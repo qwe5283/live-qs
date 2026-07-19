@@ -1,0 +1,76 @@
+<Window x:Class="LiveQs.Windows.App.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="活动时间" Width="1180" Height="760" MinWidth="940" MinHeight="620"
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource WindowBrush}">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="214" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Border Background="{DynamicResource SidebarBrush}">
+            <Grid Margin="16,20,16,16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <StackPanel Margin="10,2,10,26">
+                    <TextBlock Text="LIVE QS" Foreground="{DynamicResource SidebarBrandTextBrush}" FontSize="21" FontWeight="Bold" />
+                    <TextBlock Text="活动时间" Foreground="{DynamicResource SidebarSecondaryTextBrush}" FontSize="12" Margin="0,3,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Row="1">
+                    <Button x:Name="StatisticsButton" Tag="statistics" Click="Navigation_Click">
+                        <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE9D2;" Style="{DynamicResource NavigationButtonText}" FontFamily="Segoe Fluent Icons" FontSize="16" Width="28" /><TextBlock Text="统计" Style="{DynamicResource NavigationButtonText}" /></StackPanel>
+                    </Button>
+                    <Button x:Name="TimelineButton" Tag="timeline" Click="Navigation_Click">
+                        <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE823;" Style="{DynamicResource NavigationButtonText}" FontFamily="Segoe Fluent Icons" FontSize="16" Width="28" /><TextBlock Text="时间线" Style="{DynamicResource NavigationButtonText}" /></StackPanel>
+                    </Button>
+                    <Button x:Name="SettingsButton" Tag="settings" Click="Navigation_Click">
+                        <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE713;" Style="{DynamicResource NavigationButtonText}" FontFamily="Segoe Fluent Icons" FontSize="16" Width="28" /><TextBlock Text="设置" Style="{DynamicResource NavigationButtonText}" /></StackPanel>
+                    </Button>
+                </StackPanel>
+                <Border Grid.Row="3" Background="{DynamicResource SidebarStatusBrush}" CornerRadius="5" Padding="11,10">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse x:Name="SamplingDot" Width="8" Height="8" Fill="{DynamicResource SidebarSamplingActiveBrush}" Margin="0,0,8,0" />
+                            <TextBlock x:Name="SamplingStatusText" Text="采样中" Foreground="{DynamicResource SidebarBrandTextBrush}" FontSize="12" />
+                        </StackPanel>
+                        <TextBlock x:Name="SyncStatusText" Text="本地模式" Foreground="{DynamicResource SidebarSecondaryTextBrush}" FontSize="11" Margin="16,6,0,0" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+        <ContentControl x:Name="PageContent" Grid.Column="1"/>
+    </Grid>
+    <Window.Resources>
+        <Style x:Key="NavigationButtonText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource SidebarNavTextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="12,11" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Background" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Background" Property="Background" Value="{DynamicResource SidebarNavHoverBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource SidebarNavHoverTextBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+</Window>

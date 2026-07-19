@@ -1,0 +1,137 @@
+<UserControl x:Class="LiveQs.Windows.App.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:core="clr-namespace:LiveQs.Windows.Core"
+             MinWidth="700" MinHeight="520">
+    <Grid Background="{DynamicResource WindowBrush}">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+        <Grid Margin="28,24,28,18">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="设置" Style="{StaticResource PageTitle}" />
+                <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="保存设置" Style="{StaticResource PrimaryButton}" VerticalAlignment="Center" Click="Save_Click" />
+        </Grid>
+
+        <Border Grid.Row="1" Style="{StaticResource Surface}" Margin="28,0,28,28" Padding="0">
+            <TabControl Margin="16">
+                <TabItem Header="采样">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="10,20" MaxWidth="720" HorizontalAlignment="Left">
+                            <TextBlock Text="采样策略" Style="{StaticResource SectionTitle}" />
+                            <TextBlock Text="更短的间隔能更准确地记录应用切换，但会增加本地写入频率。" Style="{StaticResource MutedText}" Margin="0,5,0,18" />
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="190" /><ColumnDefinition Width="300" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="46" /><RowDefinition Height="46" /><RowDefinition Height="46" /><RowDefinition Height="46" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="采样间隔（秒）" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1" Text="{Binding SamplingIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" Width="140" HorizontalAlignment="Left" />
+                                <TextBlock Grid.Row="1" Text="AFK 阈值（秒）" VerticalAlignment="Center" />
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding AfkThresholdSeconds, UpdateSourceTrigger=PropertyChanged}" Width="140" HorizontalAlignment="Left" />
+                                <TextBlock Grid.Row="2" Text="窗口标题" VerticalAlignment="Center" />
+                                <ComboBox Grid.Row="2" Grid.Column="1" SelectedValue="{Binding WindowTitleMode}" SelectedValuePath="Tag" Width="180" HorizontalAlignment="Left">
+                                    <ComboBoxItem Content="本地保存原文" Tag="{x:Static core:WindowTitleMode.Original}" />
+                                    <ComboBoxItem Content="仅保存哈希" Tag="{x:Static core:WindowTitleMode.Hash}" />
+                                    <ComboBoxItem Content="不记录" Tag="{x:Static core:WindowTitleMode.None}" />
+                                </ComboBox>
+                                <TextBlock Grid.Row="3" Text="采样状态" VerticalAlignment="Center" />
+                                <CheckBox Grid.Row="3" Grid.Column="1" Content="暂停采样" IsChecked="{Binding SamplingPaused}" VerticalAlignment="Center" />
+                            </Grid>
+
+                            <Separator Margin="0,22" Background="{DynamicResource BorderBrush}" />
+                            <TextBlock Text="程序行为" Style="{StaticResource SectionTitle}" />
+                            <StackPanel Margin="0,14,0,0">
+                                <CheckBox Content="登录 Windows 后自动启动" IsChecked="{Binding LaunchOnStartup}" Margin="0,0,0,12" />
+                                <CheckBox Content="启动后直接隐藏到托盘" IsChecked="{Binding StartMinimized}" Margin="0,0,0,12" />
+                                <CheckBox Content="关闭主窗口时继续在托盘运行" IsChecked="{Binding CloseToTray}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="云同步">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="10,20" MaxWidth="720" HorizontalAlignment="Left">
+                            <TextBlock Text="本地优先同步" Style="{StaticResource SectionTitle}" />
+                            <TextBlock Text="服务端不可用时，采样和本地查询会继续工作；待同步记录保留在本地队列。" Style="{StaticResource MutedText}" Margin="0,5,0,18" />
+                            <CheckBox Content="启用云同步" IsChecked="{Binding CloudSyncEnabled}" Margin="0,0,0,16" />
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="190" /><ColumnDefinition Width="390" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="50" /><RowDefinition Height="50" /><RowDefinition Height="50" /></Grid.RowDefinitions>
+                                <TextBlock Text="服务端 Base URL" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1" Text="{Binding ServerBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Grid.Row="1" Text="Device Token" VerticalAlignment="Center" />
+                                <PasswordBox x:Name="TokenBox" Grid.Row="1" Grid.Column="1" Padding="9,7" BorderBrush="{DynamicResource BorderBrush}" />
+                                <TextBlock Grid.Row="2" Text="Device ID" VerticalAlignment="Center" />
+                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding DeviceId, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+                            <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="4" Padding="14,11" Margin="0,20,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource AccentBrush}" Margin="0,0,9,0" />
+                                    <TextBlock Text="{Binding SyncStatusText}" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="应用管理">
+                    <Grid Margin="10,18">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                        <StackPanel Margin="0,0,0,14">
+                            <TextBlock Text="别名、分类与排除" Style="{StaticResource SectionTitle}" />
+                            <TextBlock Text="排除应用后，新采样和统计都不会包含它；历史记录仍保留，可随时恢复。" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
+                        </StackPanel>
+                        <DataGrid Grid.Row="1" ItemsSource="{Binding ApplicationRules}" AutoGenerateColumns="False" CanUserAddRows="False"
+                                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" BorderBrush="{DynamicResource BorderBrush}"
+                                  Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                  RowBackground="{DynamicResource SurfaceBrush}" AlternatingRowBackground="{DynamicResource WindowBrush}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="应用 ID" Binding="{Binding AppId}" IsReadOnly="True" Width="2*" />
+                                <DataGridTextColumn Header="显示名称" Binding="{Binding Alias, UpdateSourceTrigger=PropertyChanged}" Width="2*" />
+                                <DataGridTextColumn Header="分类" Binding="{Binding Category, UpdateSourceTrigger=PropertyChanged}" Width="*" />
+                                <DataGridCheckBoxColumn Header="排除" Binding="{Binding IsExcluded, UpdateSourceTrigger=PropertyChanged}" Width="72" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </TabItem>
+
+                <TabItem Header="本地数据">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="10,20" MaxWidth="760" HorizontalAlignment="Left">
+                            <TextBlock Text="存储与保留" Style="{StaticResource SectionTitle}" />
+                            <Grid Margin="0,14,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="190" /><ColumnDefinition Width="430" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="48" /><RowDefinition Height="48" /></Grid.RowDefinitions>
+                                <TextBlock Text="本地保留期（天）" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1" Text="{Binding RetentionDays, UpdateSourceTrigger=PropertyChanged}" Width="140" HorizontalAlignment="Left" />
+                                <TextBlock Grid.Row="1" Text="数据库位置" VerticalAlignment="Center" />
+                                <Grid Grid.Row="1" Grid.Column="1">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding DatabasePath, Mode=OneWay}" IsReadOnly="True" />
+                                    <Button Grid.Column="1" Content="&#xED25;" FontFamily="Segoe Fluent Icons" ToolTip="打开所在目录"
+                                            Style="{StaticResource SecondaryButton}" Padding="10,8" Margin="7,0,0,0" Click="OpenDataFolder_Click" />
+                                </Grid>
+                            </Grid>
+
+                            <Separator Margin="0,22" Background="{DynamicResource BorderBrush}" />
+                            <TextBlock Text="范围维护" Style="{StaticResource SectionTitle}" />
+                            <TextBlock Text="导出或删除选定日期范围内的本地活动时间段。" Style="{StaticResource MutedText}" Margin="0,5,0,14" />
+                            <StackPanel Orientation="Horizontal">
+                                <DatePicker SelectedDate="{Binding MaintenanceStartDate}" Width="145" />
+                                <TextBlock Text="至" VerticalAlignment="Center" Margin="8,0" />
+                                <DatePicker SelectedDate="{Binding MaintenanceEndDate}" Width="145" />
+                                <Button Content="导出 CSV" Style="{StaticResource SecondaryButton}" Margin="12,0,0,0" Click="Export_Click" />
+                                <Button Content="删除数据" Foreground="White" Background="{DynamicResource DangerBrush}"
+                                        Style="{StaticResource PrimaryButton}" Margin="7,0,0,0" Click="Delete_Click" />
+                            </StackPanel>
+                            <Button Content="优化数据库" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,22,0,0" Click="Optimize_Click" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+            </TabControl>
+        </Border>
+    </Grid>
+</UserControl>

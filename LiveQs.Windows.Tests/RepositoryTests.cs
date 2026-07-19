@@ -1,0 +1,92 @@
+using LiveQs.Windows.Core;
+using LiveQs.Windows.Infrastructure;
+
+namespace LiveQs.Windows.Tests;
+
+public sealed class RepositoryTests : IDisposable
+{
+    private readonly TestPaths _paths = new();
+
+    [Fact]
+    public async Task RecordSample_MergesContinuousStateAndSeparatesAfk()
+    {
+        var repository = await CreateRepositoryAsync();
+        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+
+        await repository.RecordSampleAsync(Sample(localNoon, false), TimeSpan.FromSeconds(5));
+        await repository.RecordSampleAsync(Sample(localNoon.AddSeconds(5), false), TimeSpan.FromSeconds(5));
+        await repository.RecordSampleAsync(Sample(localNoon.AddSeconds(10), true), TimeSpan.FromSeconds(5));
+
+        var dashboard = await repository.GetDashboardAsync(DateRange.Today());
+        var timeline = await repository.GetTimelineAsync(DateRange.Today());
+        Assert.Equal(2, timeline.Count);
+        Assert.Equal(10, dashboard.ActiveDuration.TotalSeconds, 3);
+        Assert.Equal(5, dashboard.AfkDuration.TotalSeconds, 3);
+        Assert.Single(dashboard.Apps);
+        Assert.Equal(2, await repository.GetPendingSyncCountAsync());
+    }
+
+    [Fact]
+    public async Task ApplicationRule_ChangesHistoricalQueriesWithoutDeletingRows()
+    {
+        var repository = await CreateRepositoryAsync();
+        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+        await repository.RecordSampleAsync(Sample(localNoon, false), TimeSpan.FromSeconds(5));
+
+        await repository.SaveApplicationRuleAsync(new ApplicationRule("browser.exe", "浏览器", "工作", true));
+        var hidden = await repository.GetTimelineAsync(DateRange.Today());
+        Assert.Empty(hidden);
+
+        await repository.SaveApplicationRuleAsync(new ApplicationRule("browser.exe", "浏览器", "工作", false));
+        var restored = await repository.GetTimelineAsync(DateRange.Today());
+        Assert.Single(restored);
+        Assert.Equal("浏览器", restored[0].AppName);
+        Assert.Equal("工作", restored[0].Category);
+    }
+
+    [Fact]
+    public async Task MarkSyncedAndDeleteRange_MaintainQueueConsistency()
+    {
+        var repository = await CreateRepositoryAsync();
+        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+        await repository.RecordSampleAsync(Sample(localNoon, false), TimeSpan.FromSeconds(5));
+        var items = await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1));
+        Assert.Single(items);
+
+        await repository.MarkSyncedAsync(items.Select(item => item.SegmentId), DateTimeOffset.UtcNow);
+        Assert.Equal(0, await repository.GetPendingSyncCountAsync());
+
+        Assert.Equal(1, await repository.DeleteRangeAsync(DateRange.Today()));
+        Assert.Empty(await repository.GetTimelineAsync(DateRange.Today()));
+    }
+
+    private async Task<SqliteActivityRepository> CreateRepositoryAsync()
+    {
+        var repository = new SqliteActivityRepository(_paths);
+        await repository.InitializeAsync();
+        return repository;
+    }
+
+    private static ActivitySample Sample(DateTimeOffset time, bool afk) => new(
+        time.ToUniversalTime(), "browser.exe", "Browser", "C:\\Browser.exe", "Docs", "hash",
+        afk ? 120 : 0, afk, false, false, null, null);
+
+    public void Dispose()
+    {
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        if (Directory.Exists(_paths.DataDirectory)) Directory.Delete(_paths.DataDirectory, true);
+    }
+
+    private sealed class TestPaths : IAppPaths
+    {
+        public TestPaths()
+        {
+            DataDirectory = Path.Combine(Path.GetTempPath(), "LiveQs.Tests", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(DataDirectory);
+        }
+
+        public string DataDirectory { get; }
+        public string DatabasePath => Path.Combine(DataDirectory, "test.db");
+        public string LogPath => Path.Combine(DataDirectory, "test.log");
+    }
+}
