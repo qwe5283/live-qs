@@ -27,11 +27,11 @@
                                     <RowDefinition Height="46" /><RowDefinition Height="46" /><RowDefinition Height="46" /><RowDefinition Height="46" />
                                 </Grid.RowDefinitions>
                                 <TextBlock Text="采样间隔（秒）" VerticalAlignment="Center" />
-                                <TextBox Grid.Column="1" Text="{Binding SamplingIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" Width="140" HorizontalAlignment="Left" />
+                                <TextBox Grid.Column="1" Text="{Binding SamplingIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" Width="140" HorizontalAlignment="Left" VerticalAlignment="Center" />
                                 <TextBlock Grid.Row="1" Text="AFK 阈值（秒）" VerticalAlignment="Center" />
-                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding AfkThresholdSeconds, UpdateSourceTrigger=PropertyChanged}" Width="140" HorizontalAlignment="Left" />
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding AfkThresholdSeconds, UpdateSourceTrigger=PropertyChanged}" Width="140" HorizontalAlignment="Left" VerticalAlignment="Center" />
                                 <TextBlock Grid.Row="2" Text="窗口标题" VerticalAlignment="Center" />
-                                <ComboBox Grid.Row="2" Grid.Column="1" SelectedValue="{Binding WindowTitleMode}" SelectedValuePath="Tag" Width="180" HorizontalAlignment="Left">
+                                <ComboBox Grid.Row="2" Grid.Column="1" SelectedValue="{Binding WindowTitleMode}" SelectedValuePath="Tag" Width="180" HorizontalAlignment="Left" VerticalAlignment="Center">
                                     <ComboBoxItem Content="本地保存原文" Tag="{x:Static core:WindowTitleMode.Original}" />
                                     <ComboBoxItem Content="仅保存哈希" Tag="{x:Static core:WindowTitleMode.Hash}" />
                                     <ComboBoxItem Content="不记录" Tag="{x:Static core:WindowTitleMode.None}" />
@@ -61,11 +61,11 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="190" /><ColumnDefinition Width="390" /></Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions><RowDefinition Height="50" /><RowDefinition Height="50" /><RowDefinition Height="50" /></Grid.RowDefinitions>
                                 <TextBlock Text="服务端 Base URL" VerticalAlignment="Center" />
-                                <TextBox Grid.Column="1" Text="{Binding ServerBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBox Grid.Column="1" Text="{Binding ServerBaseUrl, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"/>
                                 <TextBlock Grid.Row="1" Text="Device Token" VerticalAlignment="Center" />
                                 <PasswordBox x:Name="TokenBox" Grid.Row="1" Grid.Column="1" Padding="9,7" BorderBrush="{DynamicResource BorderBrush}" />
                                 <TextBlock Grid.Row="2" Text="Device ID" VerticalAlignment="Center" />
-                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding DeviceId, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding DeviceId, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"/>
                             </Grid>
                             <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="4" Padding="14,11" Margin="0,20,0,0">
                                 <StackPanel Orientation="Horizontal">
@@ -106,11 +106,11 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="190" /><ColumnDefinition Width="430" /></Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions><RowDefinition Height="48" /><RowDefinition Height="48" /></Grid.RowDefinitions>
                                 <TextBlock Text="本地保留期（天）" VerticalAlignment="Center" />
-                                <TextBox Grid.Column="1" Text="{Binding RetentionDays, UpdateSourceTrigger=PropertyChanged}" Width="140" HorizontalAlignment="Left" />
+                                <TextBox Grid.Column="1" Text="{Binding RetentionDays, UpdateSourceTrigger=PropertyChanged}" Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"/>
                                 <TextBlock Grid.Row="1" Text="数据库位置" VerticalAlignment="Center" />
                                 <Grid Grid.Row="1" Grid.Column="1">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                    <TextBox Text="{Binding DatabasePath, Mode=OneWay}" IsReadOnly="True" />
+                                    <TextBox Text="{Binding DatabasePath, Mode=OneWay}" IsReadOnly="True" VerticalAlignment="Center"/>
                                     <Button Grid.Column="1" Content="&#xED25;" FontFamily="Segoe Fluent Icons" ToolTip="打开所在目录"
                                             Style="{StaticResource SecondaryButton}" Padding="10,8" Margin="7,0,0,0" Click="OpenDataFolder_Click" />
                                 </Grid>
@@ -120,9 +120,9 @@
                             <TextBlock Text="范围维护" Style="{StaticResource SectionTitle}" />
                             <TextBlock Text="导出或删除选定日期范围内的本地活动时间段。" Style="{StaticResource MutedText}" Margin="0,5,0,14" />
                             <StackPanel Orientation="Horizontal">
-                                <DatePicker SelectedDate="{Binding MaintenanceStartDate}" Width="145" />
+                                <DatePicker SelectedDate="{Binding MaintenanceStartDate}" Width="160" />
                                 <TextBlock Text="至" VerticalAlignment="Center" Margin="8,0" />
-                                <DatePicker SelectedDate="{Binding MaintenanceEndDate}" Width="145" />
+                                <DatePicker SelectedDate="{Binding MaintenanceEndDate}" Width="160" />
                                 <Button Content="导出 CSV" Style="{StaticResource SecondaryButton}" Margin="12,0,0,0" Click="Export_Click" />
                                 <Button Foreground="White" Background="{DynamicResource DangerBrush}"
                                         Style="{StaticResource PrimaryButton}" Margin="7,0,0,0" Click="Delete_Click"><TextBlock Text="删除数据" Style="{StaticResource ButtonContentText}" /></Button>
