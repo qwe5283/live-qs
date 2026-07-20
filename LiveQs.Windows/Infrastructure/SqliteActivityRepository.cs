@@ -17,8 +17,8 @@ public sealed class SqliteActivityRepository(IAppPaths paths) : IActivityReposit
 
     private static readonly string[] Palette =
     [
-        "#25856F", "#D56A45", "#3D72B4", "#B24E71", "#7A63A8",
-        "#79852E", "#A75B2D", "#397D91", "#8E5A48", "#526D82",
+        "#007AFF", "#D56A45", "#4285F4", "#1DB954", "#7A63A8",
+        "#4A154B", "#A75B2D", "#A259FF", "#FF6F00", "#526D82",
     ];
 
     private readonly string _connectionString = new SqliteConnectionStringBuilder

@@ -20,7 +20,7 @@
                 <DatePicker SelectedDate="{Binding SelectedDate}" Width="150" Margin="7,0" />
                 <Button Content="&#x203A;" FontFamily="Segoe UI" FontSize="18" ToolTip="后一天" Style="{StaticResource SecondaryButton}" Padding="10,6" Click="Next_Click" />
                 <Button Content="今天" Style="{StaticResource SecondaryButton}" Margin="7,0,0,0" Click="Today_Click" />
-                <Button Content="查询" Style="{StaticResource PrimaryButton}" Margin="7,0,0,0" Click="Query_Click" />
+                <Button Style="{StaticResource PrimaryButton}" Margin="7,0,0,0" Click="Query_Click"><TextBlock Text="查询" Style="{StaticResource ButtonContentText}" /></Button>
             </StackPanel>
         </Grid>
 

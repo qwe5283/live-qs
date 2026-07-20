@@ -12,6 +12,7 @@ namespace LiveQs.Windows;
 
 public partial class LiveQsApplication : System.Windows.Application
 {
+    private static readonly Uri LightThemeUri = new("App/Styles/Theme.Light.xaml", UriKind.Relative);
     private static readonly Uri DarkThemeUri = new("App/Styles/Theme.Dark.xaml", UriKind.Relative);
     private IHost? _host;
     private Mutex? _singleInstance;
@@ -118,15 +119,16 @@ public partial class LiveQsApplication : System.Windows.Application
         using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
         var isLight = key?.GetValue("AppsUseLightTheme") is not int value || value != 0;
 
+        var desiredSource = isLight ? LightThemeUri : DarkThemeUri;
         var dictionaries = Resources.MergedDictionaries;
-        var darkTheme = dictionaries.FirstOrDefault(dictionary =>
+        var currentPalette = dictionaries.FirstOrDefault(dictionary =>
+            dictionary.Source?.OriginalString.EndsWith("Theme.Light.xaml", StringComparison.OrdinalIgnoreCase) == true ||
             dictionary.Source?.OriginalString.EndsWith("Theme.Dark.xaml", StringComparison.OrdinalIgnoreCase) == true);
-        if (isLight)
-        {
-            if (darkTheme is not null) dictionaries.Remove(darkTheme);
+        if (currentPalette?.Source?.OriginalString.EndsWith(desiredSource.OriginalString, StringComparison.OrdinalIgnoreCase) == true)
             return;
-        }
 
-        if (darkTheme is null) dictionaries.Add(new ResourceDictionary { Source = DarkThemeUri });
+        var paletteIndex = currentPalette is null ? 0 : dictionaries.IndexOf(currentPalette);
+        if (currentPalette is not null) dictionaries.Remove(currentPalette);
+        dictionaries.Insert(paletteIndex, new ResourceDictionary { Source = desiredSource });
     }
 }

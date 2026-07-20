@@ -7,9 +7,19 @@
     <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A7B2B8" />
     <SolidColorBrush x:Key="MutedTextBrush" Color="#7E8A90" />
     <SolidColorBrush x:Key="BorderBrush" Color="#344046" />
-    <SolidColorBrush x:Key="AccentBrush" Color="#55B79E" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#0A84FF" />
     <SolidColorBrush x:Key="AccentSoftBrush" Color="#263D37" />
     <SolidColorBrush x:Key="WarningBrush" Color="#E18462" />
     <SolidColorBrush x:Key="DangerBrush" Color="#D06464" />
     <SolidColorBrush x:Key="InputBrush" Color="#252D31" />
+    <SolidColorBrush x:Key="SidebarBrandTextBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="SidebarSecondaryTextBrush" Color="#9FB0B8" />
+    <SolidColorBrush x:Key="SidebarStatusBrush" Color="#303236" />
+    <SolidColorBrush x:Key="SidebarSamplingActiveBrush" Color="#55B79E" />
+    <SolidColorBrush x:Key="SidebarBorderBrush" Color="#344046" />
+    <SolidColorBrush x:Key="SidebarNavTextBrush" Color="#B9C5CA" />
+    <SolidColorBrush x:Key="SidebarNavHoverTextBrush" Color="#ECF0F2" />
+    <SolidColorBrush x:Key="SidebarNavHoverBrush" Color="#303236" />
+    <SolidColorBrush x:Key="SidebarNavSelectedTextBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="SidebarNavSelectedBrush" Color="#1A2B45" />
 </ResourceDictionary>

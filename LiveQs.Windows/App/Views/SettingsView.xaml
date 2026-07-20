@@ -11,7 +11,7 @@
                 <TextBlock Text="设置" Style="{StaticResource PageTitle}" />
                 <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
             </StackPanel>
-            <Button Grid.Column="1" Content="保存设置" Style="{StaticResource PrimaryButton}" VerticalAlignment="Center" Click="Save_Click" />
+            <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" VerticalAlignment="Center" Click="Save_Click"><TextBlock Text="保存设置" Style="{StaticResource ButtonContentText}" /></Button>
         </Grid>
 
         <Border Grid.Row="1" Style="{StaticResource Surface}" Margin="28,0,28,28" Padding="0">
@@ -124,8 +124,8 @@
                                 <TextBlock Text="至" VerticalAlignment="Center" Margin="8,0" />
                                 <DatePicker SelectedDate="{Binding MaintenanceEndDate}" Width="145" />
                                 <Button Content="导出 CSV" Style="{StaticResource SecondaryButton}" Margin="12,0,0,0" Click="Export_Click" />
-                                <Button Content="删除数据" Foreground="White" Background="{DynamicResource DangerBrush}"
-                                        Style="{StaticResource PrimaryButton}" Margin="7,0,0,0" Click="Delete_Click" />
+                                <Button Foreground="White" Background="{DynamicResource DangerBrush}"
+                                        Style="{StaticResource PrimaryButton}" Margin="7,0,0,0" Click="Delete_Click"><TextBlock Text="删除数据" Style="{StaticResource ButtonContentText}" /></Button>
                             </StackPanel>
                             <Button Content="优化数据库" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,22,0,0" Click="Optimize_Click" />
                         </StackPanel>

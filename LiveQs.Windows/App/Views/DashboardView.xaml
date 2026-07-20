@@ -33,7 +33,7 @@
                 <DatePicker SelectedDate="{Binding StartDate}" Width="128" />
                 <TextBlock Text="至" VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" Margin="7,0" />
                 <DatePicker SelectedDate="{Binding EndDate}" Width="128" />
-                <Button Content="查询" Style="{StaticResource PrimaryButton}" Margin="10,0,0,0" Click="Query_Click" />
+                <Button Style="{StaticResource PrimaryButton}" Margin="10,0,0,0" Click="Query_Click"><TextBlock Text="查询" Style="{StaticResource ButtonContentText}" /></Button>
             </StackPanel>
         </Grid>
 

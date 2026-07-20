@@ -1,0 +1,25 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="WindowBrush" Color="#F2F2F7" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="SidebarBrush" Color="#EDEEF1" />
+    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#172126" />
+    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#65737A" />
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#8A969C" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#DCE2E5" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#007AFF" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#E2F1ED" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#D56A45" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#B54747" />
+    <SolidColorBrush x:Key="InputBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="SidebarBrandTextBrush" Color="#172126" />
+    <SolidColorBrush x:Key="SidebarSecondaryTextBrush" Color="#6B7280" />
+    <SolidColorBrush x:Key="SidebarStatusBrush" Color="#DADBDE" />
+    <SolidColorBrush x:Key="SidebarSamplingActiveBrush" Color="#55B79E" />
+    <SolidColorBrush x:Key="SidebarBorderBrush" Color="#DDDEE0" />
+    <SolidColorBrush x:Key="SidebarNavTextBrush" Color="#6B7280" />
+    <SolidColorBrush x:Key="SidebarNavHoverTextBrush" Color="#6B7280" />
+    <SolidColorBrush x:Key="SidebarNavHoverBrush" Color="#DADBDE" />
+    <SolidColorBrush x:Key="SidebarNavSelectedTextBrush" Color="#007AFF" />
+    <SolidColorBrush x:Key="SidebarNavSelectedBrush" Color="#CBDDF3" />
+</ResourceDictionary>
