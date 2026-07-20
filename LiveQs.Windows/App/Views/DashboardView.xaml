@@ -30,9 +30,9 @@
                 <Button Content="今天" Style="{StaticResource SecondaryButton}" Padding="11,7" Margin="0,0,6,0" Click="Today_Click" />
                 <Button Content="近 7 天" Style="{StaticResource SecondaryButton}" Padding="11,7" Margin="0,0,6,0" Click="Week_Click" />
                 <Button Content="近 30 天" Style="{StaticResource SecondaryButton}" Padding="11,7" Margin="0,0,10,0" Click="Month_Click" />
-                <DatePicker SelectedDate="{Binding StartDate}" Width="128" />
+                <DatePicker SelectedDate="{Binding StartDate}" Width="160" />
                 <TextBlock Text="至" VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" Margin="7,0" />
-                <DatePicker SelectedDate="{Binding EndDate}" Width="128" />
+                <DatePicker SelectedDate="{Binding EndDate}" Width="160" />
                 <Button Style="{StaticResource PrimaryButton}" Margin="10,0,0,0" Click="Query_Click"><TextBlock Text="查询" Style="{StaticResource ButtonContentText}" /></Button>
             </StackPanel>
         </Grid>

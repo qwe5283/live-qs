@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
+using Wpf.Ui.Appearance;
 
 namespace LiveQs.Windows;
 
@@ -118,6 +119,15 @@ public partial class LiveQsApplication : System.Windows.Application
     {
         using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
         var isLight = key?.GetValue("AppsUseLightTheme") is not int value || value != 0;
+        var applicationTheme = isLight ? ApplicationTheme.Light : ApplicationTheme.Dark;
+
+        // WPF-UI supplies the base control templates; LiveQs keeps its own semantic palette.
+        ApplicationThemeManager.Apply(applicationTheme, Wpf.Ui.Controls.WindowBackdropType.None, false);
+        ApplicationAccentColorManager.Apply(
+            isLight ? Color.FromRgb(0, 122, 255) : Color.FromRgb(10, 132, 255),
+            applicationTheme,
+            false,
+            false);
 
         var desiredSource = isLight ? LightThemeUri : DarkThemeUri;
         var dictionaries = Resources.MergedDictionaries;
