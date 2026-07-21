@@ -17,9 +17,15 @@
                 <TextBlock Text="{Binding Summary}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Content="&#x2039;" FontFamily="Segoe UI" FontSize="18" ToolTip="前一天" Style="{StaticResource SecondaryButton}" Padding="10,6" Command="{Binding PreviousCommand}" />
+                <Button ToolTip="前一天" AutomationProperties.Name="前一天" Style="{StaticResource SecondaryButton}" Padding="10,6" Command="{Binding PreviousCommand}">
+                    <ui:SymbolIcon Symbol="ChevronLeft20" FontSize="18"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                </Button>
                 <DatePicker SelectedDate="{Binding SelectedDate}" Width="150" Margin="7,0" />
-                <Button Content="&#x203A;" FontFamily="Segoe UI" FontSize="18" ToolTip="后一天" Style="{StaticResource SecondaryButton}" Padding="10,6" Command="{Binding NextCommand}" />
+                <Button ToolTip="后一天" AutomationProperties.Name="后一天" Style="{StaticResource SecondaryButton}" Padding="10,6" Command="{Binding NextCommand}">
+                    <ui:SymbolIcon Symbol="ChevronRight20" FontSize="18"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                </Button>
                 <Button Content="今天" Style="{StaticResource SecondaryButton}" Margin="7,0,0,0" Command="{Binding TodayCommand}" />
                 <Button Style="{StaticResource PrimaryButton}" Margin="7,0,0,0" Command="{Binding LoadCommand}"><TextBlock Text="查询" Style="{StaticResource ButtonContentText}" /></Button>
             </StackPanel>
@@ -82,7 +88,7 @@
                 </ListBox>
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
                             Visibility="{Binding IsEmpty, Converter={StaticResource VisibleWhenTrue}}">
-                    <TextBlock Text="&#xE823;" FontFamily="Segoe Fluent Icons" FontSize="34" Foreground="{DynamicResource MutedTextBrush}" HorizontalAlignment="Center" />
+                    <ui:SymbolIcon Symbol="CalendarEmpty24" FontSize="34" Foreground="{DynamicResource MutedTextBrush}" HorizontalAlignment="Center" />
                     <TextBlock Text="这一天没有活动记录" FontSize="16" FontWeight="SemiBold" Margin="0,14,0,0" HorizontalAlignment="Center"/>
                     <TextBlock Text="可以切换日期，或在设置中确认采样未暂停" Style="{StaticResource MutedText}" Margin="0,6,0,0" HorizontalAlignment="Center"/>
                 </StackPanel>

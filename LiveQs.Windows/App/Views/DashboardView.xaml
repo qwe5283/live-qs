@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:LiveQs.Windows.App.Controls"
              xmlns:converters="clr-namespace:LiveQs.Windows.App.Converters"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              MinWidth="720" MinHeight="520">
     <UserControl.Resources>
         <converters:BooleanToVisibilityConverter x:Key="VisibleWhenTrue" />
@@ -138,7 +139,7 @@
                 <Border Style="{StaticResource Surface}" Padding="40" MinHeight="260"
                         Visibility="{Binding IsEmpty, Converter={StaticResource VisibleWhenTrue}}">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="&#xE81E;" FontFamily="Segoe Fluent Icons" FontSize="34" Foreground="{DynamicResource MutedTextBrush}" HorizontalAlignment="Center" />
+                        <ui:SymbolIcon Symbol="DataPie24" FontSize="34" Foreground="{DynamicResource MutedTextBrush}" HorizontalAlignment="Center" />
                         <TextBlock Text="这个日期范围还没有活动数据" FontSize="16" FontWeight="SemiBold" Margin="0,14,0,0" />
                         <TextBlock Text="后台采样开启后，统计会自动出现在这里。" Style="{StaticResource MutedText}" Margin="0,6,0,0" />
                     </StackPanel>
