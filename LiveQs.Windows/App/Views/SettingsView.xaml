@@ -22,7 +22,7 @@
     </UserControl.Resources>
     <Grid Background="{DynamicResource WindowBrush}">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-        <Grid Margin="28,24,28,18">
+        <Grid Margin="28,8,28,18">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <StackPanel>
                 <TextBlock Text="设置" Style="{StaticResource PageTitle}" />
@@ -130,7 +130,7 @@
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                     <TextBox Text="{Binding DatabasePath, Mode=OneWay}" IsReadOnly="True" VerticalAlignment="Center"/>
                                     <Button Grid.Column="1" ToolTip="打开所在目录" AutomationProperties.Name="打开所在目录"
-                                            Style="{StaticResource SecondaryButton}" Padding="10,8" Margin="7,0,0,0" Command="{Binding OpenDataFolderCommand}">
+                                            Style="{StaticResource SecondaryButton}" Height="36" Padding="10,8" Margin="7,0" Command="{Binding OpenDataFolderCommand}">
                                         <ui:SymbolIcon Symbol="FolderOpen24" FontSize="18"
                                                        Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                     </Button>

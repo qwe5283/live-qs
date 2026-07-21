@@ -1,15 +1,28 @@
-<Window x:Class="LiveQs.Windows.App.Views.MainWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-        Title="活动时间" Width="1040" Height="720" MinWidth="940" MinHeight="620"
-        WindowStartupLocation="CenterScreen" Background="{DynamicResource WindowBrush}">
-    <Grid>
+<ui:FluentWindow x:Class="LiveQs.Windows.App.Views.MainWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="统计 - 活动时间" Width="1040" Height="720" MinWidth="940" MinHeight="620"
+                 WindowStartupLocation="CenterScreen"
+                 Background="{DynamicResource WindowBrush}"
+                 Foreground="{DynamicResource PrimaryTextBrush}"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="None"
+                 WindowCornerPreference="Round">
+    <Grid Background="{DynamicResource WindowBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="214" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
-        <Border Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource SidebarBorderBrush}" BorderThickness="0, 0, 1, 0">
+        <!-- 侧边栏 -->
+        <Border Grid.RowSpan="2"
+                Background="{DynamicResource SidebarBrush}"
+                BorderBrush="{DynamicResource SidebarBorderBrush}"
+                BorderThickness="0, 0, 1, 0">
             <Grid Margin="16,20,16,16">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -63,7 +76,18 @@
                 </Border>
             </Grid>
         </Border>
-        <ContentControl x:Name="PageContent" Grid.Column="1"/>
+        <!-- 页面内容 -->
+        <ContentControl x:Name="PageContent" Grid.Row="1" Grid.Column="1" />
+        <!-- 标题栏 -->
+        <ui:TitleBar x:Name="AppTitleBar"
+                     Grid.ColumnSpan="2"
+                     Panel.ZIndex="10"
+                     Title="统计"
+                     Height="48"
+                     Padding="238,4,0,4"
+                     Background="Transparent"
+                     Foreground="{DynamicResource PrimaryTextBrush}"
+                     ButtonsForeground="{DynamicResource PrimaryTextBrush}" />
     </Grid>
     <Window.Resources>
         <Style x:Key="NavigationButtonText" TargetType="TextBlock">
@@ -94,4 +118,4 @@
             </Setter>
         </Style>
     </Window.Resources>
-</Window>
+</ui:FluentWindow>

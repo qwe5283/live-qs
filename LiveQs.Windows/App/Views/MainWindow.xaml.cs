@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace LiveQs.Windows.App.Views;
 
-public partial class MainWindow : Window
+public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 {
     private readonly IActivityRepository _repository;
     private readonly ISyncStatusService _syncStatusService;
@@ -76,12 +76,21 @@ public partial class MainWindow : Window
 
     private void SelectPage(string page)
     {
+        var pageTitle = page switch
+        {
+            "timeline" => "时间线",
+            "settings" => "设置",
+            _ => "统计",
+        };
+
         PageContent.Content = page switch
         {
             "timeline" => _timeline,
             "settings" => _settings,
             _ => _dashboard,
         };
+        AppTitleBar.Title = pageTitle;
+        Title = $"{pageTitle} - 活动时间";
         SetSelected(StatisticsButton, page == "statistics");
         SetSelected(TimelineButton, page == "timeline");
         SetSelected(SettingsButton, page == "settings");
