@@ -9,7 +9,7 @@
             <ColumnDefinition Width="214" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
-        <Border Background="{DynamicResource SidebarBrush}" BorderBrush="{StaticResource SidebarBorderBrush}" BorderThickness="0, 0, 1, 0">
+        <Border Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource SidebarBorderBrush}" BorderThickness="0, 0, 1, 0">
             <Grid Margin="16,20,16,16">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -17,9 +17,17 @@
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <StackPanel Margin="10,2,10,26">
-                    <TextBlock Text="LIVE QS" FontSize="21" FontWeight="Bold" />
-                    <TextBlock Text="活动时间" Foreground="{DynamicResource SidebarSecondaryTextBrush}" FontSize="12" Margin="0,3,0,0" />
+                <StackPanel Orientation="Horizontal" Margin="10,2,10,26">
+                    <Image Width="36" Height="36"
+                           Source="pack://application:,,,/Assets/LiveQs.png"
+                           Stretch="Uniform"
+                           SnapsToDevicePixels="True"
+                           UseLayoutRounding="True"
+                           RenderOptions.BitmapScalingMode="HighQuality" />
+                    <StackPanel Margin="8, 0, 0, 0">
+                        <TextBlock Text="LIVE QS" FontSize="21" FontWeight="Bold" />
+                        <TextBlock Text="活动时间" Foreground="{DynamicResource SidebarSecondaryTextBrush}" FontSize="12" Margin="0,3,0,0" />
+                    </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Row="1">
                     <Button x:Name="StatisticsButton" Tag="statistics" Click="Navigation_Click">

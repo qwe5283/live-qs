@@ -45,20 +45,22 @@ public static class AppIconFactory
     private static IReadOnlyDictionary<TrayIconState, ImageSource> CreateTrayIcons() =>
         new Dictionary<TrayIconState, ImageSource>
         {
-            [TrayIconState.Local] = BaseIcon.Value,
-            [TrayIconState.Paused] = DrawStatusDot(Color.FromRgb(226, 126, 86)),
-            [TrayIconState.CloudConnected] = DrawStatusDot(Color.FromRgb(85, 183, 158)),
-            [TrayIconState.CloudUnavailable] = DrawStatusDot(Color.FromRgb(126, 138, 144)),
+            [TrayIconState.Local] = RenderTrayIcon(),
+            [TrayIconState.Paused] = RenderTrayIcon(Color.FromRgb(226, 126, 86)),
+            [TrayIconState.CloudConnected] = RenderTrayIcon(Color.FromRgb(85, 183, 158)),
+            [TrayIconState.CloudUnavailable] = RenderTrayIcon(Color.FromRgb(126, 138, 144)),
         };
 
-    private static ImageSource DrawStatusDot(Color color)
+    private static ImageSource RenderTrayIcon(Color? statusColor = null)
     {
         const int size = 64;
         var visual = new DrawingVisual();
+        RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.HighQuality);
         using (var context = visual.RenderOpen())
         {
             context.DrawImage(BaseIcon.Value, new Rect(0, 0, size, size));
-            context.DrawEllipse(new SolidColorBrush(color), new Pen(Brushes.White, 1.5), new Point(52, 13), 10, 10);
+            if (statusColor is { } color)
+                context.DrawEllipse(new SolidColorBrush(color), new Pen(Brushes.White, 1.5), new Point(52, 13), 10, 10);
         }
 
         var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);

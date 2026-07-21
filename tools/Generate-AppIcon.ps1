@@ -1,5 +1,7 @@
 param(
-    [string]$OutputPath = (Join-Path $PSScriptRoot '..\LiveQs.Windows\Assets\LiveQs.ico')
+    [string]$OutputPath = (Join-Path $PSScriptRoot '..\LiveQs.Windows\Assets\LiveQs.ico'),
+    [string]$PngOutputPath = (Join-Path $PSScriptRoot '..\LiveQs.Windows\Assets\LiveQs.png'),
+    [int]$PngSize = 96
 )
 
 Set-StrictMode -Version Latest
@@ -84,4 +86,9 @@ finally {
     $stream.Dispose()
 }
 
+$pngDirectory = Split-Path -Parent $PngOutputPath
+[System.IO.Directory]::CreateDirectory($pngDirectory) | Out-Null
+[System.IO.File]::WriteAllBytes($PngOutputPath, (New-IconPng $PngSize))
+
 Write-Output "Generated $OutputPath with sizes: $($sizes -join ', ')"
+Write-Output "Generated $PngOutputPath at ${PngSize}x${PngSize}"

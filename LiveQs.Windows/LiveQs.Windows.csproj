@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <Resource Include="Assets\LiveQs.ico" />
+    <Resource Include="Assets\LiveQs.png" />
   </ItemGroup>
 
 </Project>

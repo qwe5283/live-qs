@@ -20,6 +20,6 @@
     <SolidColorBrush x:Key="SidebarNavTextBrush" Color="#B9C5CA" />
     <SolidColorBrush x:Key="SidebarNavHoverTextBrush" Color="#ECF0F2" />
     <SolidColorBrush x:Key="SidebarNavHoverBrush" Color="#303236" />
-    <SolidColorBrush x:Key="SidebarNavSelectedTextBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="SidebarNavSelectedTextBrush" Color="#0A84FF" />
     <SolidColorBrush x:Key="SidebarNavSelectedBrush" Color="#1A2B45" />
 </ResourceDictionary>
