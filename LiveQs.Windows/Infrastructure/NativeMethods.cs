@@ -4,6 +4,9 @@ namespace LiveQs.Windows.Infrastructure;
 
 internal static partial class NativeMethods
 {
+    internal const int GwlExStyle = -20;
+    internal const int WsExToolWindow = 0x00000080;
+    internal const int WsExNoActivate = 0x08000000;
     internal const uint MonitorDefaultToNearest = 2;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -44,6 +47,12 @@ internal static partial class NativeMethods
 
     [LibraryImport("user32.dll")]
     internal static partial nint GetForegroundWindow();
+
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
+    internal static partial int GetWindowLong(nint windowHandle, int index);
+
+    [LibraryImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
+    internal static partial int SetWindowLong(nint windowHandle, int index, int value);
 
     [LibraryImport("user32.dll", EntryPoint = "GetWindowTextLengthW")]
     internal static partial int GetWindowTextLength(nint windowHandle);

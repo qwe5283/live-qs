@@ -1,10 +1,13 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
 using LiveQs.Windows.App.Views;
 using LiveQs.Windows.App.Controls;
 using LiveQs.Windows.Core;
+using LiveQs.Windows.Infrastructure;
 using Microsoft.Extensions.Logging;
 using Wpf.Ui.Tray.Controls;
 
@@ -47,20 +50,24 @@ public sealed class TrayIconService(
         menu.Items.Add(new Separator());
         menu.Items.Add(exit);
 
-        _trayHostWindow = new Window
+        var trayHostWindow = new Window
         {
             Width = 0,
             Height = 0,
             Left = -32000,
             Top = -32000,
             ShowInTaskbar = false,
+            ShowActivated = false,
+            Focusable = false,
             WindowStyle = WindowStyle.None,
             ResizeMode = ResizeMode.NoResize,
             AllowsTransparency = true,
             Background = Brushes.Transparent,
             Opacity = 0,
         };
-        _trayHostWindow.Show();
+        trayHostWindow.SourceInitialized += (_, _) => ConfigureTrayHostWindow(trayHostWindow);
+        _trayHostWindow = trayHostWindow;
+        trayHostWindow.Show();
 
         _icon = new NotifyIcon
         {
@@ -170,6 +177,16 @@ public sealed class TrayIconService(
         try { Process.Start(new ProcessStartInfo("explorer.exe", $"\"{paths.DataDirectory}\"") { UseShellExecute = true }); }
         catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
         { System.Windows.MessageBox.Show(exception.Message, "无法打开目录"); }
+    }
+
+    private static void ConfigureTrayHostWindow(Window window)
+    {
+        var handle = new WindowInteropHelper(window).Handle;
+        var extendedStyle = NativeMethods.GetWindowLong(handle, NativeMethods.GwlExStyle);
+        _ = NativeMethods.SetWindowLong(
+            handle,
+            NativeMethods.GwlExStyle,
+            extendedStyle | NativeMethods.WsExToolWindow | NativeMethods.WsExNoActivate);
     }
 
     public void Dispose()
