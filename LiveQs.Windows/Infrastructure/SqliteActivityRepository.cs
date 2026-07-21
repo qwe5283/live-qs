@@ -90,6 +90,8 @@ public sealed class SqliteActivityRepository(IAppPaths paths) : IActivityReposit
                 ON activity_segments(started_utc, ended_utc);
             CREATE INDEX IF NOT EXISTS ix_activity_segments_app
                 ON activity_segments(app_id, started_utc);
+            CREATE INDEX IF NOT EXISTS ix_activity_segments_timeline
+                ON activity_segments(started_utc DESC, id DESC);
             CREATE INDEX IF NOT EXISTS ix_sync_queue_due
                 ON sync_queue(next_attempt_utc, attempt_count);
             """;
@@ -255,6 +257,21 @@ public sealed class SqliteActivityRepository(IAppPaths paths) : IActivityReposit
 
     public async Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(DateRange range, CancellationToken cancellationToken = default) =>
         await ReadSegmentsAsync(range, cancellationToken);
+
+    public async Task<TimelinePage> GetTimelinePageAsync(
+        DateRange range,
+        int pageSize,
+        TimelineCursor? cursor = null,
+        CancellationToken cancellationToken = default)
+    {
+        var take = Math.Clamp(pageSize, 1, 1_000);
+        var items = await ReadSegmentsPageAsync(range, take + 1, cursor, cancellationToken);
+        var hasMore = items.Count > take;
+        var pageItems = hasMore ? items.Take(take).ToArray() : items;
+        var last = pageItems.LastOrDefault();
+        TimelineCursor? nextCursor = hasMore && last is not null ? new TimelineCursor(last.StartedAt, last.Id) : null;
+        return new TimelinePage(pageItems, nextCursor, hasMore);
+    }
 
     public async Task<IReadOnlyList<ApplicationRule>> GetApplicationRulesAsync(CancellationToken cancellationToken = default)
     {
@@ -467,6 +484,63 @@ public sealed class SqliteActivityRepository(IAppPaths paths) : IActivityReposit
         command.Parameters.AddWithValue("$start", UtcText(range.Start));
         command.Parameters.AddWithValue("$end", UtcText(range.End));
         var result = new List<ActivitySegment>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var appId = reader.GetString(3);
+            result.Add(new ActivitySegment(
+                reader.GetInt64(0), ParseTime(reader.GetString(1)), ParseTime(reader.GetString(2)), appId,
+                reader.GetString(4), reader.GetString(5), reader.GetBoolean(6), reader.GetBoolean(7),
+                reader.GetBoolean(8), reader.GetString(9), ColorFor(appId)));
+        }
+        return result;
+    }
+
+    private async Task<IReadOnlyList<ActivitySegment>> ReadSegmentsPageAsync(
+        DateRange range,
+        int take,
+        TimelineCursor? cursor,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = cursor is null
+            ? """
+                SELECT s.id, s.started_utc, s.ended_utc, s.app_id,
+                       COALESCE(NULLIF(r.alias, ''), s.app_name) AS display_name,
+                       s.window_title, s.is_afk, s.is_audio_playing, s.is_fullscreen,
+                       COALESCE(NULLIF(r.category, ''), '未分类') AS category
+                FROM activity_segments s
+                LEFT JOIN application_rules r ON r.app_id = s.app_id
+                WHERE s.started_utc < $end AND s.ended_utc > $start
+                  AND COALESCE(r.is_excluded, 0) = 0
+                ORDER BY s.started_utc DESC, s.id DESC
+                LIMIT $take;
+                """
+            : """
+                SELECT s.id, s.started_utc, s.ended_utc, s.app_id,
+                       COALESCE(NULLIF(r.alias, ''), s.app_name) AS display_name,
+                       s.window_title, s.is_afk, s.is_audio_playing, s.is_fullscreen,
+                       COALESCE(NULLIF(r.category, ''), '未分类') AS category
+                FROM activity_segments s
+                LEFT JOIN application_rules r ON r.app_id = s.app_id
+                WHERE s.started_utc < $end AND s.ended_utc > $start
+                  AND COALESCE(r.is_excluded, 0) = 0
+                  AND (s.started_utc < $cursorStarted
+                       OR (s.started_utc = $cursorStarted AND s.id < $cursorId))
+                ORDER BY s.started_utc DESC, s.id DESC
+                LIMIT $take;
+                """;
+        command.Parameters.AddWithValue("$start", UtcText(range.Start));
+        command.Parameters.AddWithValue("$end", UtcText(range.End));
+        command.Parameters.AddWithValue("$take", take);
+        if (cursor is { } value)
+        {
+            command.Parameters.AddWithValue("$cursorStarted", UtcText(value.StartedAt));
+            command.Parameters.AddWithValue("$cursorId", value.Id);
+        }
+
+        var result = new List<ActivitySegment>(take);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {

@@ -11,6 +11,11 @@ public interface IActivityRepository
     Task RecordSampleAsync(ActivitySample sample, TimeSpan sampleInterval, CancellationToken cancellationToken = default);
     Task<DashboardSnapshot> GetDashboardAsync(DateRange range, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(DateRange range, CancellationToken cancellationToken = default);
+    Task<TimelinePage> GetTimelinePageAsync(
+        DateRange range,
+        int pageSize,
+        TimelineCursor? cursor = null,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ApplicationRule>> GetApplicationRulesAsync(CancellationToken cancellationToken = default);
     Task SaveApplicationRuleAsync(ApplicationRule rule, CancellationToken cancellationToken = default);
     Task<AppSettings> GetSettingsAsync(CancellationToken cancellationToken = default);

@@ -60,6 +60,30 @@ public sealed class RepositoryTests : IDisposable
         Assert.Empty(await repository.GetTimelineAsync(DateRange.Today()));
     }
 
+    [Fact]
+    public async Task TimelinePage_UsesStableCursorWithoutDuplicatesOrGaps()
+    {
+        var repository = await CreateRepositoryAsync();
+        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+        for (var index = 0; index < 7; index++)
+            await repository.RecordSampleAsync(Sample(localNoon.AddSeconds(index * 5), index % 2 == 0), TimeSpan.FromSeconds(5));
+
+        var expected = await repository.GetTimelineAsync(DateRange.Today());
+        var actual = new List<ActivitySegment>();
+        TimelineCursor? cursor = null;
+        TimelinePage page;
+        do
+        {
+            page = await repository.GetTimelinePageAsync(DateRange.Today(), 3, cursor);
+            actual.AddRange(page.Items);
+            cursor = page.NextCursor;
+        } while (page.HasMore);
+
+        Assert.Equal(expected.Select(segment => segment.Id), actual.Select(segment => segment.Id));
+        Assert.Equal(actual.Count, actual.Select(segment => segment.Id).Distinct().Count());
+        Assert.Null(page.NextCursor);
+    }
+
     private async Task<SqliteActivityRepository> CreateRepositoryAsync()
     {
         var repository = new SqliteActivityRepository(_paths);

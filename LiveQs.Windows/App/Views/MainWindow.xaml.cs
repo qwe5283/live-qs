@@ -3,7 +3,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using LiveQs.Windows.App.Controls;
+using LiveQs.Windows.App.ViewModels;
 using LiveQs.Windows.Core;
+using Microsoft.Extensions.Logging;
 
 namespace LiveQs.Windows.App.Views;
 
@@ -22,14 +24,15 @@ public partial class MainWindow : Window
         IStartupManager startupManager,
         ISyncStatusService syncStatusService,
         IAppPaths paths,
-        IUserDialogService dialogs)
+        IUserDialogService dialogs,
+        ILogger<TimelineViewModel> timelineLogger)
     {
         InitializeComponent();
         Icon = AppIconFactory.CreateApplicationIcon();
         _repository = repository;
         _syncStatusService = syncStatusService;
         _dashboard = new DashboardView(repository, dialogs);
-        _timeline = new TimelineView(repository, dialogs);
+        _timeline = new TimelineView(repository, dialogs, timelineLogger);
         _settings = new SettingsView(repository, startupManager, syncStatusService, paths, dialogs);
         _statusTimer = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, OnStatusTick, Dispatcher);
         _syncStatusService.Changed += OnSyncStatusChanged;
