@@ -9,10 +9,10 @@ public enum WindowTitleMode
 
 public sealed record AppSettings
 {
-    public int SamplingIntervalSeconds { get; init; } = 5;
-    public int AfkThresholdSeconds { get; init; } = 60;
+    public int SamplingIntervalSeconds { get; init; } = 10;
+    public int AfkThresholdSeconds { get; init; } = 90;
     public WindowTitleMode WindowTitleMode { get; init; } = WindowTitleMode.Original;
-    public int RetentionDays { get; init; } = 365;
+    public int RetentionDays { get; init; } = 30;
     public bool CloudSyncEnabled { get; init; }
     public string ServerBaseUrl { get; init; } = "http://localhost:8787";
     public string DeviceToken { get; init; } = "";

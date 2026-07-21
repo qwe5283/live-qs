@@ -63,8 +63,8 @@
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
                             Visibility="{Binding IsEmpty, Converter={StaticResource VisibleWhenTrue}}">
                     <TextBlock Text="&#xE823;" FontFamily="Segoe Fluent Icons" FontSize="34" Foreground="{DynamicResource MutedTextBrush}" HorizontalAlignment="Center" />
-                    <TextBlock Text="这一天没有活动记录" FontSize="16" FontWeight="SemiBold" Margin="0,14,0,0" />
-                    <TextBlock Text="可以切换日期，或在设置中确认采样未暂停。" Style="{StaticResource MutedText}" Margin="0,6,0,0" />
+                    <TextBlock Text="这一天没有活动记录" FontSize="16" FontWeight="SemiBold" Margin="0,14,0,0" HorizontalAlignment="Center"/>
+                    <TextBlock Text="可以切换日期，或在设置中确认采样未暂停" Style="{StaticResource MutedText}" Margin="0,6,0,0" HorizontalAlignment="Center"/>
                 </StackPanel>
             </Grid>
         </Border>

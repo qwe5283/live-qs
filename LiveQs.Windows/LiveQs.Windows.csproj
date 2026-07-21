@@ -8,6 +8,7 @@
     <UseWPF>true</UseWPF>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\LiveQs.ico</ApplicationIcon>
     <AssemblyName>LiveQs.Windows</AssemblyName>
     <RootNamespace>LiveQs.Windows</RootNamespace>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -22,6 +23,10 @@
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="WPF-UI" Version="4.3.0" />
     <PackageReference Include="WPF-UI.Tray" Version="4.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\LiveQs.ico" />
   </ItemGroup>
 
 </Project>

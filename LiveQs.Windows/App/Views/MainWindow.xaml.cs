@@ -25,7 +25,7 @@ public partial class MainWindow : Window
         IUserDialogService dialogs)
     {
         InitializeComponent();
-        Icon = AppIconFactory.CreateImageSource();
+        Icon = AppIconFactory.CreateApplicationIcon();
         _repository = repository;
         _syncStatusService = syncStatusService;
         _dashboard = new DashboardView(repository, dialogs);

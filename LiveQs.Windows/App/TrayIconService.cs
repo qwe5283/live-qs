@@ -1,23 +1,31 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using LiveQs.Windows.App.Views;
 using LiveQs.Windows.App.Controls;
 using LiveQs.Windows.Core;
 using Microsoft.Extensions.Logging;
-using Wpf.Ui.Tray;
+using Wpf.Ui.Tray.Controls;
 
 namespace LiveQs.Windows.App;
 
 public sealed class TrayIconService(
     IActivityRepository repository,
     IAppPaths paths,
+    ISyncStatusService syncStatusService,
     ILogger<TrayIconService> logger) : IDisposable
 {
-    private NotifyIconService? _icon;
+    private NotifyIcon? _icon;
     private MenuItem? _pauseItem;
     private MainWindow? _window;
     private Window? _trayHostWindow;
+    private DispatcherTimer? _refreshTimer;
+    private TrayIconState? _currentIconState;
+    private string? _currentTooltip;
+    private bool _samplingPaused;
+    private bool _cloudSyncEnabled;
+    private bool _isRefreshing;
 
     public void Initialize(MainWindow window)
     {
@@ -54,14 +62,22 @@ public sealed class TrayIconService(
         };
         _trayHostWindow.Show();
 
-        _icon = new NotifyIconService
+        _icon = new NotifyIcon
         {
             TooltipText = "LiveQs 活动时间",
-            Icon = AppIconFactory.CreateImageSource(),
-            ContextMenu = menu,
+            Icon = AppIconFactory.CreateTrayIcon(TrayIconState.Local),
+            Menu = menu,
         };
-        _icon.SetParentWindow(_trayHostWindow);
-        if (!_icon.Register()) logger.LogWarning("The tray icon could not be registered with Windows Explorer.");
+        var application = System.Windows.Application.Current;
+        var mainWindow = application.MainWindow;
+        application.MainWindow = _trayHostWindow;
+        try { _icon.Register(); }
+        finally { application.MainWindow = mainWindow; }
+        if (!_icon.IsRegistered) logger.LogWarning("The tray icon could not be registered with Windows Explorer.");
+
+        syncStatusService.Changed += OnSyncStatusChanged;
+        _refreshTimer = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, OnRefreshTimer, application.Dispatcher);
+        _refreshTimer.Start();
         _ = RefreshAsync();
     }
 
@@ -74,30 +90,80 @@ public sealed class TrayIconService(
         {
             var settings = await repository.GetSettingsAsync();
             await repository.SaveSettingsAsync(settings with { SamplingPaused = _pauseItem.IsChecked });
+            _samplingPaused = _pauseItem.IsChecked;
+            ApplyTrayState(syncStatusService.Current);
             await RefreshAsync();
         }
         catch (Exception exception)
         {
             _pauseItem.IsChecked = !_pauseItem.IsChecked;
+            _samplingPaused = _pauseItem.IsChecked;
+            ApplyTrayState(syncStatusService.Current);
             System.Windows.MessageBox.Show(exception.Message, "无法更新采样状态", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
         }
     }
 
     private async Task RefreshAsync()
     {
-        if (_pauseItem is null || _icon is null) return;
+        if (_pauseItem is null || _icon is null || _isRefreshing) return;
+        _isRefreshing = true;
         try
         {
             var settings = await repository.GetSettingsAsync();
-            _pauseItem.IsChecked = settings.SamplingPaused;
-            _pauseItem.Header = settings.SamplingPaused ? "恢复采样" : "暂停采样";
-            _icon.TooltipText = settings.SamplingPaused ? "LiveQs · 采样已暂停" : "LiveQs · 正在采样";
+            _samplingPaused = settings.SamplingPaused;
+            _cloudSyncEnabled = settings.CloudSyncEnabled;
+            _pauseItem.IsChecked = _samplingPaused;
+            _pauseItem.Header = _samplingPaused ? "恢复采样" : "暂停采样";
+            ApplyTrayState(syncStatusService.Current);
         }
         catch (Exception exception)
         {
             logger.LogWarning(exception, "The tray status could not be refreshed.");
         }
+        finally
+        {
+            _isRefreshing = false;
+        }
     }
+
+    private async void OnRefreshTimer(object? sender, EventArgs args) => await RefreshAsync();
+
+    private void OnSyncStatusChanged(object? sender, SyncStatus status) =>
+        System.Windows.Application.Current.Dispatcher.BeginInvoke(() => ApplyTrayState(status));
+
+    private void ApplyTrayState(SyncStatus syncStatus)
+    {
+        if (_icon is null) return;
+
+        var state = ResolveIconState(_samplingPaused, _cloudSyncEnabled, syncStatus.LastError);
+        var tooltip = state switch
+        {
+            TrayIconState.Paused => "LiveQs · 采样已暂停",
+            TrayIconState.CloudConnected => "LiveQs · 正在采样 · 云同步",
+            TrayIconState.CloudUnavailable => "LiveQs · 正在采样 · 云端不可达",
+            _ => "LiveQs · 正在采样 · 本地模式",
+        };
+
+        if (_currentIconState != state)
+        {
+            _icon.Icon = AppIconFactory.CreateTrayIcon(state);
+            _currentIconState = state;
+        }
+        if (!string.Equals(_currentTooltip, tooltip, StringComparison.Ordinal))
+        {
+            _icon.TooltipText = tooltip;
+            _currentTooltip = tooltip;
+        }
+    }
+
+    internal static TrayIconState ResolveIconState(bool samplingPaused, bool cloudSyncEnabled, string? syncError) =>
+        samplingPaused
+            ? TrayIconState.Paused
+            : !cloudSyncEnabled
+                ? TrayIconState.Local
+                : string.IsNullOrWhiteSpace(syncError)
+                    ? TrayIconState.CloudConnected
+                    : TrayIconState.CloudUnavailable;
 
     private void OpenDataDirectory()
     {
@@ -109,7 +175,11 @@ public sealed class TrayIconService(
     public void Dispose()
     {
         if (_icon is null) return;
+        syncStatusService.Changed -= OnSyncStatusChanged;
+        _refreshTimer?.Stop();
+        _refreshTimer = null;
         _icon.Unregister();
+        _icon.Dispose();
         _icon = null;
         _trayHostWindow?.Close();
         _trayHostWindow = null;
