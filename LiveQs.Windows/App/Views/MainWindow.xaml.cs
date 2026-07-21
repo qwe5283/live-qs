@@ -2,8 +2,6 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
-using System.Windows.Interop;
-using System.Windows.Media.Imaging;
 using LiveQs.Windows.App.Controls;
 using LiveQs.Windows.Core;
 
@@ -23,16 +21,16 @@ public partial class MainWindow : Window
         IActivityRepository repository,
         IStartupManager startupManager,
         ISyncStatusService syncStatusService,
-        IAppPaths paths)
+        IAppPaths paths,
+        IUserDialogService dialogs)
     {
         InitializeComponent();
-        using (var appIcon = AppIconFactory.Create())
-            Icon = Imaging.CreateBitmapSourceFromHIcon(appIcon.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+        Icon = AppIconFactory.CreateImageSource();
         _repository = repository;
         _syncStatusService = syncStatusService;
-        _dashboard = new DashboardView(repository);
-        _timeline = new TimelineView(repository);
-        _settings = new SettingsView(repository, startupManager, syncStatusService, paths);
+        _dashboard = new DashboardView(repository, dialogs);
+        _timeline = new TimelineView(repository, dialogs);
+        _settings = new SettingsView(repository, startupManager, syncStatusService, paths, dialogs);
         _statusTimer = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, OnStatusTick, Dispatcher);
         _syncStatusService.Changed += OnSyncStatusChanged;
         Closing += OnClosing;

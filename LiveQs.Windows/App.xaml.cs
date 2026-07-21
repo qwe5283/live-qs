@@ -7,6 +7,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
+using Serilog;
+using Serilog.Events;
 using Wpf.Ui.Appearance;
 
 namespace LiveQs.Windows;
@@ -19,6 +21,7 @@ public partial class LiveQsApplication : System.Windows.Application
     private Mutex? _singleInstance;
     private TrayIconService? _trayIcon;
     private MainWindow? _window;
+    private Serilog.ILogger? _bootstrapLogger;
 
     public bool IsExiting { get; private set; }
 
@@ -37,6 +40,7 @@ public partial class LiveQsApplication : System.Windows.Application
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
         DispatcherUnhandledException += (_, eventArgs) =>
         {
+            _bootstrapLogger?.Error(eventArgs.Exception, "Unhandled dispatcher exception.");
             MessageBox.Show(eventArgs.Exception.Message, "LiveQs 发生错误", MessageBoxButton.OK, MessageBoxImage.Error);
             eventArgs.Handled = true;
         };
@@ -44,9 +48,25 @@ public partial class LiveQsApplication : System.Windows.Application
         try
         {
             var builder = Host.CreateApplicationBuilder();
+            var appPaths = new AppPaths();
+            _bootstrapLogger = new LoggerConfiguration()
+                .MinimumLevel.Information()
+                .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+                .Enrich.FromLogContext()
+                .WriteTo.File(
+                    appPaths.LogPath,
+                    rollingInterval: RollingInterval.Day,
+                    retainedFileCountLimit: 14,
+                    fileSizeLimitBytes: 10 * 1024 * 1024,
+                    rollOnFileSizeLimit: true,
+                    shared: true)
+                .CreateLogger();
+            _bootstrapLogger.Information("LiveQs is starting.");
             builder.Logging.ClearProviders();
             builder.Logging.AddDebug();
-            builder.Services.AddSingleton<IAppPaths, AppPaths>();
+            builder.Logging.AddSerilog(_bootstrapLogger, dispose: false);
+            builder.Services.AddSingleton<IAppPaths>(appPaths);
+            builder.Services.AddSingleton<IUserDialogService, WpfUserDialogService>();
             builder.Services.AddSingleton<IActivityRepository, SqliteActivityRepository>();
             builder.Services.AddSingleton<IForegroundSampler, ForegroundSampler>();
             builder.Services.AddSingleton<IStartupManager, StartupManager>();
@@ -63,6 +83,7 @@ public partial class LiveQsApplication : System.Windows.Application
             var repository = _host.Services.GetRequiredService<IActivityRepository>();
             await repository.InitializeAsync();
             await _host.StartAsync();
+            _bootstrapLogger.Information("LiveQs background services started.");
 
             _window = _host.Services.GetRequiredService<MainWindow>();
             MainWindow = _window;
@@ -74,6 +95,7 @@ public partial class LiveQsApplication : System.Windows.Application
         }
         catch (Exception exception)
         {
+            _bootstrapLogger?.Fatal(exception, "LiveQs failed to start.");
             try
             {
                 var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LiveQs", "Windows");
@@ -90,6 +112,7 @@ public partial class LiveQsApplication : System.Windows.Application
     {
         if (IsExiting) return;
         IsExiting = true;
+        _bootstrapLogger?.Information("LiveQs is shutting down.");
         _trayIcon?.Dispose();
         _window?.Close();
         if (_host is not null)
@@ -109,6 +132,8 @@ public partial class LiveQsApplication : System.Windows.Application
         try { _singleInstance?.ReleaseMutex(); }
         catch (ApplicationException) { }
         _singleInstance?.Dispose();
+        (_bootstrapLogger as IDisposable)?.Dispose();
+        _bootstrapLogger = null;
         base.OnExit(args);
     }
 

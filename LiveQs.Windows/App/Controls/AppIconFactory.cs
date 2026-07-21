@@ -1,36 +1,31 @@
-using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Runtime.InteropServices;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace LiveQs.Windows.App.Controls;
 
-public static partial class AppIconFactory
+public static class AppIconFactory
 {
-    public static Icon Create()
+    public static ImageSource CreateImageSource()
     {
-        using var bitmap = new Bitmap(64, 64, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        using var graphics = Graphics.FromImage(bitmap);
-        graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        graphics.Clear(System.Drawing.Color.Transparent);
-        using var background = new SolidBrush(System.Drawing.Color.FromArgb(37, 133, 111));
-        graphics.FillEllipse(background, 4, 4, 56, 56);
-        using var facePen = new System.Drawing.Pen(System.Drawing.Color.White, 5) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        graphics.DrawEllipse(facePen, 16, 16, 32, 32);
-        graphics.DrawLine(facePen, 32, 22, 32, 34);
-        graphics.DrawLine(facePen, 32, 34, 41, 39);
-        using var dot = new SolidBrush(System.Drawing.Color.FromArgb(226, 126, 86));
-        graphics.FillEllipse(dot, 47, 8, 10, 10);
-
-        var handle = bitmap.GetHicon();
-        try
+        const int size = 64;
+        var visual = new DrawingVisual();
+        using (var context = visual.RenderOpen())
         {
-            using var borrowed = Icon.FromHandle(handle);
-            return (Icon)borrowed.Clone();
+            context.DrawEllipse(new SolidColorBrush(Color.FromRgb(00, 122, 255)), null, new Point(32, 32), 28, 28);
+            var clockPen = new Pen(Brushes.White, 5)
+            {
+                StartLineCap = PenLineCap.Round,
+                EndLineCap = PenLineCap.Round,
+            };
+            context.DrawEllipse(null, clockPen, new Point(32, 32), 16, 16);
+            context.DrawLine(clockPen, new Point(32, 22), new Point(32, 34));
+            context.DrawLine(clockPen, new Point(32, 34), new Point(41, 39));
+            context.DrawEllipse(new SolidColorBrush(Color.FromRgb(226, 126, 86)), null, new Point(52, 13), 5, 5);
         }
-        finally { _ = DestroyIcon(handle); }
-    }
 
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool DestroyIcon(nint iconHandle);
+        var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
+    }
 }

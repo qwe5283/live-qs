@@ -11,7 +11,7 @@
                 <TextBlock Text="设置" Style="{StaticResource PageTitle}" />
                 <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
             </StackPanel>
-            <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" VerticalAlignment="Center" Click="Save_Click"><TextBlock Text="保存设置" Style="{StaticResource ButtonContentText}" /></Button>
+            <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" VerticalAlignment="Center" Command="{Binding SaveCommand}"><TextBlock Text="保存设置" Style="{StaticResource ButtonContentText}" /></Button>
         </Grid>
 
         <Border Grid.Row="1" Style="{StaticResource Surface}" Margin="28,0,28,28" Padding="0">
@@ -63,7 +63,8 @@
                                 <TextBlock Text="服务端 Base URL" VerticalAlignment="Center" />
                                 <TextBox Grid.Column="1" Text="{Binding ServerBaseUrl, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"/>
                                 <TextBlock Grid.Row="1" Text="Device Token" VerticalAlignment="Center" />
-                                <PasswordBox x:Name="TokenBox" Grid.Row="1" Grid.Column="1" Padding="9,7" BorderBrush="{DynamicResource BorderBrush}" />
+                                <PasswordBox x:Name="TokenBox" Grid.Row="1" Grid.Column="1" Padding="9,7" BorderBrush="{DynamicResource BorderBrush}"
+                                             PasswordChanged="TokenBox_PasswordChanged" />
                                 <TextBlock Grid.Row="2" Text="Device ID" VerticalAlignment="Center" />
                                 <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding DeviceId, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"/>
                             </Grid>
@@ -112,7 +113,7 @@
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                     <TextBox Text="{Binding DatabasePath, Mode=OneWay}" IsReadOnly="True" VerticalAlignment="Center"/>
                                     <Button Grid.Column="1" Content="&#xED25;" FontFamily="Segoe Fluent Icons" ToolTip="打开所在目录"
-                                            Style="{StaticResource SecondaryButton}" Padding="10,8" Margin="7,0,0,0" Click="OpenDataFolder_Click" />
+                                            Style="{StaticResource SecondaryButton}" Padding="10,8" Margin="7,0,0,0" Command="{Binding OpenDataFolderCommand}" />
                                 </Grid>
                             </Grid>
 
@@ -123,11 +124,11 @@
                                 <DatePicker SelectedDate="{Binding MaintenanceStartDate}" Width="160" />
                                 <TextBlock Text="至" VerticalAlignment="Center" Margin="8,0" />
                                 <DatePicker SelectedDate="{Binding MaintenanceEndDate}" Width="160" />
-                                <Button Content="导出 CSV" Style="{StaticResource SecondaryButton}" Margin="12,0,0,0" Click="Export_Click" />
+                                <Button Content="导出 CSV" Style="{StaticResource SecondaryButton}" Margin="12,0,0,0" Command="{Binding ExportCommand}" />
                                 <Button Foreground="White" Background="{DynamicResource DangerBrush}"
-                                        Style="{StaticResource PrimaryButton}" Margin="7,0,0,0" Click="Delete_Click"><TextBlock Text="删除数据" Style="{StaticResource ButtonContentText}" /></Button>
+                                        Style="{StaticResource PrimaryButton}" Margin="7,0,0,0" Command="{Binding DeleteCommand}"><TextBlock Text="删除数据" Style="{StaticResource ButtonContentText}" /></Button>
                             </StackPanel>
-                            <Button Content="优化数据库" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,22,0,0" Click="Optimize_Click" />
+                            <Button Content="优化数据库" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,22,0,0" Command="{Binding OptimizeCommand}" />
                         </StackPanel>
                     </ScrollViewer>
                 </TabItem>

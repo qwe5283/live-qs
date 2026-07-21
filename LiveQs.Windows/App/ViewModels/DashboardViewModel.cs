@@ -1,10 +1,13 @@
 using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.Input;
 using LiveQs.Windows.Core;
 
 namespace LiveQs.Windows.App.ViewModels;
 
-public sealed class DashboardViewModel(IActivityRepository repository) : ViewModelBase
+public sealed class DashboardViewModel : ViewModelBase
 {
+    private readonly IActivityRepository _repository;
+    private readonly IUserDialogService _dialogs;
     private DateTime? _startDate = DateTime.Today;
     private DateTime? _endDate = DateTime.Today;
     private string _activeText = "0分钟";
@@ -14,7 +17,21 @@ public sealed class DashboardViewModel(IActivityRepository repository) : ViewMod
     private bool _isEmpty = true;
     private bool _isLoading;
 
+    public DashboardViewModel(IActivityRepository repository, IUserDialogService dialogs)
+    {
+        _repository = repository;
+        _dialogs = dialogs;
+        LoadCommand = new AsyncRelayCommand(() => RunAsync(LoadAsync));
+        TodayCommand = new AsyncRelayCommand(() => RunAsync(() => SelectPresetAsync(1)));
+        WeekCommand = new AsyncRelayCommand(() => RunAsync(() => SelectPresetAsync(7)));
+        MonthCommand = new AsyncRelayCommand(() => RunAsync(() => SelectPresetAsync(30)));
+    }
+
     public ObservableCollection<AppUsage> Apps { get; } = [];
+    public IAsyncRelayCommand LoadCommand { get; }
+    public IAsyncRelayCommand TodayCommand { get; }
+    public IAsyncRelayCommand WeekCommand { get; }
+    public IAsyncRelayCommand MonthCommand { get; }
     public DateTime? StartDate { get => _startDate; set => Set(ref _startDate, value); }
     public DateTime? EndDate { get => _endDate; set => Set(ref _endDate, value); }
     public string ActiveText { get => _activeText; private set => Set(ref _activeText, value); }
@@ -33,7 +50,7 @@ public sealed class DashboardViewModel(IActivityRepository repository) : ViewMod
             var start = (StartDate ?? DateTime.Today).Date;
             var end = (EndDate ?? start).Date;
             if (end < start) (start, end) = (end, start);
-            var snapshot = await repository.GetDashboardAsync(DateRange.FromLocalDates(start, end));
+            var snapshot = await _repository.GetDashboardAsync(DateRange.FromLocalDates(start, end));
             Apps.Clear();
             foreach (var app in snapshot.Apps) Apps.Add(app);
             ActiveText = DurationText.Format(snapshot.ActiveDuration);
@@ -50,5 +67,11 @@ public sealed class DashboardViewModel(IActivityRepository repository) : ViewMod
         EndDate = DateTime.Today;
         StartDate = DateTime.Today.AddDays(-(Math.Max(1, days) - 1));
         await LoadAsync();
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        try { await action(); }
+        catch (Exception exception) { _dialogs.ShowError("查询失败", exception); }
     }
 }

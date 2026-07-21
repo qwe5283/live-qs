@@ -1,16 +1,33 @@
 using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.Input;
 using LiveQs.Windows.Core;
 
 namespace LiveQs.Windows.App.ViewModels;
 
-public sealed class TimelineViewModel(IActivityRepository repository) : ViewModelBase
+public sealed class TimelineViewModel : ViewModelBase
 {
+    private readonly IActivityRepository _repository;
+    private readonly IUserDialogService _dialogs;
     private DateTime? _selectedDate = DateTime.Today;
     private bool _isEmpty = true;
     private bool _isLoading;
     private string _summary = "暂无活动";
 
+    public TimelineViewModel(IActivityRepository repository, IUserDialogService dialogs)
+    {
+        _repository = repository;
+        _dialogs = dialogs;
+        LoadCommand = new AsyncRelayCommand(() => RunAsync(LoadAsync));
+        PreviousCommand = new AsyncRelayCommand(() => RunAsync(() => MoveAsync(-1)));
+        NextCommand = new AsyncRelayCommand(() => RunAsync(() => MoveAsync(1)));
+        TodayCommand = new AsyncRelayCommand(() => RunAsync(SelectTodayAsync));
+    }
+
     public ObservableCollection<TimelineRow> Rows { get; } = [];
+    public IAsyncRelayCommand LoadCommand { get; }
+    public IAsyncRelayCommand PreviousCommand { get; }
+    public IAsyncRelayCommand NextCommand { get; }
+    public IAsyncRelayCommand TodayCommand { get; }
     public DateTime? SelectedDate { get => _selectedDate; set => Set(ref _selectedDate, value); }
     public bool IsEmpty { get => _isEmpty; private set => Set(ref _isEmpty, value); }
     public bool IsLoading { get => _isLoading; private set => Set(ref _isLoading, value); }
@@ -23,7 +40,7 @@ public sealed class TimelineViewModel(IActivityRepository repository) : ViewMode
         try
         {
             var date = (SelectedDate ?? DateTime.Today).Date;
-            var segments = await repository.GetTimelineAsync(DateRange.FromLocalDates(date, date));
+            var segments = await _repository.GetTimelineAsync(DateRange.FromLocalDates(date, date));
             Rows.Clear();
             foreach (var segment in segments)
             {
@@ -52,6 +69,18 @@ public sealed class TimelineViewModel(IActivityRepository repository) : ViewMode
     {
         SelectedDate = (SelectedDate ?? DateTime.Today).AddDays(days);
         await LoadAsync();
+    }
+
+    private async Task SelectTodayAsync()
+    {
+        SelectedDate = DateTime.Today;
+        await LoadAsync();
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        try { await action(); }
+        catch (Exception exception) { _dialogs.ShowError("查询失败", exception); }
     }
 }
 

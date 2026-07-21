@@ -108,13 +108,12 @@ public sealed class ForegroundSampler : IForegroundSampler
 
     private static (int? Percent, bool? Charging) GetBattery()
     {
-        try
-        {
-            var status = System.Windows.Forms.SystemInformation.PowerStatus;
-            if (status.BatteryChargeStatus == System.Windows.Forms.BatteryChargeStatus.NoSystemBattery) return (null, null);
-            return ((int)Math.Round(status.BatteryLifePercent * 100), status.PowerLineStatus == System.Windows.Forms.PowerLineStatus.Online);
-        }
-        catch (InvalidOperationException) { return (null, null); }
+        if (!NativeMethods.GetSystemPowerStatus(out var status) || status.BatteryFlag is 128 or byte.MaxValue)
+            return (null, null);
+
+        int? percent = status.BatteryLifePercent == byte.MaxValue ? null : status.BatteryLifePercent;
+        bool? charging = status.AcLineStatus == byte.MaxValue ? null : status.AcLineStatus == 1;
+        return (percent, charging);
     }
 
     private static string Sha256(string value) =>

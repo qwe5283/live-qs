@@ -31,6 +31,17 @@ internal static partial class NativeMethods
         internal uint Flags;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct SystemPowerStatus
+    {
+        internal byte AcLineStatus;
+        internal byte BatteryFlag;
+        internal byte BatteryLifePercent;
+        internal byte SystemStatusFlag;
+        internal uint BatteryLifeTime;
+        internal uint BatteryFullLifeTime;
+    }
+
     [LibraryImport("user32.dll")]
     internal static partial nint GetForegroundWindow();
 
@@ -57,4 +68,8 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool GetMonitorInfo(nint monitorHandle, ref MonitorInfo info);
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetSystemPowerStatus(out SystemPowerStatus status);
 }

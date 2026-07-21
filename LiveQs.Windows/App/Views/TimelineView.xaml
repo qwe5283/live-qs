@@ -16,11 +16,11 @@
                 <TextBlock Text="{Binding Summary}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Content="&#x2039;" FontFamily="Segoe UI" FontSize="18" ToolTip="前一天" Style="{StaticResource SecondaryButton}" Padding="10,6" Click="Previous_Click" />
+                <Button Content="&#x2039;" FontFamily="Segoe UI" FontSize="18" ToolTip="前一天" Style="{StaticResource SecondaryButton}" Padding="10,6" Command="{Binding PreviousCommand}" />
                 <DatePicker SelectedDate="{Binding SelectedDate}" Width="150" Margin="7,0" />
-                <Button Content="&#x203A;" FontFamily="Segoe UI" FontSize="18" ToolTip="后一天" Style="{StaticResource SecondaryButton}" Padding="10,6" Click="Next_Click" />
-                <Button Content="今天" Style="{StaticResource SecondaryButton}" Margin="7,0,0,0" Click="Today_Click" />
-                <Button Style="{StaticResource PrimaryButton}" Margin="7,0,0,0" Click="Query_Click"><TextBlock Text="查询" Style="{StaticResource ButtonContentText}" /></Button>
+                <Button Content="&#x203A;" FontFamily="Segoe UI" FontSize="18" ToolTip="后一天" Style="{StaticResource SecondaryButton}" Padding="10,6" Command="{Binding NextCommand}" />
+                <Button Content="今天" Style="{StaticResource SecondaryButton}" Margin="7,0,0,0" Command="{Binding TodayCommand}" />
+                <Button Style="{StaticResource PrimaryButton}" Margin="7,0,0,0" Command="{Binding LoadCommand}"><TextBlock Text="查询" Style="{StaticResource ButtonContentText}" /></Button>
             </StackPanel>
         </Grid>
 
