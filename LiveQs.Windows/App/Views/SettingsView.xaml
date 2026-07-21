@@ -4,6 +4,22 @@
              xmlns:core="clr-namespace:LiveQs.Windows.Core"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              MinWidth="700" MinHeight="520">
+    <UserControl.Resources>
+        <DataTemplate x:Key="SettingsTabHeaderTemplate">
+            <TextBlock Text="{Binding}" TextWrapping="NoWrap" TextTrimming="None" HorizontalAlignment="Left">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                        <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type TabItem}}}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </DataTemplate>
+    </UserControl.Resources>
     <Grid Background="{DynamicResource WindowBrush}">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
         <Grid Margin="28,24,28,18">
@@ -17,7 +33,7 @@
 
         <Border Grid.Row="1" Style="{StaticResource Surface}" Margin="28,0,28,28" Padding="0">
             <TabControl Margin="16">
-                <TabItem Header="采样">
+                <TabItem Header="采样" HeaderTemplate="{StaticResource SettingsTabHeaderTemplate}">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="10,20" MaxWidth="720" HorizontalAlignment="Left">
                             <TextBlock Text="采样策略" Style="{StaticResource SectionTitle}" />
@@ -52,7 +68,7 @@
                     </ScrollViewer>
                 </TabItem>
 
-                <TabItem Header="云同步">
+                <TabItem Header="云同步" HeaderTemplate="{StaticResource SettingsTabHeaderTemplate}">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="10,20" MaxWidth="720" HorizontalAlignment="Left">
                             <TextBlock Text="本地优先同步" Style="{StaticResource SectionTitle}" />
@@ -79,7 +95,7 @@
                     </ScrollViewer>
                 </TabItem>
 
-                <TabItem Header="应用管理">
+                <TabItem Header="应用管理" HeaderTemplate="{StaticResource SettingsTabHeaderTemplate}">
                     <Grid Margin="10,18">
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                         <StackPanel Margin="0,0,0,14">
@@ -100,7 +116,7 @@
                     </Grid>
                 </TabItem>
 
-                <TabItem Header="本地数据">
+                <TabItem Header="本地数据" HeaderTemplate="{StaticResource SettingsTabHeaderTemplate}">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="10,20" MaxWidth="760" HorizontalAlignment="Left">
                             <TextBlock Text="存储与保留" Style="{StaticResource SectionTitle}" />
