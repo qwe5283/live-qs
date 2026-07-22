@@ -1,32 +1,25 @@
 using System.Windows;
 using System.Windows.Controls;
-using LiveQs.Windows.Core;
-using LiveQs.Windows.Services;
 using LiveQs.Windows.ViewModels;
-using Microsoft.Extensions.Logging;
 
 namespace LiveQs.Windows.Views;
 
 public partial class TimelineView : System.Windows.Controls.UserControl
 {
-    private readonly TimelineViewModel _viewModel;
+    public TimelineViewModel ViewModel { get; }
 
-    public TimelineView(
-        IActivityRepository repository,
-        IUserDialogService dialogs,
-        ILogger<TimelineViewModel> logger)
+    public TimelineView(TimelineViewModel viewModel)
     {
         InitializeComponent();
-        _viewModel = new TimelineViewModel(repository, dialogs, logger);
-        DataContext = _viewModel;
+        DataContext = ViewModel = viewModel;
     }
 
-    public Task RefreshAsync() => _viewModel.LoadAsync();
+    public Task RefreshAsync() => ViewModel.RefreshAsync();
 
     private void TimelineList_ScrollChanged(object sender, ScrollChangedEventArgs args)
     {
         if (args.ExtentHeight <= args.ViewportHeight || args.VerticalOffset < args.ExtentHeight - args.ViewportHeight - 240)
             return;
-        _viewModel.LoadMoreCommand.Execute(null);
+        ViewModel.LoadMoreCommand.Execute(null);
     }
 }

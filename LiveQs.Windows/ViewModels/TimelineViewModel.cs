@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiveQs.Windows.Core;
 using LiveQs.Windows.Services;
@@ -6,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace LiveQs.Windows.ViewModels;
 
-public sealed class TimelineViewModel : ViewModelBase
+public sealed partial class TimelineViewModel : ViewModelBase
 {
     private const int PageSize = 500;
     private readonly IActivityRepository _repository;
@@ -16,12 +17,19 @@ public sealed class TimelineViewModel : ViewModelBase
     private DateRange _currentRange;
     private TimelineCursor? _nextCursor;
     private long _requestVersion;
+    [ObservableProperty]
     private DateTime? _selectedDate = DateTime.Today;
+    [ObservableProperty]
     private IReadOnlyList<TimelineRow> _rows = Array.Empty<TimelineRow>();
+    [ObservableProperty]
     private bool _isEmpty = true;
+    [ObservableProperty]
     private bool _isLoading;
+    [ObservableProperty]
     private bool _isLoadingMore;
+    [ObservableProperty]
     private bool _hasMore;
+    [ObservableProperty]
     private string _summary = "暂无活动";
 
     public TimelineViewModel(
@@ -32,27 +40,9 @@ public sealed class TimelineViewModel : ViewModelBase
         _repository = repository;
         _dialogs = dialogs;
         _logger = logger;
-        LoadCommand = new AsyncRelayCommand(() => RunAsync(LoadAsync));
-        LoadMoreCommand = new AsyncRelayCommand(() => RunAsync(LoadMoreAsync));
-        PreviousCommand = new AsyncRelayCommand(() => RunAsync(() => MoveAsync(-1)));
-        NextCommand = new AsyncRelayCommand(() => RunAsync(() => MoveAsync(1)));
-        TodayCommand = new AsyncRelayCommand(() => RunAsync(SelectTodayAsync));
     }
 
-    public IReadOnlyList<TimelineRow> Rows { get => _rows; private set => Set(ref _rows, value); }
-    public IAsyncRelayCommand LoadCommand { get; }
-    public IAsyncRelayCommand LoadMoreCommand { get; }
-    public IAsyncRelayCommand PreviousCommand { get; }
-    public IAsyncRelayCommand NextCommand { get; }
-    public IAsyncRelayCommand TodayCommand { get; }
-    public DateTime? SelectedDate { get => _selectedDate; set => Set(ref _selectedDate, value); }
-    public bool IsEmpty { get => _isEmpty; private set => Set(ref _isEmpty, value); }
-    public bool IsLoading { get => _isLoading; private set => Set(ref _isLoading, value); }
-    public bool IsLoadingMore { get => _isLoadingMore; private set => Set(ref _isLoadingMore, value); }
-    public bool HasMore { get => _hasMore; private set => Set(ref _hasMore, value); }
-    public string Summary { get => _summary; private set => Set(ref _summary, value); }
-
-    public async Task LoadAsync()
+    public async Task RefreshAsync()
     {
         var version = Interlocked.Increment(ref _requestVersion);
         var cancellation = new CancellationTokenSource();
@@ -84,19 +74,19 @@ public sealed class TimelineViewModel : ViewModelBase
         }
     }
 
-    public async Task MoveAsync(int days)
+    private async Task MoveAsync(int days)
     {
         SelectedDate = (SelectedDate ?? DateTime.Today).AddDays(days);
-        await LoadAsync();
+        await RefreshAsync();
     }
 
     private async Task SelectTodayAsync()
     {
         SelectedDate = DateTime.Today;
-        await LoadAsync();
+        await RefreshAsync();
     }
 
-    private async Task LoadMoreAsync()
+    private async Task LoadMorePageAsync()
     {
         if (IsLoading || IsLoadingMore || !HasMore || _nextCursor is not { } cursor || _loadCancellation is not { } cancellation)
             return;
@@ -120,6 +110,21 @@ public sealed class TimelineViewModel : ViewModelBase
             if (version == Volatile.Read(ref _requestVersion)) IsLoadingMore = false;
         }
     }
+
+    [RelayCommand]
+    private Task LoadAsync() => RunAsync(RefreshAsync);
+
+    [RelayCommand]
+    private Task LoadMoreAsync() => RunAsync(LoadMorePageAsync);
+
+    [RelayCommand]
+    private Task PreviousAsync() => RunAsync(() => MoveAsync(-1));
+
+    [RelayCommand]
+    private Task NextAsync() => RunAsync(() => MoveAsync(1));
+
+    [RelayCommand]
+    private Task TodayAsync() => RunAsync(SelectTodayAsync);
 
     private async Task<TimelinePageResult> LoadPageInBackgroundAsync(
         DateRange range,

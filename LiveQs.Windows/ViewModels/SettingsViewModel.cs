@@ -1,32 +1,48 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiveQs.Windows.Core;
 using LiveQs.Windows.Services;
 
 namespace LiveQs.Windows.ViewModels;
 
-public sealed class SettingsViewModel : ViewModelBase
+public sealed partial class SettingsViewModel : ViewModelBase
 {
     private readonly IActivityRepository _repository;
     private readonly IStartupManager _startupManager;
     private readonly ISyncStatusService _syncStatusService;
     private readonly IAppPaths _paths;
     private readonly IUserDialogService _dialogs;
+    [ObservableProperty]
     private int _samplingIntervalSeconds;
+    [ObservableProperty]
     private int _afkThresholdSeconds;
+    [ObservableProperty]
     private WindowTitleMode _windowTitleMode;
+    [ObservableProperty]
     private int _retentionDays;
+    [ObservableProperty]
     private bool _cloudSyncEnabled;
+    [ObservableProperty]
     private string _serverBaseUrl = "";
+    [ObservableProperty]
     private string _deviceToken = "";
+    [ObservableProperty]
     private string _deviceId = "";
+    [ObservableProperty]
     private bool _launchOnStartup;
+    [ObservableProperty]
     private bool _closeToTray;
+    [ObservableProperty]
     private bool _samplingPaused;
+    [ObservableProperty]
     private string _statusText = "尚未保存";
+    [ObservableProperty]
     private string _syncStatusText = "本地模式";
+    [ObservableProperty]
     private DateTime? _maintenanceStartDate = DateTime.Today;
+    [ObservableProperty]
     private DateTime? _maintenanceEndDate = DateTime.Today;
 
     public SettingsViewModel(
@@ -41,36 +57,11 @@ public sealed class SettingsViewModel : ViewModelBase
         _syncStatusService = syncStatusService;
         _paths = paths;
         _dialogs = dialogs;
-        SaveCommand = new AsyncRelayCommand(() => RunAsync(SaveAsync, "保存设置失败"));
-        ExportCommand = new AsyncRelayCommand(ExportSelectedRangeAsync);
-        DeleteCommand = new AsyncRelayCommand(DeleteSelectedRangeWithConfirmationAsync);
-        OptimizeCommand = new AsyncRelayCommand(() => RunAsync(OptimizeAsync, "数据库维护失败"));
-        OpenDataFolderCommand = new RelayCommand(OpenDataFolder);
     }
 
     public IReadOnlyList<WindowTitleMode> WindowTitleModes { get; } = Enum.GetValues<WindowTitleMode>();
     public ObservableCollection<ApplicationRuleRow> ApplicationRules { get; } = [];
-    public IAsyncRelayCommand SaveCommand { get; }
-    public IAsyncRelayCommand ExportCommand { get; }
-    public IAsyncRelayCommand DeleteCommand { get; }
-    public IAsyncRelayCommand OptimizeCommand { get; }
-    public IRelayCommand OpenDataFolderCommand { get; }
     public string DatabasePath => _paths.DatabasePath;
-    public int SamplingIntervalSeconds { get => _samplingIntervalSeconds; set => Set(ref _samplingIntervalSeconds, value); }
-    public int AfkThresholdSeconds { get => _afkThresholdSeconds; set => Set(ref _afkThresholdSeconds, value); }
-    public WindowTitleMode WindowTitleMode { get => _windowTitleMode; set => Set(ref _windowTitleMode, value); }
-    public int RetentionDays { get => _retentionDays; set => Set(ref _retentionDays, value); }
-    public bool CloudSyncEnabled { get => _cloudSyncEnabled; set => Set(ref _cloudSyncEnabled, value); }
-    public string ServerBaseUrl { get => _serverBaseUrl; set => Set(ref _serverBaseUrl, value); }
-    public string DeviceToken { get => _deviceToken; set => Set(ref _deviceToken, value); }
-    public string DeviceId { get => _deviceId; set => Set(ref _deviceId, value); }
-    public bool LaunchOnStartup { get => _launchOnStartup; set => Set(ref _launchOnStartup, value); }
-    public bool CloseToTray { get => _closeToTray; set => Set(ref _closeToTray, value); }
-    public bool SamplingPaused { get => _samplingPaused; set => Set(ref _samplingPaused, value); }
-    public string StatusText { get => _statusText; private set => Set(ref _statusText, value); }
-    public string SyncStatusText { get => _syncStatusText; private set => Set(ref _syncStatusText, value); }
-    public DateTime? MaintenanceStartDate { get => _maintenanceStartDate; set => Set(ref _maintenanceStartDate, value); }
-    public DateTime? MaintenanceEndDate { get => _maintenanceEndDate; set => Set(ref _maintenanceEndDate, value); }
 
     public async Task LoadAsync()
     {
@@ -93,7 +84,7 @@ public sealed class SettingsViewModel : ViewModelBase
         StatusText = "设置已加载";
     }
 
-    public async Task SaveAsync()
+    private async Task SaveCoreAsync()
     {
         var settings = BuildSettings();
         var validation = settings.Validate();
@@ -126,7 +117,7 @@ public sealed class SettingsViewModel : ViewModelBase
         StatusText = "CSV 导出完成";
     }
 
-    public async Task OptimizeAsync()
+    private async Task OptimizeCoreAsync()
     {
         await _repository.OptimizeAsync();
         StatusText = "数据库维护完成";
@@ -181,6 +172,19 @@ public sealed class SettingsViewModel : ViewModelBase
             await RunAsync(async () => { _ = await DeleteSelectedRangeAsync(); }, "删除失败");
     }
 
+    [RelayCommand]
+    private Task SaveAsync() => RunAsync(SaveCoreAsync, "保存设置失败");
+
+    [RelayCommand]
+    private Task ExportAsync() => ExportSelectedRangeAsync();
+
+    [RelayCommand]
+    private Task DeleteAsync() => DeleteSelectedRangeWithConfirmationAsync();
+
+    [RelayCommand]
+    private Task OptimizeAsync() => RunAsync(OptimizeCoreAsync, "数据库维护失败");
+
+    [RelayCommand]
     private void OpenDataFolder()
     {
         try
@@ -200,10 +204,13 @@ public sealed class SettingsViewModel : ViewModelBase
     }
 }
 
-public sealed class ApplicationRuleRow : ViewModelBase
+public sealed partial class ApplicationRuleRow : ViewModelBase
 {
+    [ObservableProperty]
     private string _alias;
+    [ObservableProperty]
     private string _category;
+    [ObservableProperty]
     private bool _isExcluded;
 
     public ApplicationRuleRow(ApplicationRule rule)
@@ -215,8 +222,5 @@ public sealed class ApplicationRuleRow : ViewModelBase
     }
 
     public string AppId { get; }
-    public string Alias { get => _alias; set => Set(ref _alias, value); }
-    public string Category { get => _category; set => Set(ref _category, value); }
-    public bool IsExcluded { get => _isExcluded; set => Set(ref _isExcluded, value); }
     public ApplicationRule ToRule() => new(AppId, Alias ?? "", Category ?? "未分类", IsExcluded);
 }
