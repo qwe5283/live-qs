@@ -15,26 +15,41 @@ namespace LiveQs.Windows;
 
 public partial class LiveQsApplication : System.Windows.Application
 {
+    private const string SingleInstanceMutexName = @"Local\LiveQs.Windows.SingleInstance";
+    private const string ActivationEventName = @"Local\LiveQs.Windows.Activate";
     private static readonly Uri LightThemeUri = new("Styles/Theme.Light.xaml", UriKind.Relative);
     private static readonly Uri DarkThemeUri = new("Styles/Theme.Dark.xaml", UriKind.Relative);
+    private EventWaitHandle? _activationEvent;
+    private RegisteredWaitHandle? _activationRegistration;
     private IHost? _host;
     private Mutex? _singleInstance;
     private TrayIconService? _trayIcon;
     private MainWindow? _window;
     private Serilog.ILogger? _bootstrapLogger;
+    private bool _activationPending;
+    private bool _ownsSingleInstanceMutex;
 
     public bool IsExiting { get; private set; }
 
     protected override async void OnStartup(StartupEventArgs args)
     {
         base.OnStartup(args);
-        _singleInstance = new Mutex(true, @"Local\LiveQs.Windows.SingleInstance", out var isFirstInstance);
+        _activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivationEventName);
+        _singleInstance = new Mutex(true, SingleInstanceMutexName, out var isFirstInstance);
+        _ownsSingleInstanceMutex = isFirstInstance;
         if (!isFirstInstance)
         {
-            MessageBox.Show("活动时间已经在运行，请从系统托盘打开。", "LiveQs", MessageBoxButton.OK, MessageBoxImage.Information);
+            _activationEvent.Set();
             Shutdown();
             return;
         }
+
+        _activationRegistration = ThreadPool.RegisterWaitForSingleObject(
+            _activationEvent,
+            static (state, _) => ((LiveQsApplication)state!).QueueActivationRequest(),
+            this,
+            Timeout.Infinite,
+            false);
 
         ApplySystemTheme();
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
@@ -82,7 +97,15 @@ public partial class LiveQsApplication : System.Windows.Application
             _trayIcon.Initialize(_window);
             var settings = await repository.GetSettingsAsync();
             var background = args.Args.Any(value => string.Equals(value, "--background", StringComparison.OrdinalIgnoreCase));
-            if (!background && !settings.StartMinimized) _window.Show();
+            if (_activationPending)
+            {
+                _activationPending = false;
+                _window.RestoreAndActivate();
+            }
+            else if (!background && !settings.StartMinimized)
+            {
+                _window.Show();
+            }
         }
         catch (Exception exception)
         {
@@ -120,12 +143,40 @@ public partial class LiveQsApplication : System.Windows.Application
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         _trayIcon?.Dispose();
-        try { _singleInstance?.ReleaseMutex(); }
-        catch (ApplicationException) { }
+        _activationRegistration?.Unregister(null);
+        _activationRegistration = null;
+        _activationEvent?.Dispose();
+        _activationEvent = null;
+        if (_ownsSingleInstanceMutex)
+        {
+            try { _singleInstance?.ReleaseMutex(); }
+            catch (ApplicationException) { }
+            _ownsSingleInstanceMutex = false;
+        }
         _singleInstance?.Dispose();
+        _singleInstance = null;
         (_bootstrapLogger as IDisposable)?.Dispose();
         _bootstrapLogger = null;
         base.OnExit(args);
+    }
+
+    private void QueueActivationRequest()
+    {
+        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
+        _ = Dispatcher.BeginInvoke(new Action(HandleActivationRequest));
+    }
+
+    private void HandleActivationRequest()
+    {
+        if (IsExiting) return;
+        if (_window is null)
+        {
+            _activationPending = true;
+            return;
+        }
+
+        _bootstrapLogger?.Information("Another process requested activation of the main window.");
+        _window.RestoreAndActivate();
     }
 
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs args) =>
