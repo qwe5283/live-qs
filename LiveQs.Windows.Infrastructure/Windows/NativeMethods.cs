@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace LiveQs.Windows.Infrastructure;
+namespace LiveQs.Windows.Infrastructure.Windows;
 
 internal static partial class NativeMethods
 {

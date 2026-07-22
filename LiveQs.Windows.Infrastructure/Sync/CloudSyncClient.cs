@@ -2,9 +2,11 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.Http;
 using System.Text.Json;
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Core.Settings;
+using LiveQs.Windows.Core.Sync;
 
-namespace LiveQs.Windows.Infrastructure;
+namespace LiveQs.Windows.Infrastructure.Sync;
 
 public sealed class CloudSyncClient(IHttpClientFactory httpClientFactory) : ISyncClient
 {

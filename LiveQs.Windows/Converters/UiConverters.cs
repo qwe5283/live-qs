@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Common;
 
 namespace LiveQs.Windows.Converters;
 

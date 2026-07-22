@@ -1,12 +1,14 @@
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Core.Settings;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace LiveQs.Windows.Infrastructure;
+namespace LiveQs.Windows.Infrastructure.Sampling;
 
 public sealed class SamplingWorker(
     IForegroundSampler sampler,
-    IActivityRepository repository,
+    ISettingsStore settingsStore,
+    IActivityWriter activityWriter,
     TimeProvider timeProvider,
     ILogger<SamplingWorker> logger) : BackgroundService
 {
@@ -17,13 +19,13 @@ public sealed class SamplingWorker(
             var delay = TimeSpan.FromSeconds(5);
             try
             {
-                var settings = await repository.GetSettingsAsync(stoppingToken);
+                var settings = await settingsStore.GetSettingsAsync(stoppingToken);
                 delay = TimeSpan.FromSeconds(settings.SamplingIntervalSeconds);
                 if (!settings.SamplingPaused)
                 {
                     var sample = sampler.Capture(settings);
                     if (sample is not null)
-                        await repository.RecordSampleAsync(sample, delay, stoppingToken);
+                        await activityWriter.RecordSampleAsync(sample, delay, stoppingToken);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

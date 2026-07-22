@@ -1,6 +1,7 @@
 using System.Windows;
-using LiveQs.Windows.Core;
-using LiveQs.Windows.Infrastructure;
+using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Infrastructure.Configuration;
+using LiveQs.Windows.Infrastructure.DependencyInjection;
 using LiveQs.Windows.Services;
 using LiveQs.Windows.ViewModels;
 using LiveQs.Windows.Views;
@@ -78,7 +79,7 @@ public partial class LiveQsApplication : System.Windows.Application
             _lifecycle = new ApplicationLifecycleService(
                 this,
                 _host,
-                _host.Services.GetRequiredService<IActivityRepository>(),
+                _host.Services.GetRequiredService<IDatabaseInitializer>(),
                 _host.Services.GetRequiredService<TrayIconService>(),
                 _host.Services.GetRequiredService<MainWindow>(),
                 _singleInstance,

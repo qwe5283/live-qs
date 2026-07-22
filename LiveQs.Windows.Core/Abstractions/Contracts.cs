@@ -1,14 +1,28 @@
-namespace LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Activity;
+using LiveQs.Windows.Core.Analytics;
+using LiveQs.Windows.Core.Common;
+using LiveQs.Windows.Core.Settings;
+using LiveQs.Windows.Core.Sync;
+
+namespace LiveQs.Windows.Core.Abstractions;
 
 public interface IForegroundSampler
 {
     ActivitySample? Capture(AppSettings settings);
 }
 
-public interface IActivityRepository
+public interface IDatabaseInitializer
 {
     Task InitializeAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IActivityWriter
+{
     Task RecordSampleAsync(ActivitySample sample, TimeSpan sampleInterval, CancellationToken cancellationToken = default);
+}
+
+public interface IActivityQueryService
+{
     Task<DashboardSnapshot> GetDashboardAsync(DateRange range, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(DateRange range, CancellationToken cancellationToken = default);
     Task<TimelinePage> GetTimelinePageAsync(
@@ -17,13 +31,25 @@ public interface IActivityRepository
         TimelineCursor? cursor = null,
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ApplicationRule>> GetApplicationRulesAsync(CancellationToken cancellationToken = default);
+}
+
+public interface ISettingsStore
+{
     Task SaveApplicationRuleAsync(ApplicationRule rule, CancellationToken cancellationToken = default);
     Task<AppSettings> GetSettingsAsync(CancellationToken cancellationToken = default);
     Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default);
+}
+
+public interface ISyncQueueStore
+{
     Task<IReadOnlyList<SyncQueueItem>> GetPendingSyncAsync(int limit, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task MarkSyncedAsync(IEnumerable<long> segmentIds, DateTimeOffset syncedAt, CancellationToken cancellationToken = default);
     Task MarkSyncFailedAsync(IEnumerable<long> segmentIds, string error, DateTimeOffset nextAttemptAt, CancellationToken cancellationToken = default);
     Task<int> GetPendingSyncCountAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IActivityMaintenance
+{
     Task<int> DeleteBeforeAsync(DateTimeOffset cutoff, CancellationToken cancellationToken = default);
     Task<int> DeleteRangeAsync(DateRange range, CancellationToken cancellationToken = default);
     Task ExportCsvAsync(string path, DateRange range, CancellationToken cancellationToken = default);

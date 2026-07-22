@@ -1,14 +1,16 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Core.Analytics;
+using LiveQs.Windows.Core.Common;
 using LiveQs.Windows.Services;
 
 namespace LiveQs.Windows.ViewModels;
 
 public sealed partial class DashboardViewModel : ViewModelBase
 {
-    private readonly IActivityRepository _repository;
+    private readonly IActivityQueryService _queryService;
     private readonly IUserDialogService _dialogs;
     private readonly TimeProvider _timeProvider;
     [ObservableProperty]
@@ -28,9 +30,9 @@ public sealed partial class DashboardViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isLoading;
 
-    public DashboardViewModel(IActivityRepository repository, IUserDialogService dialogs, TimeProvider timeProvider)
+    public DashboardViewModel(IActivityQueryService queryService, IUserDialogService dialogs, TimeProvider timeProvider)
     {
-        _repository = repository;
+        _queryService = queryService;
         _dialogs = dialogs;
         _timeProvider = timeProvider;
         _startDate = Today;
@@ -48,7 +50,7 @@ public sealed partial class DashboardViewModel : ViewModelBase
             var start = (StartDate ?? Today).Date;
             var end = (EndDate ?? start).Date;
             if (end < start) (start, end) = (end, start);
-            var snapshot = await _repository.GetDashboardAsync(DateRange.FromLocalDates(start, end));
+            var snapshot = await _queryService.GetDashboardAsync(DateRange.FromLocalDates(start, end));
             Apps.Clear();
             foreach (var app in snapshot.Apps) Apps.Add(app);
             ActiveText = DurationText.Format(snapshot.ActiveDuration);

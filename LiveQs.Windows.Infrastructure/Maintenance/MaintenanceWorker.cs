@@ -1,11 +1,13 @@
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Core.Settings;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace LiveQs.Windows.Infrastructure;
+namespace LiveQs.Windows.Infrastructure.Maintenance;
 
 public sealed class MaintenanceWorker(
-    IActivityRepository repository,
+    ISettingsStore settingsStore,
+    IActivityMaintenance maintenance,
     TimeProvider timeProvider,
     ILogger<MaintenanceWorker> logger) : BackgroundService
 {
@@ -15,9 +17,9 @@ public sealed class MaintenanceWorker(
         {
             try
             {
-                var settings = await repository.GetSettingsAsync(stoppingToken);
-                var deleted = await repository.DeleteBeforeAsync(timeProvider.GetUtcNow().AddDays(-settings.RetentionDays), stoppingToken);
-                await repository.OptimizeAsync(stoppingToken);
+                var settings = await settingsStore.GetSettingsAsync(stoppingToken);
+                var deleted = await maintenance.DeleteBeforeAsync(timeProvider.GetUtcNow().AddDays(-settings.RetentionDays), stoppingToken);
+                await maintenance.OptimizeAsync(stoppingToken);
                 if (deleted > 0) logger.LogInformation("Retention cleanup deleted {Count} activity segments.", deleted);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

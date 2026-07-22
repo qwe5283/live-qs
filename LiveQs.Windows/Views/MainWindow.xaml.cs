@@ -3,13 +3,14 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using LiveQs.Windows.Controls;
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Core.Sync;
 
 namespace LiveQs.Windows.Views;
 
 public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 {
-    private readonly IActivityRepository _repository;
+    private readonly ISettingsStore _settingsStore;
     private readonly ISyncStatusService _syncStatusService;
     private readonly DashboardView _dashboard;
     private readonly TimelineView _timeline;
@@ -18,7 +19,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private bool _closeToTray = true;
 
     public MainWindow(
-        IActivityRepository repository,
+        ISettingsStore settingsStore,
         ISyncStatusService syncStatusService,
         DashboardView dashboard,
         TimelineView timeline,
@@ -26,7 +27,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         InitializeComponent();
         Icon = AppIconFactory.CreateApplicationIcon();
-        _repository = repository;
+        _settingsStore = settingsStore;
         _syncStatusService = syncStatusService;
         _dashboard = dashboard;
         _timeline = timeline;
@@ -112,7 +113,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         try
         {
-            var settings = await _repository.GetSettingsAsync();
+            var settings = await _settingsStore.GetSettingsAsync();
             _closeToTray = settings.CloseToTray;
             SamplingStatusText.Text = settings.SamplingPaused ? "采样已暂停" : "采样中";
             SamplingDot.SetResourceReference(

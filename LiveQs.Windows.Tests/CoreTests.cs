@@ -1,4 +1,5 @@
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Common;
+using LiveQs.Windows.Core.Settings;
 
 namespace LiveQs.Windows.Tests;
 

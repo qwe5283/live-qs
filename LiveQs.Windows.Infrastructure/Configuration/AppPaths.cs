@@ -1,6 +1,6 @@
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Abstractions;
 
-namespace LiveQs.Windows.Infrastructure;
+namespace LiveQs.Windows.Infrastructure.Configuration;
 
 public sealed class AppPaths : IAppPaths
 {

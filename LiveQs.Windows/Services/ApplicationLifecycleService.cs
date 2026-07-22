@@ -1,5 +1,5 @@
 using System.Windows;
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Views;
 using Microsoft.Extensions.Hosting;
 
@@ -9,7 +9,7 @@ public sealed class ApplicationLifecycleService : IDisposable
 {
     private readonly Application _application;
     private readonly IHost _host;
-    private readonly IActivityRepository _repository;
+    private readonly IDatabaseInitializer _databaseInitializer;
     private readonly TrayIconService _trayIcon;
     private readonly MainWindow _window;
     private readonly SingleInstanceCoordinator _singleInstance;
@@ -22,7 +22,7 @@ public sealed class ApplicationLifecycleService : IDisposable
     public ApplicationLifecycleService(
         Application application,
         IHost host,
-        IActivityRepository repository,
+        IDatabaseInitializer databaseInitializer,
         TrayIconService trayIcon,
         MainWindow window,
         SingleInstanceCoordinator singleInstance,
@@ -30,7 +30,7 @@ public sealed class ApplicationLifecycleService : IDisposable
     {
         _application = application;
         _host = host;
-        _repository = repository;
+        _databaseInitializer = databaseInitializer;
         _trayIcon = trayIcon;
         _window = window;
         _singleInstance = singleInstance;
@@ -43,7 +43,7 @@ public sealed class ApplicationLifecycleService : IDisposable
     public async Task StartAsync(bool background)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        await _repository.InitializeAsync();
+        await _databaseInitializer.InitializeAsync();
         await _host.StartAsync();
         _logger.Information("LiveQs background services started.");
 

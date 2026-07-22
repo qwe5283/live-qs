@@ -1,5 +1,8 @@
-using LiveQs.Windows.Core;
-using LiveQs.Windows.Infrastructure;
+using LiveQs.Windows.Core.Activity;
+using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Core.Common;
+using LiveQs.Windows.Core.Settings;
+using LiveQs.Windows.Infrastructure.Persistence.Sqlite;
 
 namespace LiveQs.Windows.Tests;
 

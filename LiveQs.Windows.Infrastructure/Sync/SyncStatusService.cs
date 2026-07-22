@@ -1,6 +1,7 @@
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Core.Sync;
 
-namespace LiveQs.Windows.Infrastructure;
+namespace LiveQs.Windows.Infrastructure.Sync;
 
 public sealed class SyncStatusService : ISyncStatusService
 {

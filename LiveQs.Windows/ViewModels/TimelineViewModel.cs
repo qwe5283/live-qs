@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Core.Activity;
+using LiveQs.Windows.Core.Common;
 using LiveQs.Windows.Services;
 using Microsoft.Extensions.Logging;
 
@@ -10,7 +12,7 @@ namespace LiveQs.Windows.ViewModels;
 public sealed partial class TimelineViewModel : ViewModelBase
 {
     private const int PageSize = 500;
-    private readonly IActivityRepository _repository;
+    private readonly IActivityQueryService _queryService;
     private readonly IUserDialogService _dialogs;
     private readonly ILogger<TimelineViewModel> _logger;
     private readonly TimeProvider _timeProvider;
@@ -34,12 +36,12 @@ public sealed partial class TimelineViewModel : ViewModelBase
     private string _summary = "暂无活动";
 
     public TimelineViewModel(
-        IActivityRepository repository,
+        IActivityQueryService queryService,
         IUserDialogService dialogs,
         ILogger<TimelineViewModel> logger,
         TimeProvider timeProvider)
     {
-        _repository = repository;
+        _queryService = queryService;
         _dialogs = dialogs;
         _logger = logger;
         _timeProvider = timeProvider;
@@ -139,7 +141,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
         await Task.Run(async () =>
         {
             var queryTimer = Stopwatch.StartNew();
-            var page = await _repository
+            var page = await _queryService
                 .GetTimelinePageAsync(range, PageSize, cursor, cancellationToken)
                 .ConfigureAwait(false);
             queryTimer.Stop();

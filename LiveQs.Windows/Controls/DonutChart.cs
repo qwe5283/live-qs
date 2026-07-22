@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Media;
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Analytics;
 
 namespace LiveQs.Windows.Controls;
 

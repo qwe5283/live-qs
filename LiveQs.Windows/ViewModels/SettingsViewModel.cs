@@ -2,14 +2,19 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Core.Common;
+using LiveQs.Windows.Core.Settings;
+using LiveQs.Windows.Core.Sync;
 using LiveQs.Windows.Services;
 
 namespace LiveQs.Windows.ViewModels;
 
 public sealed partial class SettingsViewModel : ViewModelBase
 {
-    private readonly IActivityRepository _repository;
+    private readonly IActivityQueryService _queryService;
+    private readonly ISettingsStore _settingsStore;
+    private readonly IActivityMaintenance _maintenance;
     private readonly IStartupManager _startupManager;
     private readonly ISyncStatusService _syncStatusService;
     private readonly IAppPaths _paths;
@@ -47,14 +52,18 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private DateTime? _maintenanceEndDate;
 
     public SettingsViewModel(
-        IActivityRepository repository,
+        IActivityQueryService queryService,
+        ISettingsStore settingsStore,
+        IActivityMaintenance maintenance,
         IStartupManager startupManager,
         ISyncStatusService syncStatusService,
         IAppPaths paths,
         IUserDialogService dialogs,
         TimeProvider timeProvider)
     {
-        _repository = repository;
+        _queryService = queryService;
+        _settingsStore = settingsStore;
+        _maintenance = maintenance;
         _startupManager = startupManager;
         _syncStatusService = syncStatusService;
         _paths = paths;
@@ -70,7 +79,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public async Task LoadAsync()
     {
-        var settings = await _repository.GetSettingsAsync();
+        var settings = await _settingsStore.GetSettingsAsync();
         SamplingIntervalSeconds = settings.SamplingIntervalSeconds;
         AfkThresholdSeconds = settings.AfkThresholdSeconds;
         WindowTitleMode = settings.WindowTitleMode;
@@ -95,15 +104,15 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var validation = settings.Validate();
         if (validation is not null) throw new ArgumentException(validation);
         _startupManager.SetEnabled(LaunchOnStartup);
-        await _repository.SaveSettingsAsync(settings);
+        await _settingsStore.SaveSettingsAsync(settings);
         foreach (var row in ApplicationRules)
-            await _repository.SaveApplicationRuleAsync(row.ToRule());
+            await _settingsStore.SaveApplicationRuleAsync(row.ToRule());
         StatusText = $"已保存于 {_timeProvider.GetLocalNow():HH:mm:ss}";
     }
 
     public async Task ReloadRulesAsync()
     {
-        var rules = await _repository.GetApplicationRulesAsync();
+        var rules = await _queryService.GetApplicationRulesAsync();
         ApplicationRules.Clear();
         foreach (var rule in rules) ApplicationRules.Add(new ApplicationRuleRow(rule));
     }
@@ -111,20 +120,20 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public async Task<int> DeleteSelectedRangeAsync()
     {
         var range = SelectedMaintenanceRange();
-        var deleted = await _repository.DeleteRangeAsync(range);
+        var deleted = await _maintenance.DeleteRangeAsync(range);
         StatusText = $"已删除 {deleted} 个时间段";
         return deleted;
     }
 
     public async Task ExportAsync(string path)
     {
-        await _repository.ExportCsvAsync(path, SelectedMaintenanceRange());
+        await _maintenance.ExportCsvAsync(path, SelectedMaintenanceRange());
         StatusText = "CSV 导出完成";
     }
 
     private async Task OptimizeCoreAsync()
     {
-        await _repository.OptimizeAsync();
+        await _maintenance.OptimizeAsync();
         StatusText = "数据库维护完成";
     }
 

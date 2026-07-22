@@ -5,7 +5,8 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using LiveQs.Windows.Controls;
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Core.Sync;
 using LiveQs.Windows.Interop;
 using LiveQs.Windows.Views;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,7 @@ using Wpf.Ui.Tray.Controls;
 namespace LiveQs.Windows.Services;
 
 public sealed class TrayIconService(
-    IActivityRepository repository,
+    ISettingsStore settingsStore,
     IAppPaths paths,
     ISyncStatusService syncStatusService,
     ILogger<TrayIconService> logger) : IDisposable
@@ -95,8 +96,8 @@ public sealed class TrayIconService(
         if (_pauseItem is null) return;
         try
         {
-            var settings = await repository.GetSettingsAsync();
-            await repository.SaveSettingsAsync(settings with { SamplingPaused = _pauseItem.IsChecked });
+            var settings = await settingsStore.GetSettingsAsync();
+            await settingsStore.SaveSettingsAsync(settings with { SamplingPaused = _pauseItem.IsChecked });
             _samplingPaused = _pauseItem.IsChecked;
             ApplyTrayState(syncStatusService.Current);
             await RefreshAsync();
@@ -116,7 +117,7 @@ public sealed class TrayIconService(
         _isRefreshing = true;
         try
         {
-            var settings = await repository.GetSettingsAsync();
+            var settings = await settingsStore.GetSettingsAsync();
             _samplingPaused = settings.SamplingPaused;
             _cloudSyncEnabled = settings.CloudSyncEnabled;
             _pauseItem.IsChecked = _samplingPaused;

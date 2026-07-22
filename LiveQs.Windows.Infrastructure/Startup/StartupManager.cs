@@ -1,7 +1,7 @@
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Abstractions;
 using Microsoft.Win32;
 
-namespace LiveQs.Windows.Infrastructure;
+namespace LiveQs.Windows.Infrastructure.Startup;
 
 public sealed class StartupManager : IStartupManager
 {

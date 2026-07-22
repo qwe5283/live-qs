@@ -2,9 +2,12 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
-using LiveQs.Windows.Core;
+using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Core.Activity;
+using LiveQs.Windows.Core.Settings;
+using LiveQs.Windows.Infrastructure.Windows;
 
-namespace LiveQs.Windows.Infrastructure;
+namespace LiveQs.Windows.Infrastructure.Sampling;
 
 public sealed class ForegroundSampler : IForegroundSampler
 {

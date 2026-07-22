@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace LiveQs.Windows.Infrastructure;
+namespace LiveQs.Windows.Infrastructure.Sampling;
 
 internal sealed class AudioActivityDetector
 {
