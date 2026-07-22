@@ -1,8 +1,8 @@
-<UserControl x:Class="LiveQs.Windows.App.Views.DashboardView"
+<UserControl x:Class="LiveQs.Windows.Views.DashboardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:controls="clr-namespace:LiveQs.Windows.App.Controls"
-             xmlns:converters="clr-namespace:LiveQs.Windows.App.Converters"
+             xmlns:controls="clr-namespace:LiveQs.Windows.Controls"
+             xmlns:converters="clr-namespace:LiveQs.Windows.Converters"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              MinWidth="720" MinHeight="520">
     <UserControl.Resources>

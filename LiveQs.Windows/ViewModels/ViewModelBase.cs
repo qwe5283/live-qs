@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace LiveQs.Windows.App.ViewModels;
+namespace LiveQs.Windows.ViewModels;
 
 public abstract class ViewModelBase : ObservableObject
 {

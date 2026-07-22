@@ -1,5 +1,5 @@
-using LiveQs.Windows.App;
-using LiveQs.Windows.App.Controls;
+using LiveQs.Windows.Controls;
+using LiveQs.Windows.Services;
 
 namespace LiveQs.Windows.Tests;
 

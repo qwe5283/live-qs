@@ -1,7 +1,7 @@
 using Microsoft.Win32;
 using System.Windows;
 
-namespace LiveQs.Windows.App;
+namespace LiveQs.Windows.Services;
 
 public sealed class WpfUserDialogService : IUserDialogService
 {

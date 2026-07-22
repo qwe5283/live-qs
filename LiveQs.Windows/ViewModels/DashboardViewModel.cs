@@ -1,8 +1,9 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
 using LiveQs.Windows.Core;
+using LiveQs.Windows.Services;
 
-namespace LiveQs.Windows.App.ViewModels;
+namespace LiveQs.Windows.ViewModels;
 
 public sealed class DashboardViewModel : ViewModelBase
 {

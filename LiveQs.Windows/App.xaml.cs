@@ -1,8 +1,8 @@
 using System.Windows;
-using LiveQs.Windows.App;
-using LiveQs.Windows.App.Views;
 using LiveQs.Windows.Core;
 using LiveQs.Windows.Infrastructure;
+using LiveQs.Windows.Services;
+using LiveQs.Windows.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -15,8 +15,8 @@ namespace LiveQs.Windows;
 
 public partial class LiveQsApplication : System.Windows.Application
 {
-    private static readonly Uri LightThemeUri = new("App/Styles/Theme.Light.xaml", UriKind.Relative);
-    private static readonly Uri DarkThemeUri = new("App/Styles/Theme.Dark.xaml", UriKind.Relative);
+    private static readonly Uri LightThemeUri = new("Styles/Theme.Light.xaml", UriKind.Relative);
+    private static readonly Uri DarkThemeUri = new("Styles/Theme.Dark.xaml", UriKind.Relative);
     private IHost? _host;
     private Mutex? _singleInstance;
     private TrayIconService? _trayIcon;
@@ -65,17 +65,8 @@ public partial class LiveQsApplication : System.Windows.Application
             builder.Logging.ClearProviders();
             builder.Logging.AddDebug();
             builder.Logging.AddSerilog(_bootstrapLogger, dispose: false);
-            builder.Services.AddSingleton<IAppPaths>(appPaths);
+            builder.Services.AddLiveQsInfrastructure(appPaths);
             builder.Services.AddSingleton<IUserDialogService, WpfUserDialogService>();
-            builder.Services.AddSingleton<IActivityRepository, SqliteActivityRepository>();
-            builder.Services.AddSingleton<IForegroundSampler, ForegroundSampler>();
-            builder.Services.AddSingleton<IStartupManager, StartupManager>();
-            builder.Services.AddSingleton<ISyncStatusService, SyncStatusService>();
-            builder.Services.AddSingleton<ISyncClient, CloudSyncClient>();
-            builder.Services.AddHttpClient("cloud-sync", client => client.Timeout = TimeSpan.FromSeconds(15));
-            builder.Services.AddHostedService<SamplingWorker>();
-            builder.Services.AddHostedService<SyncWorker>();
-            builder.Services.AddHostedService<MaintenanceWorker>();
             builder.Services.AddSingleton<MainWindow>();
             builder.Services.AddSingleton<TrayIconService>();
             _host = builder.Build();

@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Data;
 using LiveQs.Windows.Core;
 
-namespace LiveQs.Windows.App.Converters;
+namespace LiveQs.Windows.Converters;
 
 public sealed class BooleanToVisibilityConverter : IValueConverter
 {

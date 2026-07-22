@@ -2,12 +2,13 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
-using LiveQs.Windows.App.Controls;
-using LiveQs.Windows.App.ViewModels;
+using LiveQs.Windows.Controls;
 using LiveQs.Windows.Core;
+using LiveQs.Windows.Services;
+using LiveQs.Windows.ViewModels;
 using Microsoft.Extensions.Logging;
 
-namespace LiveQs.Windows.App.Views;
+namespace LiveQs.Windows.Views;
 
 public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 {

@@ -1,9 +1,10 @@
 using System.Windows;
 using System.Windows.Controls;
-using LiveQs.Windows.App.ViewModels;
 using LiveQs.Windows.Core;
+using LiveQs.Windows.Services;
+using LiveQs.Windows.ViewModels;
 
-namespace LiveQs.Windows.App.Views;
+namespace LiveQs.Windows.Views;
 
 public partial class SettingsView : System.Windows.Controls.UserControl
 {

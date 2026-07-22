@@ -4,14 +4,14 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
-using LiveQs.Windows.App.Views;
-using LiveQs.Windows.App.Controls;
+using LiveQs.Windows.Controls;
 using LiveQs.Windows.Core;
-using LiveQs.Windows.Infrastructure;
+using LiveQs.Windows.Interop;
+using LiveQs.Windows.Views;
 using Microsoft.Extensions.Logging;
 using Wpf.Ui.Tray.Controls;
 
-namespace LiveQs.Windows.App;
+namespace LiveQs.Windows.Services;
 
 public sealed class TrayIconService(
     IActivityRepository repository,
@@ -34,7 +34,7 @@ public sealed class TrayIconService(
     {
         _window = window;
         var menu = new ContextMenu();
-        var show = new MenuItem { Header = "打开活动时间" };
+        var show = new MenuItem { Header = "打开主界面" };
         show.Click += (_, _) => ShowWindow();
         _pauseItem = new MenuItem { Header = "暂停采样", IsCheckable = true };
         _pauseItem.Click += async (_, _) => await TogglePauseAsync();
@@ -182,11 +182,11 @@ public sealed class TrayIconService(
     private static void ConfigureTrayHostWindow(Window window)
     {
         var handle = new WindowInteropHelper(window).Handle;
-        var extendedStyle = NativeMethods.GetWindowLong(handle, NativeMethods.GwlExStyle);
-        _ = NativeMethods.SetWindowLong(
+        var extendedStyle = TrayWindowNativeMethods.GetWindowLong(handle, TrayWindowNativeMethods.GwlExStyle);
+        _ = TrayWindowNativeMethods.SetWindowLong(
             handle,
-            NativeMethods.GwlExStyle,
-            extendedStyle | NativeMethods.WsExToolWindow | NativeMethods.WsExNoActivate);
+            TrayWindowNativeMethods.GwlExStyle,
+            extendedStyle | TrayWindowNativeMethods.WsExToolWindow | TrayWindowNativeMethods.WsExNoActivate);
     }
 
     public void Dispose()

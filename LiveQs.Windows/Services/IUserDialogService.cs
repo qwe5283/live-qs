@@ -1,4 +1,4 @@
-namespace LiveQs.Windows.App;
+namespace LiveQs.Windows.Services;
 
 public interface IUserDialogService
 {

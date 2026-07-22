@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace LiveQs.Windows.App.Controls;
+namespace LiveQs.Windows.Controls;
 
 public enum TrayIconState
 {

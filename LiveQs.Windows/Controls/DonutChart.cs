@@ -4,7 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using LiveQs.Windows.Core;
 
-namespace LiveQs.Windows.App.Controls;
+namespace LiveQs.Windows.Controls;
 
 public sealed class DonutChart : FrameworkElement
 {
