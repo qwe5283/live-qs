@@ -14,6 +14,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly ISyncStatusService _syncStatusService;
     private readonly IAppPaths _paths;
     private readonly IUserDialogService _dialogs;
+    private readonly TimeProvider _timeProvider;
     [ObservableProperty]
     private int _samplingIntervalSeconds;
     [ObservableProperty]
@@ -41,22 +42,26 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _syncStatusText = "本地模式";
     [ObservableProperty]
-    private DateTime? _maintenanceStartDate = DateTime.Today;
+    private DateTime? _maintenanceStartDate;
     [ObservableProperty]
-    private DateTime? _maintenanceEndDate = DateTime.Today;
+    private DateTime? _maintenanceEndDate;
 
     public SettingsViewModel(
         IActivityRepository repository,
         IStartupManager startupManager,
         ISyncStatusService syncStatusService,
         IAppPaths paths,
-        IUserDialogService dialogs)
+        IUserDialogService dialogs,
+        TimeProvider timeProvider)
     {
         _repository = repository;
         _startupManager = startupManager;
         _syncStatusService = syncStatusService;
         _paths = paths;
         _dialogs = dialogs;
+        _timeProvider = timeProvider;
+        _maintenanceStartDate = Today;
+        _maintenanceEndDate = Today;
     }
 
     public IReadOnlyList<WindowTitleMode> WindowTitleModes { get; } = Enum.GetValues<WindowTitleMode>();
@@ -93,7 +98,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         await _repository.SaveSettingsAsync(settings);
         foreach (var row in ApplicationRules)
             await _repository.SaveApplicationRuleAsync(row.ToRule());
-        StatusText = $"已保存于 {DateTime.Now:HH:mm:ss}";
+        StatusText = $"已保存于 {_timeProvider.GetLocalNow():HH:mm:ss}";
     }
 
     public async Task ReloadRulesAsync()
@@ -140,7 +145,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     private DateRange SelectedMaintenanceRange()
     {
-        var start = (MaintenanceStartDate ?? DateTime.Today).Date;
+        var start = (MaintenanceStartDate ?? Today).Date;
         var end = (MaintenanceEndDate ?? start).Date;
         if (end < start) (start, end) = (end, start);
         return DateRange.FromLocalDates(start, end);
@@ -162,7 +167,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     private async Task ExportSelectedRangeAsync()
     {
-        var path = _dialogs.SelectExportPath($"LiveQs-{DateTime.Today:yyyy-MM-dd}.csv");
+        var path = _dialogs.SelectExportPath($"LiveQs-{Today:yyyy-MM-dd}.csv");
         if (path is not null) await RunAsync(() => ExportAsync(path), "导出失败");
     }
 
@@ -196,6 +201,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
             _dialogs.ShowError("无法打开目录", exception);
         }
     }
+
+    private DateTime Today => _timeProvider.GetLocalNow().Date;
 
     private async Task RunAsync(Func<Task> action, string title)
     {

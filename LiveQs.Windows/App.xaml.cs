@@ -16,41 +16,24 @@ namespace LiveQs.Windows;
 
 public partial class LiveQsApplication : System.Windows.Application
 {
-    private const string SingleInstanceMutexName = @"Local\LiveQs.Windows.SingleInstance";
-    private const string ActivationEventName = @"Local\LiveQs.Windows.Activate";
     private static readonly Uri LightThemeUri = new("Styles/Theme.Light.xaml", UriKind.Relative);
     private static readonly Uri DarkThemeUri = new("Styles/Theme.Dark.xaml", UriKind.Relative);
-    private EventWaitHandle? _activationEvent;
-    private RegisteredWaitHandle? _activationRegistration;
     private IHost? _host;
-    private Mutex? _singleInstance;
-    private TrayIconService? _trayIcon;
-    private MainWindow? _window;
+    private SingleInstanceCoordinator? _singleInstance;
+    private ApplicationLifecycleService? _lifecycle;
     private Serilog.ILogger? _bootstrapLogger;
-    private bool _activationPending;
-    private bool _ownsSingleInstanceMutex;
 
-    public bool IsExiting { get; private set; }
+    public bool IsExiting => _lifecycle?.IsExiting == true;
 
     protected override async void OnStartup(StartupEventArgs args)
     {
         base.OnStartup(args);
-        _activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivationEventName);
-        _singleInstance = new Mutex(true, SingleInstanceMutexName, out var isFirstInstance);
-        _ownsSingleInstanceMutex = isFirstInstance;
-        if (!isFirstInstance)
+        _singleInstance = new SingleInstanceCoordinator(Dispatcher);
+        if (!_singleInstance.TryAcquire())
         {
-            _activationEvent.Set();
             Shutdown();
             return;
         }
-
-        _activationRegistration = ThreadPool.RegisterWaitForSingleObject(
-            _activationEvent,
-            static (state, _) => ((LiveQsApplication)state!).QueueActivationRequest(),
-            this,
-            Timeout.Infinite,
-            false);
 
         ApplySystemTheme();
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
@@ -92,26 +75,16 @@ public partial class LiveQsApplication : System.Windows.Application
             builder.Services.AddSingleton<MainWindow>();
             builder.Services.AddSingleton<TrayIconService>();
             _host = builder.Build();
-
-            var repository = _host.Services.GetRequiredService<IActivityRepository>();
-            await repository.InitializeAsync();
-            await _host.StartAsync();
-            _bootstrapLogger.Information("LiveQs background services started.");
-
-            _window = _host.Services.GetRequiredService<MainWindow>();
-            MainWindow = _window;
-            _trayIcon = _host.Services.GetRequiredService<TrayIconService>();
-            _trayIcon.Initialize(_window);
+            _lifecycle = new ApplicationLifecycleService(
+                this,
+                _host,
+                _host.Services.GetRequiredService<IActivityRepository>(),
+                _host.Services.GetRequiredService<TrayIconService>(),
+                _host.Services.GetRequiredService<MainWindow>(),
+                _singleInstance,
+                _bootstrapLogger);
             var background = args.Args.Any(value => string.Equals(value, "--background", StringComparison.OrdinalIgnoreCase));
-            if (_activationPending)
-            {
-                _activationPending = false;
-                _window.RestoreAndActivate();
-            }
-            else if (!background)
-            {
-                _window.Show();
-            }
+            await _lifecycle.StartAsync(background);
         }
         catch (Exception exception)
         {
@@ -120,7 +93,7 @@ public partial class LiveQsApplication : System.Windows.Application
             {
                 var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LiveQs", "Windows");
                 Directory.CreateDirectory(directory);
-                File.AppendAllText(Path.Combine(directory, "startup-error.log"), $"[{DateTimeOffset.Now:O}]\n{exception}\n\n");
+                File.AppendAllText(Path.Combine(directory, "startup-error.log"), $"[{TimeProvider.System.GetLocalNow():O}]\n{exception}\n\n");
             }
             catch (Exception) { }
             MessageBox.Show(exception.ToString(), "LiveQs 启动失败", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -130,59 +103,26 @@ public partial class LiveQsApplication : System.Windows.Application
 
     public async void RequestExit()
     {
-        if (IsExiting) return;
-        IsExiting = true;
-        _bootstrapLogger?.Information("LiveQs is shutting down.");
-        _trayIcon?.Dispose();
-        _window?.Close();
-        if (_host is not null)
-        {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try { await _host.StopAsync(timeout.Token); }
-            catch (OperationCanceledException) { }
-            _host.Dispose();
-        }
-        Shutdown();
+        if (_lifecycle is not null) await _lifecycle.RequestExitAsync();
+        else Shutdown();
     }
 
     protected override void OnExit(ExitEventArgs args)
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
-        _trayIcon?.Dispose();
-        _activationRegistration?.Unregister(null);
-        _activationRegistration = null;
-        _activationEvent?.Dispose();
-        _activationEvent = null;
-        if (_ownsSingleInstanceMutex)
+        _lifecycle?.Dispose();
+        _lifecycle = null;
+        if (_host is not null)
         {
-            try { _singleInstance?.ReleaseMutex(); }
-            catch (ApplicationException) { }
-            _ownsSingleInstanceMutex = false;
+            try { _host.Dispose(); }
+            catch (ObjectDisposedException) { }
         }
         _singleInstance?.Dispose();
         _singleInstance = null;
+        _host = null;
         (_bootstrapLogger as IDisposable)?.Dispose();
         _bootstrapLogger = null;
         base.OnExit(args);
-    }
-
-    private void QueueActivationRequest()
-    {
-        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
-        _ = Dispatcher.BeginInvoke(new Action(HandleActivationRequest));
-    }
-
-    private void HandleActivationRequest()
-    {
-        if (IsExiting) return;
-        if (_window is null)
-        {
-            _activationPending = true;
-            return;
-        }
-
-        _bootstrapLogger?.Information("Another process requested activation of the main window.");
-        _window.RestoreAndActivate();
     }
 
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs args) =>

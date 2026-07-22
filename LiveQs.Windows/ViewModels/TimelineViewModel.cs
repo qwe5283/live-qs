@@ -13,12 +13,13 @@ public sealed partial class TimelineViewModel : ViewModelBase
     private readonly IActivityRepository _repository;
     private readonly IUserDialogService _dialogs;
     private readonly ILogger<TimelineViewModel> _logger;
+    private readonly TimeProvider _timeProvider;
     private CancellationTokenSource? _loadCancellation;
     private DateRange _currentRange;
     private TimelineCursor? _nextCursor;
     private long _requestVersion;
     [ObservableProperty]
-    private DateTime? _selectedDate = DateTime.Today;
+    private DateTime? _selectedDate;
     [ObservableProperty]
     private IReadOnlyList<TimelineRow> _rows = Array.Empty<TimelineRow>();
     [ObservableProperty]
@@ -35,11 +36,14 @@ public sealed partial class TimelineViewModel : ViewModelBase
     public TimelineViewModel(
         IActivityRepository repository,
         IUserDialogService dialogs,
-        ILogger<TimelineViewModel> logger)
+        ILogger<TimelineViewModel> logger,
+        TimeProvider timeProvider)
     {
         _repository = repository;
         _dialogs = dialogs;
         _logger = logger;
+        _timeProvider = timeProvider;
+        _selectedDate = Today;
     }
 
     public async Task RefreshAsync()
@@ -50,7 +54,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
         previous?.Cancel();
         previous?.Dispose();
 
-        var date = (SelectedDate ?? DateTime.Today).Date;
+        var date = (SelectedDate ?? Today).Date;
         _currentRange = DateRange.FromLocalDates(date, date);
         _nextCursor = null;
         IsLoading = true;
@@ -76,13 +80,13 @@ public sealed partial class TimelineViewModel : ViewModelBase
 
     private async Task MoveAsync(int days)
     {
-        SelectedDate = (SelectedDate ?? DateTime.Today).AddDays(days);
+        SelectedDate = (SelectedDate ?? Today).AddDays(days);
         await RefreshAsync();
     }
 
     private async Task SelectTodayAsync()
     {
-        SelectedDate = DateTime.Today;
+        SelectedDate = Today;
         await RefreshAsync();
     }
 
@@ -102,7 +106,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
             _nextCursor = result.NextCursor;
             HasMore = result.HasMore;
             UpdateSummary();
-            LogPage((SelectedDate ?? DateTime.Today).Date, result, true);
+            LogPage((SelectedDate ?? Today).Date, result, true);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         finally
@@ -125,6 +129,8 @@ public sealed partial class TimelineViewModel : ViewModelBase
 
     [RelayCommand]
     private Task TodayAsync() => RunAsync(SelectTodayAsync);
+
+    private DateTime Today => _timeProvider.GetLocalNow().Date;
 
     private async Task<TimelinePageResult> LoadPageInBackgroundAsync(
         DateRange range,

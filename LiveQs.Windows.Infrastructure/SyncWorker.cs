@@ -8,6 +8,7 @@ public sealed class SyncWorker(
     IActivityRepository repository,
     ISyncClient client,
     ISyncStatusService statusService,
+    TimeProvider timeProvider,
     ILogger<SyncWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -26,7 +27,7 @@ public sealed class SyncWorker(
                     continue;
                 }
 
-                var items = await repository.GetPendingSyncAsync(100, DateTimeOffset.UtcNow, stoppingToken);
+                var items = await repository.GetPendingSyncAsync(100, timeProvider.GetUtcNow(), stoppingToken);
                 if (items.Count == 0)
                 {
                     statusService.Update(new SyncStatus(true, false, pending, lastSuccess, ""));
@@ -38,7 +39,7 @@ public sealed class SyncWorker(
                 try
                 {
                     await client.UploadAsync(items, settings, stoppingToken);
-                    lastSuccess = DateTimeOffset.UtcNow;
+                    lastSuccess = timeProvider.GetUtcNow();
                     await repository.MarkSyncedAsync(items.Select(item => item.SegmentId), lastSuccess.Value, stoppingToken);
                     pending = await repository.GetPendingSyncCountAsync(stoppingToken);
                     statusService.Update(new SyncStatus(true, false, pending, lastSuccess, ""));
@@ -47,7 +48,7 @@ public sealed class SyncWorker(
                 {
                     var attempt = items.Max(item => item.AttemptCount) + 1;
                     var seconds = Math.Min(3600, 15 * Math.Pow(2, Math.Min(attempt, 8)));
-                    var next = DateTimeOffset.UtcNow.AddSeconds(seconds + Random.Shared.Next(0, 10));
+                    var next = timeProvider.GetUtcNow().AddSeconds(seconds + Random.Shared.Next(0, 10));
                     await repository.MarkSyncFailedAsync(items.Select(item => item.SegmentId), exception.Message, next, stoppingToken);
                     logger.LogWarning(exception, "Cloud sync failed; local collection remains active.");
                     statusService.Update(new SyncStatus(true, false, pending, lastSuccess, exception.Message));
@@ -66,9 +67,9 @@ public sealed class SyncWorker(
         }
     }
 
-    private static async Task Delay(CancellationToken token, TimeSpan duration)
+    private async Task Delay(CancellationToken token, TimeSpan duration)
     {
-        try { await Task.Delay(duration, token); }
+        try { await Task.Delay(duration, timeProvider, token); }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
     }
 }

@@ -7,6 +7,7 @@ namespace LiveQs.Windows.Infrastructure;
 public sealed class SamplingWorker(
     IForegroundSampler sampler,
     IActivityRepository repository,
+    TimeProvider timeProvider,
     ILogger<SamplingWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -34,7 +35,7 @@ public sealed class SamplingWorker(
                 logger.LogError(exception, "Foreground sampling failed; the next sample will still run.");
             }
 
-            try { await Task.Delay(delay, stoppingToken); }
+            try { await Task.Delay(delay, timeProvider, stoppingToken); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
         }
     }

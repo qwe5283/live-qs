@@ -9,6 +9,7 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         IAppPaths appPaths)
     {
+        services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IAppPaths>(appPaths);
         services.AddSingleton<IActivityRepository, SqliteActivityRepository>();
         services.AddSingleton<IForegroundSampler, ForegroundSampler>();

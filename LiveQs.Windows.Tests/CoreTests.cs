@@ -44,4 +44,23 @@ public sealed class CoreTests
         Assert.Equal(new DateTime(2026, 7, 4), range.End.LocalDateTime.Date);
         Assert.Equal(3, (range.End - range.Start).TotalDays);
     }
+
+    [Fact]
+    public void DateRange_TodayUsesInjectedClock()
+    {
+        var localNoon = new DateTime(2026, 7, 23, 12, 30, 0);
+        var utcNow = new DateTimeOffset(localNoon, TimeZoneInfo.Local.GetUtcOffset(localNoon)).ToUniversalTime();
+        var clock = new FixedTimeProvider(utcNow);
+
+        var range = DateRange.Today(clock);
+
+        Assert.Equal(new DateTime(2026, 7, 23), range.Start.LocalDateTime.Date);
+        Assert.Equal(new DateTime(2026, 7, 24), range.End.LocalDateTime.Date);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Local;
+    }
 }

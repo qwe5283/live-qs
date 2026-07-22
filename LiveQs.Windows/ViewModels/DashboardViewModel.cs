@@ -10,10 +10,11 @@ public sealed partial class DashboardViewModel : ViewModelBase
 {
     private readonly IActivityRepository _repository;
     private readonly IUserDialogService _dialogs;
+    private readonly TimeProvider _timeProvider;
     [ObservableProperty]
-    private DateTime? _startDate = DateTime.Today;
+    private DateTime? _startDate;
     [ObservableProperty]
-    private DateTime? _endDate = DateTime.Today;
+    private DateTime? _endDate;
     [ObservableProperty]
     private string _activeText = "0分钟";
     [ObservableProperty]
@@ -27,10 +28,13 @@ public sealed partial class DashboardViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isLoading;
 
-    public DashboardViewModel(IActivityRepository repository, IUserDialogService dialogs)
+    public DashboardViewModel(IActivityRepository repository, IUserDialogService dialogs, TimeProvider timeProvider)
     {
         _repository = repository;
         _dialogs = dialogs;
+        _timeProvider = timeProvider;
+        _startDate = Today;
+        _endDate = Today;
     }
 
     public ObservableCollection<AppUsage> Apps { get; } = [];
@@ -41,7 +45,7 @@ public sealed partial class DashboardViewModel : ViewModelBase
         IsLoading = true;
         try
         {
-            var start = (StartDate ?? DateTime.Today).Date;
+            var start = (StartDate ?? Today).Date;
             var end = (EndDate ?? start).Date;
             if (end < start) (start, end) = (end, start);
             var snapshot = await _repository.GetDashboardAsync(DateRange.FromLocalDates(start, end));
@@ -58,10 +62,12 @@ public sealed partial class DashboardViewModel : ViewModelBase
 
     private async Task SelectPresetAsync(int days)
     {
-        EndDate = DateTime.Today;
-        StartDate = DateTime.Today.AddDays(-(Math.Max(1, days) - 1));
+        EndDate = Today;
+        StartDate = Today.AddDays(-(Math.Max(1, days) - 1));
         await RefreshAsync();
     }
+
+    private DateTime Today => _timeProvider.GetLocalNow().Date;
 
     [RelayCommand]
     private Task LoadAsync() => RunAsync(RefreshAsync);

@@ -136,7 +136,11 @@ public readonly record struct DateRange(DateTimeOffset Start, DateTimeOffset End
         return new DateRange(start, end);
     }
 
-    public static DateRange Today() => FromLocalDates(DateTime.Today, DateTime.Today);
+    public static DateRange Today(TimeProvider? timeProvider = null)
+    {
+        var today = (timeProvider ?? TimeProvider.System).GetLocalNow().Date;
+        return FromLocalDates(today, today);
+    }
 }
 
 public static class DurationText

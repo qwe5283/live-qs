@@ -8,7 +8,13 @@ namespace LiveQs.Windows.Infrastructure;
 
 public sealed class ForegroundSampler : IForegroundSampler
 {
+    private readonly TimeProvider _timeProvider;
     private readonly AudioActivityDetector _audioDetector = new();
+
+    public ForegroundSampler(TimeProvider timeProvider)
+    {
+        _timeProvider = timeProvider;
+    }
 
     public ActivitySample? Capture(AppSettings settings)
     {
@@ -43,7 +49,7 @@ public sealed class ForegroundSampler : IForegroundSampler
         var battery = GetBattery();
 
         return new ActivitySample(
-            DateTimeOffset.UtcNow,
+            _timeProvider.GetUtcNow(),
             processName.ToLowerInvariant(),
             displayName,
             executablePath,

@@ -8,7 +8,7 @@ using Microsoft.Data.Sqlite;
 
 namespace LiveQs.Windows.Infrastructure;
 
-public sealed class SqliteActivityRepository(IAppPaths paths) : IActivityRepository
+public sealed class SqliteActivityRepository(IAppPaths paths, TimeProvider timeProvider) : IActivityRepository
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -28,6 +28,8 @@ public sealed class SqliteActivityRepository(IAppPaths paths) : IActivityReposit
         Cache = SqliteCacheMode.Shared,
         Pooling = true,
     }.ToString();
+
+    private readonly TimeProvider _timeProvider = timeProvider;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -107,7 +109,7 @@ public sealed class SqliteActivityRepository(IAppPaths paths) : IActivityReposit
             ON CONFLICT(id) DO NOTHING;
             """;
         seed.Parameters.AddWithValue("$json", JsonSerializer.Serialize(new AppSettings(), JsonOptions));
-        seed.Parameters.AddWithValue("$now", UtcText(DateTimeOffset.UtcNow));
+        seed.Parameters.AddWithValue("$now", UtcText(_timeProvider.GetUtcNow()));
         await seed.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -121,7 +123,7 @@ public sealed class SqliteActivityRepository(IAppPaths paths) : IActivityReposit
         var startedAt = sample.CapturedAt.ToUniversalTime();
         var endedAt = startedAt + normalizedInterval;
         var fingerprint = Fingerprint(sample, settings.WindowTitleMode);
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
 
         await using var connection = await OpenAsync(cancellationToken);
         using var transaction = connection.BeginTransaction();
@@ -308,7 +310,7 @@ public sealed class SqliteActivityRepository(IAppPaths paths) : IActivityReposit
         command.Parameters.AddWithValue("$alias", rule.Alias.Trim());
         command.Parameters.AddWithValue("$category", string.IsNullOrWhiteSpace(rule.Category) ? "未分类" : rule.Category.Trim());
         command.Parameters.AddWithValue("$excluded", rule.IsExcluded);
-        command.Parameters.AddWithValue("$now", UtcText(DateTimeOffset.UtcNow));
+        command.Parameters.AddWithValue("$now", UtcText(_timeProvider.GetUtcNow()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -336,7 +338,7 @@ public sealed class SqliteActivityRepository(IAppPaths paths) : IActivityReposit
             ON CONFLICT(id) DO UPDATE SET json = excluded.json, updated_utc = excluded.updated_utc;
             """;
         command.Parameters.AddWithValue("$json", JsonSerializer.Serialize(normalized, JsonOptions));
-        command.Parameters.AddWithValue("$now", UtcText(DateTimeOffset.UtcNow));
+        command.Parameters.AddWithValue("$now", UtcText(_timeProvider.GetUtcNow()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -404,7 +406,7 @@ public sealed class SqliteActivityRepository(IAppPaths paths) : IActivityReposit
                 """;
             command.Parameters.AddWithValue("$next", UtcText(nextAttemptAt));
             command.Parameters.AddWithValue("$error", error.Length > 500 ? error[..500] : error);
-            command.Parameters.AddWithValue("$now", UtcText(DateTimeOffset.UtcNow));
+        command.Parameters.AddWithValue("$now", UtcText(_timeProvider.GetUtcNow()));
             command.Parameters.AddWithValue("$id", id);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }

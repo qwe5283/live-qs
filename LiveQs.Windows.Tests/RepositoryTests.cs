@@ -86,7 +86,7 @@ public sealed class RepositoryTests : IDisposable
 
     private async Task<SqliteActivityRepository> CreateRepositoryAsync()
     {
-        var repository = new SqliteActivityRepository(_paths);
+        var repository = new SqliteActivityRepository(_paths, TimeProvider.System);
         await repository.InitializeAsync();
         return repository;
     }

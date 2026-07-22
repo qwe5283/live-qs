@@ -6,6 +6,7 @@ namespace LiveQs.Windows.Infrastructure;
 
 public sealed class MaintenanceWorker(
     IActivityRepository repository,
+    TimeProvider timeProvider,
     ILogger<MaintenanceWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -15,7 +16,7 @@ public sealed class MaintenanceWorker(
             try
             {
                 var settings = await repository.GetSettingsAsync(stoppingToken);
-                var deleted = await repository.DeleteBeforeAsync(DateTimeOffset.UtcNow.AddDays(-settings.RetentionDays), stoppingToken);
+                var deleted = await repository.DeleteBeforeAsync(timeProvider.GetUtcNow().AddDays(-settings.RetentionDays), stoppingToken);
                 await repository.OptimizeAsync(stoppingToken);
                 if (deleted > 0) logger.LogInformation("Retention cleanup deleted {Count} activity segments.", deleted);
             }
@@ -28,7 +29,7 @@ public sealed class MaintenanceWorker(
                 logger.LogWarning(exception, "Scheduled local database maintenance failed.");
             }
 
-            try { await Task.Delay(TimeSpan.FromHours(6), stoppingToken); }
+            try { await Task.Delay(TimeSpan.FromHours(6), timeProvider, stoppingToken); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
         }
     }
