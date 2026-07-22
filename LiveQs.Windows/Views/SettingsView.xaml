@@ -61,7 +61,6 @@
                             <TextBlock Text="程序行为" Style="{StaticResource SectionTitle}" />
                             <StackPanel Margin="0,14,0,0">
                                 <CheckBox Content="登录 Windows 后自动启动" IsChecked="{Binding LaunchOnStartup}" Margin="0,0,0,12" />
-                                <CheckBox Content="启动后直接隐藏到托盘" IsChecked="{Binding StartMinimized}" Margin="0,0,0,12" />
                                 <CheckBox Content="关闭主窗口时继续在托盘运行" IsChecked="{Binding CloseToTray}" />
                             </StackPanel>
                         </StackPanel>

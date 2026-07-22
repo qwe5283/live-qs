@@ -95,14 +95,13 @@ public partial class LiveQsApplication : System.Windows.Application
             MainWindow = _window;
             _trayIcon = _host.Services.GetRequiredService<TrayIconService>();
             _trayIcon.Initialize(_window);
-            var settings = await repository.GetSettingsAsync();
             var background = args.Args.Any(value => string.Equals(value, "--background", StringComparison.OrdinalIgnoreCase));
             if (_activationPending)
             {
                 _activationPending = false;
                 _window.RestoreAndActivate();
             }
-            else if (!background && !settings.StartMinimized)
+            else if (!background)
             {
                 _window.Show();
             }

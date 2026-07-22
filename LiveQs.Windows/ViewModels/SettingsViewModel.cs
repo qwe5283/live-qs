@@ -22,7 +22,6 @@ public sealed class SettingsViewModel : ViewModelBase
     private string _deviceToken = "";
     private string _deviceId = "";
     private bool _launchOnStartup;
-    private bool _startMinimized;
     private bool _closeToTray;
     private bool _samplingPaused;
     private string _statusText = "尚未保存";
@@ -66,7 +65,6 @@ public sealed class SettingsViewModel : ViewModelBase
     public string DeviceToken { get => _deviceToken; set => Set(ref _deviceToken, value); }
     public string DeviceId { get => _deviceId; set => Set(ref _deviceId, value); }
     public bool LaunchOnStartup { get => _launchOnStartup; set => Set(ref _launchOnStartup, value); }
-    public bool StartMinimized { get => _startMinimized; set => Set(ref _startMinimized, value); }
     public bool CloseToTray { get => _closeToTray; set => Set(ref _closeToTray, value); }
     public bool SamplingPaused { get => _samplingPaused; set => Set(ref _samplingPaused, value); }
     public string StatusText { get => _statusText; private set => Set(ref _statusText, value); }
@@ -86,7 +84,6 @@ public sealed class SettingsViewModel : ViewModelBase
         DeviceToken = settings.DeviceToken;
         DeviceId = settings.DeviceId;
         LaunchOnStartup = _startupManager.IsEnabled();
-        StartMinimized = settings.StartMinimized;
         CloseToTray = settings.CloseToTray;
         SamplingPaused = settings.SamplingPaused;
         await ReloadRulesAsync();
@@ -146,7 +143,6 @@ public sealed class SettingsViewModel : ViewModelBase
         DeviceToken = DeviceToken,
         DeviceId = DeviceId,
         LaunchOnStartup = LaunchOnStartup,
-        StartMinimized = StartMinimized,
         CloseToTray = CloseToTray,
         SamplingPaused = SamplingPaused,
     }.Normalize();

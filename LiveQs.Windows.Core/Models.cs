@@ -18,7 +18,6 @@ public sealed record AppSettings
     public string DeviceToken { get; init; } = "";
     public string DeviceId { get; init; } = Environment.MachineName.ToLowerInvariant();
     public bool LaunchOnStartup { get; init; }
-    public bool StartMinimized { get; init; }
     public bool CloseToTray { get; init; } = true;
     public bool SamplingPaused { get; init; }
 
