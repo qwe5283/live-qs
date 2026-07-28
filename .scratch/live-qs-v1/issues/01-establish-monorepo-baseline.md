@@ -14,4 +14,4 @@
 
 ## Answer
 
-根目录现为统一 Git 仓库，并通过 `legacy/windows-main` 保留迁移前的 Windows `main` 历史。根 workspace 提供全量和分组件检查，四个活动组件均已验证。领域词汇、架构决策和统一忽略规则已加入仓库；Windows 嵌套 Git 元数据已移出工作区。
+根目录现为统一 Git 仓库，并通过 `legacy/windows-main` 保留迁移前的 Windows `main` 历史。根 PowerShell 脚本提供全量和分组件检查，各组件保留独立依赖锁、版本与发布渠道，四个活动组件均已验证。领域词汇、架构决策和统一忽略规则已加入仓库；Windows 嵌套 Git 元数据已移出工作区。

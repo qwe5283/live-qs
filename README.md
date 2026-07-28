@@ -6,16 +6,22 @@ The V1 source of truth is `.scratch/live-qs-v1/spec.md`. Components share one re
 
 ## Checks
 
-Run targeted checks from the repository root:
+Install Node dependencies within each component:
 
 ```powershell
-npm run check:server
-npm run check:web
-npm run check:windows
-npm run check:android
+npm --prefix server ci
+npm --prefix web ci
 ```
 
-Use `npm run check` only when all local platform prerequisites are available.
+Run all checks from the repository root:
+
+```powershell
+.\scripts\check.ps1
+```
+
+Pass `server`, `web`, `windows`, or `android` to check one component, for example
+`.\scripts\check.ps1 server`. The repository root is not a Node package; each
+component owns its dependencies, version, and release channel.
 
 ## Components
 
