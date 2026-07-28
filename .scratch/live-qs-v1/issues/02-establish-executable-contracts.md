@@ -19,9 +19,10 @@
 闭合事件注册表和首个 `activity.interval@1` Schema。合法与非法样例覆盖未知
 类型/版本、单位、时间范围、IANA 时区、UTC 偏移和时长一致性。
 
-契约检查会校验 OpenAPI、Schema 注册、样例语义和四端派生模型同步；模型由
-同一事件联合 Schema 生成到 Server、Web、Windows 和 Android。根级
-`.\scripts\check.ps1` 已将 contracts 作为首个检查组件。兼容性和升版规则记录在
-`contracts/README.md`。
+契约检查会校验 OpenAPI、Schema 注册、样例语义、批量确认约束和四端派生模型
+同步；模型由 OpenAPI 与事件联合 Schema 共同生成到 Server、Web、Windows 和
+Android。C# 与 Kotlin 序列化测试确认 snake_case 字段和枚举 wire 值与契约一致。
+根级 `.\scripts\check.ps1` 已将 contracts 作为首个检查组件。兼容性和升版规则
+记录在 `contracts/README.md`。
 
 验证：`.\scripts\check.ps1` 全部通过。

@@ -22,14 +22,18 @@
       "required": ["kind", "record_id"],
       "properties": {
         "kind": {
-          "type": "string",
-          "enum": ["windows.foreground", "android.accessibility", "android.usage_stats"]
+          "$ref": "#/$defs/SourceKind"
         },
         "record_id": {
           "type": "string",
           "minLength": 1
         }
       }
+    },
+    "privacy_level": {
+      "type": "string",
+      "enum": ["normal", "sensitive"],
+      "default": "normal"
     },
     "payload": {
       "type": "object",
@@ -63,7 +67,7 @@
               "minimum": 0
             },
             "unit": {
-              "const": "ms"
+              "$ref": "#/$defs/DurationUnit"
             }
           }
         },
@@ -102,10 +106,22 @@
     "properties": {
       "end_at": {
         "type": "string",
-        "format": "date-time"
+        "format": "date-time",
+        "pattern": "Z$"
       }
     },
     "required": ["end_at"]
+  },
+  "$defs": {
+    "SourceKind": {
+      "title": "Source Kind",
+      "type": "string",
+      "enum": ["windows.foreground", "android.accessibility"]
+    },
+    "DurationUnit": {
+      "title": "Duration Unit",
+      "const": "ms"
+    }
   },
   "unevaluatedProperties": false
 }

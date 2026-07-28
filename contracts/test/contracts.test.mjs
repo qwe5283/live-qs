@@ -3,11 +3,15 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import Ajv2020 from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
+import { parse as parseYaml } from "yaml";
 import {
   createEventValidator,
   loadEventRegistry,
   loadEventUnionReferences,
 } from "../src/event-validator.mjs";
+import { buildProtocolModelSchema } from "../src/protocol-model-schema.mjs";
 
 const contractsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const validDirectory = path.join(contractsRoot, "examples", "valid");
@@ -62,4 +66,32 @@ test("invalid examples are rejected with their declared stable error code", () =
     assert.equal(result.valid, false, example.name);
     assert.equal(result.errors[0]?.code, expectedCode, example.name);
   }
+});
+
+test("batch response acknowledges every item and explains rejections", () => {
+  const ajv = new Ajv2020({ strict: true });
+  addFormats(ajv);
+  for (const schemaPath of [
+    "schemas/event-envelope.v1.schema.json",
+    "schemas/events/activity.interval.v1.schema.json",
+    "schemas/event.schema.json",
+  ]) {
+    ajv.addSchema(JSON.parse(fs.readFileSync(path.join(contractsRoot, schemaPath), "utf8")));
+  }
+
+  const openApi = parseYaml(fs.readFileSync(path.join(contractsRoot, "openapi.yaml"), "utf8"));
+  const protocolSchema = buildProtocolModelSchema(openApi);
+  ajv.addSchema(protocolSchema);
+  const validate = ajv.compile({ $ref: `${protocolSchema.$id}#/$defs/EventBatchResponse` });
+  const rejected = {
+    event_id: "018f62d6-4f34-7c82-9085-57c8af1d7a44",
+    revision: 1,
+    status: "rejected",
+  };
+
+  assert.equal(validate({ results: [] }), false);
+  assert.equal(validate({ results: [rejected] }), false);
+  assert.equal(validate({
+    results: [{ ...rejected, error: { code: "invalid_unit", message: "Unit is invalid." } }],
+  }), true);
 });

@@ -1,0 +1,22 @@
+{
+  "event_id": "018f62d6-4f34-7c82-9085-57c8af1d7a44",
+  "event_type": "activity.interval",
+  "schema_version": 1,
+  "owner_id": "owner",
+  "source": { "kind": "windows.foreground", "record_id": "segment-1042" },
+  "device": { "id": "windows-workstation", "platform": "windows" },
+  "start_at": "2026-07-28T09:00:00.000+08:00",
+  "end_at": "2026-07-28T09:05:00.000+08:00",
+  "capture_timezone": "Asia/Shanghai",
+  "capture_offset_minutes": 480,
+  "privacy_level": "normal",
+  "revision": 1,
+  "finalization_state": "final",
+  "provenance": { "collector_version": "0.1.0", "observed_at": "2026-07-28T01:05:01.000Z" },
+  "invalidated": false,
+  "payload": {
+    "application_id": "msedge.exe",
+    "is_afk": false,
+    "duration": { "value": 300000, "unit": "ms" }
+  }
+}

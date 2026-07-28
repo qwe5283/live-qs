@@ -49,11 +49,13 @@
     "start_at": {
       "type": "string",
       "format": "date-time",
+      "pattern": "Z$",
       "description": "Inclusive UTC instant."
     },
     "end_at": {
       "type": "string",
       "format": "date-time",
+      "pattern": "Z$",
       "description": "Exclusive UTC instant when known."
     },
     "capture_timezone": {
@@ -69,6 +71,7 @@
     "privacy_level": {
       "type": "string",
       "enum": ["normal", "sensitive"],
+      "default": "normal",
       "description": "Private observations are blocked on-device and cannot enter this contract."
     },
     "revision": {
@@ -132,7 +135,8 @@
         },
         "observed_at": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "pattern": "Z$"
         }
       }
     }

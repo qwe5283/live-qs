@@ -21,6 +21,11 @@ Generated models live in each active component's `generated/` directory. Do not
 edit them manually. Component-specific mapping or runtime validation may wrap
 these types but may not redefine their wire shape.
 
+TypeScript models use wire names directly. Kotlin models use kotlinx
+serialization with `@SerialName`. C# models use System.Text.Json attributes and
+`ContractJson.Options`; pass those options whenever serializing or deserializing
+a generated C# model so enum wire values remain exact.
+
 ## Adding an Event Version
 
 Add one self-contained file named

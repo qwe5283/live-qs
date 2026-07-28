@@ -62,6 +62,12 @@ export function createEventValidator() {
       return invalid("unknown_schema_version", "/schema_version", "Schema version is not registered for this event type.");
     }
 
+    for (const field of ["start_at", "end_at"]) {
+      if (typeof event?.[field] === "string" && !event[field].endsWith("Z")) {
+        return invalid("invalid_timestamp", `/${field}`, "Event timestamps must use UTC Z notation.");
+      }
+    }
+
     const validate = validators.get(`${event.event_type}@${event.schema_version}`);
     if (!validate || !validateRegisteredEvent(event)) {
       const errors = validateRegisteredEvent.errors ?? validate?.errors ?? [];
