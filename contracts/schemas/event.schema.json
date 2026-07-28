@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://live-qs.local/contracts/schemas/event.schema.json",
+  "title": "LiveQs Registered Event",
+  "description": "Closed union of every event type and schema version accepted by V1.",
+  "oneOf": [
+    {
+      "$ref": "./events/activity.interval.v1.schema.json"
+    }
+  ]
+}

@@ -4,11 +4,24 @@
 
 **Blocked by:** 01 — 建立 Monorepo 基线.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] OpenAPI 3.1 文档能够通过自动校验，并定义统一认证、错误和分页约定。
-- [ ] JSON Schema 定义稳定事件信封、版本字段、时间语义、revision、隐私和来源元数据。
-- [ ] 每个已定义 Schema 至少包含一个合法样例和多个关键非法样例。
-- [ ] 契约检查能够拒绝未知事件类型、未知 Schema 版本和非法单位或时间范围。
-- [ ] 兼容性规则明确区分可选字段扩展与必须升版的破坏性变化。
-- [ ] CI 或等价根级检查能够发现无效契约和未同步的派生客户端模型。
+- [x] OpenAPI 3.1 文档能够通过自动校验，并定义统一认证、错误和分页约定。
+- [x] JSON Schema 定义稳定事件信封、版本字段、时间语义、revision、隐私和来源元数据。
+- [x] 每个已定义 Schema 至少包含一个合法样例和多个关键非法样例。
+- [x] 契约检查能够拒绝未知事件类型、未知 Schema 版本和非法单位或时间范围。
+- [x] 兼容性规则明确区分可选字段扩展与必须升版的破坏性变化。
+- [x] CI 或等价根级检查能够发现无效契约和未同步的派生客户端模型。
+
+## Answer
+
+在独立的 `contracts/` Node 组件中建立了 OpenAPI 3.1、稳定事件信封、
+闭合事件注册表和首个 `activity.interval@1` Schema。合法与非法样例覆盖未知
+类型/版本、单位、时间范围、IANA 时区、UTC 偏移和时长一致性。
+
+契约检查会校验 OpenAPI、Schema 注册、样例语义和四端派生模型同步；模型由
+同一事件联合 Schema 生成到 Server、Web、Windows 和 Android。根级
+`.\scripts\check.ps1` 已将 contracts 作为首个检查组件。兼容性和升版规则记录在
+`contracts/README.md`。
+
+验证：`.\scripts\check.ps1` 全部通过。

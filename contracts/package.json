@@ -1,0 +1,23 @@
+{
+  "name": "@live-qs/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "lint:openapi": "redocly lint openapi.yaml",
+    "test:schemas": "node --test",
+    "test": "npm run lint:openapi && npm run test:schemas",
+    "generate": "node scripts/generate-models.mjs",
+    "check:generated": "node scripts/generate-models.mjs --check",
+    "check": "npm test && npm run check:generated"
+  },
+  "devDependencies": {
+    "@redocly/cli": "^2.0.8",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "quicktype": "^23.2.6"
+  }
+}

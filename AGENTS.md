@@ -25,16 +25,17 @@ Implement in this order: contracts, server, Windows, WebUI, Android, then the re
 Preserve proven Win32 sampling, Windows SQLite and tray lifecycle, Android permissions, UsageStats, Health Connect, and notification listening. Replace legacy protocol and synchronization boundaries.
 
 Run all checks with `.\scripts\check.ps1`, or pass a component name, such as
-`.\scripts\check.ps1 server`. Component commands remain available directly:
+`.\scripts\check.ps1 contracts`. Component commands remain available directly:
 
+- `npm --prefix contracts run check`
 - `cd server; npm run typecheck; npm test; npm run build`
 - `cd web; npm run build`
 - `cd windows; dotnet test LiveQs.Windows.sln`
 - `cd android; .\gradlew.bat lint test assembleDebug`
 
-Install Node dependencies per component with `npm --prefix server ci` and
-`npm --prefix web ci`. Do not add a root npm workspace; components own their
-dependency locks and versions.
+Install Node dependencies per component with `npm --prefix contracts ci`,
+`npm --prefix server ci`, and `npm --prefix web ci`. Do not add a root npm
+workspace; components own their dependency locks and versions.
 
 ## Architecture, Security, and Testing
 

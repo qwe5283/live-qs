@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("all", "server", "web", "windows", "android")]
+    [ValidateSet("all", "contracts", "server", "web", "windows", "android")]
     [string]$Component = "all"
 )
 
@@ -25,6 +25,12 @@ function Test-Server {
     Invoke-Check "Server typecheck" { & npm.cmd --prefix "$repositoryRoot\server" run typecheck }
     Invoke-Check "Server tests" { & npm.cmd --prefix "$repositoryRoot\server" test }
     Invoke-Check "Server build" { & npm.cmd --prefix "$repositoryRoot\server" run build }
+}
+
+function Test-Contracts {
+    Invoke-Check "Contract lint, examples, and generated models" {
+        & npm.cmd --prefix "$repositoryRoot\contracts" run check
+    }
 }
 
 function Test-Web {
@@ -52,7 +58,7 @@ function Test-Android {
 }
 
 $components = if ($Component -eq "all") {
-    @("server", "web", "windows", "android")
+    @("contracts", "server", "web", "windows", "android")
 }
 else {
     @($Component)
@@ -60,6 +66,7 @@ else {
 
 foreach ($selectedComponent in $components) {
     switch ($selectedComponent) {
+        "contracts" { Test-Contracts }
         "server" { Test-Server }
         "web" { Test-Web }
         "windows" { Test-Windows }

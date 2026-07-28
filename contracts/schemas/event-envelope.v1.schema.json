@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://live-qs.local/contracts/schemas/event-envelope.v1.schema.json",
+  "title": "LiveQs Event Envelope V1",
+  "description": "Stable metadata shared by every persisted V1 observation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "owner_id",
+    "source",
+    "device",
+    "start_at",
+    "capture_timezone",
+    "capture_offset_minutes",
+    "privacy_level",
+    "revision",
+    "finalization_state",
+    "provenance",
+    "invalidated",
+    "payload"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Stable globally unique identifier for one logical event across revisions."
+    },
+    "event_type": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$"
+    },
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "owner_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "device": {
+      "$ref": "#/$defs/device"
+    },
+    "start_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Inclusive UTC instant."
+    },
+    "end_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Exclusive UTC instant when known."
+    },
+    "capture_timezone": {
+      "type": "string",
+      "minLength": 1,
+      "description": "IANA timezone observed at capture."
+    },
+    "capture_offset_minutes": {
+      "type": "integer",
+      "minimum": -840,
+      "maximum": 840
+    },
+    "privacy_level": {
+      "type": "string",
+      "enum": ["normal", "sensitive"],
+      "description": "Private observations are blocked on-device and cannot enter this contract."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "finalization_state": {
+      "type": "string",
+      "enum": ["checkpoint", "final"]
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "invalidated": {
+      "type": "boolean"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "record_id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "record_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable identifier supplied by the originating adapter."
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "platform"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "platform": {
+          "type": "string",
+          "enum": ["windows", "android"]
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collector_version", "observed_at"],
+      "properties": {
+        "collector_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

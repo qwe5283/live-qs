@@ -1,0 +1,282 @@
+openapi: 3.1.0
+info:
+  title: LiveQs V1 API
+  version: 0.1.0
+  description: >-
+    Authoritative HTTP contract for the single-Owner LiveQs V1 service. Event
+    bodies are governed by the versioned JSON Schemas under schemas/.
+servers:
+  - url: http://localhost:3000
+    description: Local and trusted-LAN development
+tags:
+  - name: Events
+    description: Versioned historical observations. Heartbeats are not events.
+paths:
+  /api/v1/events/batch:
+    post:
+      operationId: batchUpsertEvents
+      summary: Submit event revisions with per-item acknowledgements
+      tags: [Events]
+      security:
+        - DeviceToken: []
+      x-required-scopes: [events:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventBatchRequest"
+      responses:
+        "200":
+          description: Every submitted item has an independent acknowledgement.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventBatchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/events:
+    get:
+      operationId: listEvents
+      summary: List latest valid event revisions
+      tags: [Events]
+      security:
+        - OwnerSession: []
+        - QueryToken: []
+      x-required-scopes: [events:read]
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Timezone"
+        - $ref: "#/components/parameters/EventType"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: A page of latest, non-invalidated event revisions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+components:
+  securitySchemes:
+    OwnerSession:
+      type: apiKey
+      in: cookie
+      name: liveqs_session
+      description: Revocable HttpOnly Owner browser session.
+    DeviceToken:
+      type: http
+      scheme: bearer
+      bearerFormat: LiveQs device token
+      description: Independently revocable upload-only collector credential.
+    QueryToken:
+      type: http
+      scheme: bearer
+      bearerFormat: LiveQs query token
+      description: Scoped, expiring, read-only credential for AI and integrations.
+  parameters:
+    From:
+      name: from
+      in: query
+      required: true
+      description: Inclusive UTC instant.
+      schema:
+        type: string
+        format: date-time
+    To:
+      name: to
+      in: query
+      required: true
+      description: Exclusive UTC instant; must be later than from.
+      schema:
+        type: string
+        format: date-time
+    Timezone:
+      name: timezone
+      in: query
+      required: true
+      description: IANA timezone used to interpret reporting boundaries.
+      schema:
+        type: string
+        minLength: 1
+        example: Asia/Shanghai
+    EventType:
+      name: event_type
+      in: query
+      required: false
+      schema:
+        type: string
+        example: activity.interval
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque continuation cursor returned by the preceding page.
+      schema:
+        type: string
+        minLength: 1
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+  responses:
+    BadRequest:
+      description: Request shape or semantics are invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Credential is missing, expired, revoked, or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Credential lacks the required scope, event type, or privacy ceiling.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: Credential rate limit was exceeded.
+      headers:
+        Retry-After:
+          description: Seconds until another request may be attempted.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    Event:
+      $ref: "./schemas/event.schema.json"
+    EventBatchRequest:
+      type: object
+      additionalProperties: false
+      required: [events]
+      properties:
+        events:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/Event"
+    EventBatchResponse:
+      type: object
+      additionalProperties: false
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventAcknowledgement"
+    EventAcknowledgement:
+      type: object
+      additionalProperties: false
+      required: [event_id, revision, status]
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [accepted, duplicate, stale_revision, rejected]
+        error:
+          oneOf:
+            - $ref: "#/components/schemas/Error"
+            - type: "null"
+    EventPage:
+      type: object
+      additionalProperties: false
+      required: [data, page, context]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Event"
+        page:
+          $ref: "#/components/schemas/PageMetadata"
+        context:
+          $ref: "#/components/schemas/QueryContext"
+    PageMetadata:
+      type: object
+      additionalProperties: false
+      required: [page_size, next_cursor]
+      properties:
+        page_size:
+          type: integer
+          minimum: 0
+          maximum: 200
+        next_cursor:
+          type: [string, "null"]
+          description: Opaque cursor, or null when no further page exists.
+    QueryContext:
+      type: object
+      additionalProperties: false
+      required: [from, to, timezone, provenance, completeness]
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+        provenance:
+          type: array
+          items:
+            type: string
+        completeness:
+          type: string
+          enum: [complete, partial, unknown]
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error, request_id]
+      properties:
+        error:
+          $ref: "#/components/schemas/Error"
+        request_id:
+          type: string
+          minLength: 1
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          pattern: "^[a-z][a-z0-9_]*$"
+        message:
+          type: string
+          minLength: 1
+        details:
+          type: object
+          additionalProperties: true
