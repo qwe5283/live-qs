@@ -1,8 +1,40 @@
+# JavaScript dependencies and generated output
+node_modules/
+**/dist/
+**/build/
+
+# .NET and Android generated output
 **/bin/
 **/obj/
-*.user
-*.suo
+**/artifacts/
+**/.gradle/
+
+# Local configuration and data
+.env
+.env.*
+!.env.example
+local.properties
+keystore.properties
+*.db
+*.db-shm
+*.db-wal
+*.hprof
+*.tsbuildinfo
+
+# Signing keys and private certificates
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+*.snk
+*.mobileprovision
+
+# IDE and operating-system files
 .vs/
 .idea/
-TestResults/
-artifacts/
+*.user
+*.suo
+Thumbs.db
+.DS_Store

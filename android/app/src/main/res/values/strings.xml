@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">AI Life</string>
+    <string name="accessibility_service_description">Reports foreground app package changes to your self-hosted AI Life server.</string>
+</resources>
