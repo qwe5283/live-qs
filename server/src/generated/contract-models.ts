@@ -19,9 +19,16 @@ export interface ProtocolModels {
   EventPage: EventPage;
   OwnerPasswordRequest: OwnerPasswordRequest;
   OwnerSessionInfo: OwnerSessionInfo;
+  OwnerSettings: OwnerSettings;
+  OwnerSettingsUpdate: OwnerSettingsUpdate;
   OwnerStatus: OwnerStatus;
   PageMetadata: PageMetadata;
   QueryContext: QueryContext;
+  UsageDayMetrics: UsageDayMetrics;
+  UsageDayReport: UsageDayReport;
+  UsageDeviceMetrics: UsageDeviceMetrics;
+  UsageMetrics: UsageMetrics;
+  UsageWeekReport: UsageWeekReport;
 }
 
 export interface CredentialCreateRequest {
@@ -267,9 +274,102 @@ export interface OwnerSessionInfo {
   authenticated: boolean;
 }
 
+export interface OwnerSettings {
+  /**
+   * IANA timezone defining the default day and week boundaries for reports. Defaults to UTC
+   * until the Owner configures another timezone; browser timezones never change a report.
+   */
+  report_timezone: string;
+}
+
+export interface OwnerSettingsUpdate {
+  /**
+   * New report timezone as an IANA timezone name.
+   */
+  report_timezone: string;
+}
+
 export interface OwnerStatus {
   /**
    * True once the single implicit Owner password has been created.
    */
   initialized: boolean;
+}
+
+export interface UsageDayMetrics {
+  active_minutes: number;
+  /**
+   * Local calendar day in the report timezone.
+   */
+  date: string;
+  device_minutes: number;
+}
+
+export interface UsageDayReport {
+  context: QueryContext;
+  /**
+   * The requested local calendar day.
+   */
+  date: string;
+  /**
+   * One entry per device lane contributing intervals to the day.
+   */
+  devices: UsageDeviceMetrics[];
+  metrics: UsageMetrics;
+  /**
+   * IANA timezone the day boundaries resolved in.
+   */
+  timezone: string;
+}
+
+export interface UsageDeviceMetrics {
+  /**
+   * Deduplicated non-AFK time of this device lane; lane unions do not de-duplicate across
+   * devices.
+   */
+  active_minutes: number;
+  /**
+   * Device lane identifier as reported in the event envelope.
+   */
+  device_id: string;
+  /**
+   * Device minutes attributed to this device lane.
+   */
+  device_minutes: number;
+  platform: Platform;
+}
+
+export interface UsageMetrics {
+  /**
+   * Active minutes: the union of qualifying non-AFK intervals over the report range.
+   * Overlapping or adjacent device time counts once.
+   */
+  active_minutes: number;
+  /**
+   * Device minutes: the sum of qualifying device intervals overlapping the report range
+   * across all devices, including AFK foreground time. Concurrent device use can exceed
+   * elapsed wall-clock time.
+   */
+  device_minutes: number;
+}
+
+export interface UsageWeekReport {
+  context: QueryContext;
+  /**
+   * One entry per local day of the week, in order.
+   */
+  days: UsageDayMetrics[];
+  metrics: UsageMetrics;
+  /**
+   * IANA timezone the week boundaries resolved in.
+   */
+  timezone: string;
+  /**
+   * Last local day of the Monday-start week in the report timezone.
+   */
+  week_end_date: string;
+  /**
+   * First local day of the Monday-start week in the report timezone.
+   */
+  week_start_date: string;
 }

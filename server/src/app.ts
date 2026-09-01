@@ -10,6 +10,7 @@ import { contextRouter, publicRouter } from "./modules/context/routes.js";
 import { credentialsRouter } from "./modules/credentials/routes.js";
 import { eventsRouter } from "./modules/events/routes.js";
 import { healthRouter } from "./modules/health/routes.js";
+import { metricsRouter } from "./modules/metrics/routes.js";
 import { ownerRouter } from "./modules/owner/routes.js";
 import { reportsRouter } from "./modules/reports/routes.js";
 import { usageRouter } from "./modules/usage/routes.js";
@@ -31,6 +32,7 @@ export function createApp(env: Env) {
   app.use("/api/v1/owner", ownerRouter(env));
   app.use("/api/v1/credentials", credentialsRouter(env));
   app.use("/api/v1/events", eventsRouter(env));
+  app.use("/api/v1/metrics", metricsRouter(env));
   app.use("/api/v1", ownerAuth());
   app.use("/api/v1", contextRouter(env));
   app.use("/api/v1", usageRouter(env));

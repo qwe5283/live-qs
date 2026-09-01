@@ -3,7 +3,9 @@ import type { Response } from "express";
 import { z } from "zod";
 import type { Env } from "../../config/env.js";
 import { ownerAuth } from "../../middleware/auth.js";
+import { recordAuditLog } from "../../shared/audit.js";
 import { AppError } from "../../shared/errors.js";
+import { getReportTimezone, setReportTimezone } from "./settings.js";
 import {
   SESSION_COOKIE_NAME,
   createOwnerCredential,
@@ -16,6 +18,10 @@ import {
 
 const passwordRequestSchema = z.strictObject({
   password: z.string().min(8, "Password must contain at least 8 characters.").max(256),
+});
+
+const settingsUpdateSchema = z.strictObject({
+  report_timezone: z.string().min(1),
 });
 
 export function ownerRouter(env: Env): Router {
@@ -50,6 +56,25 @@ export function ownerRouter(env: Env): Router {
 
   router.get("/session", ownerAuth(), (_req, res) => {
     res.json({ authenticated: true });
+  });
+
+  router.get("/settings", ownerAuth(), async (_req, res) => {
+    res.json({ report_timezone: await getReportTimezone(userId) });
+  });
+
+  router.post("/settings", ownerAuth(), async (req, res) => {
+    const parsed = settingsUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "The settings body must contain a report_timezone string.", "invalid_request");
+    }
+    const reportTimezone = await setReportTimezone(userId, parsed.data.report_timezone);
+    await recordAuditLog({
+      userId,
+      actorType: "user",
+      action: "owner.settings.update",
+      details: { report_timezone: reportTimezone },
+    });
+    res.json({ report_timezone: reportTimezone });
   });
 
   return router;

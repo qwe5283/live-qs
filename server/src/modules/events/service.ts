@@ -38,6 +38,18 @@ const PRIVACY_LEVELS_UP_TO: Record<CredentialPrivacyCeiling, string[]> = {
   private: ["normal", "sensitive"],
 };
 
+/** Privacy levels a read may touch; absent ceilings fall back to the widest contract-representable set. */
+export function privacyLevelsForRead(privacyCeiling?: CredentialPrivacyCeiling): string[] {
+  return PRIVACY_LEVELS_UP_TO[privacyCeiling ?? "private"];
+}
+
+/** Registered event types a read may touch; a non-empty allowed list is an exact intersection. */
+export function readableEventTypes(allowedEventTypes?: string[]): string[] {
+  if (allowedEventTypes === undefined || allowedEventTypes.length === 0) return [...REGISTERED_EVENT_TYPES];
+  const allowed = new Set(allowedEventTypes);
+  return REGISTERED_EVENT_TYPES.filter((type) => allowed.has(type));
+}
+
 /**
  * Maps one stored event to the contract envelope. Rows written before the
  * versioned protocol lack envelope columns and receive neutral defaults; rows
@@ -94,20 +106,14 @@ function decodeCursor(cursor: string): { startAt: Date; id: string } | null {
 export async function listEvents(query: EventRangeQuery): Promise<EventPage> {
   const credentialRestricted = query.privacyCeiling !== undefined
     || (query.allowedEventTypes !== undefined && query.allowedEventTypes.length > 0);
-  const privacyLevels = PRIVACY_LEVELS_UP_TO[query.privacyCeiling ?? "private"];
-  const restrictedTypes = [...REGISTERED_EVENT_TYPES];
-  if (query.allowedEventTypes !== undefined && query.allowedEventTypes.length > 0) {
-    const allowed = new Set(query.allowedEventTypes);
-    const intersection = restrictedTypes.filter((type) => allowed.has(type));
-    restrictedTypes.length = 0;
-    restrictedTypes.push(...intersection);
-  }
+  const privacyLevels = privacyLevelsForRead(query.privacyCeiling);
+  const restrictedTypes = readableEventTypes(query.allowedEventTypes);
 
   const unrestrictedFilter: Record<string, unknown> = {
     user_id: query.userId,
     start_at: { $gte: query.from, $lt: query.to },
-    privacy_level: { $in: PRIVACY_LEVELS_UP_TO.private },
-    type: query.eventType ? { $eq: query.eventType, $in: [...REGISTERED_EVENT_TYPES] } : { $in: [...REGISTERED_EVENT_TYPES] },
+    privacy_level: { $in: privacyLevelsForRead() },
+    type: query.eventType ? { $eq: query.eventType, $in: readableEventTypes() } : { $in: readableEventTypes() },
   };
   const filter: Record<string, unknown> = {
     user_id: query.userId,

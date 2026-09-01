@@ -71,6 +71,12 @@ public partial class ProtocolModels
     [JsonPropertyName("OwnerSessionInfo")]
     public OwnerSessionInfo OwnerSessionInfo { get; set; }
 
+    [JsonPropertyName("OwnerSettings")]
+    public OwnerSettings OwnerSettings { get; set; }
+
+    [JsonPropertyName("OwnerSettingsUpdate")]
+    public OwnerSettingsUpdate OwnerSettingsUpdate { get; set; }
+
     [JsonPropertyName("OwnerStatus")]
     public OwnerStatus OwnerStatus { get; set; }
 
@@ -79,6 +85,21 @@ public partial class ProtocolModels
 
     [JsonPropertyName("QueryContext")]
     public QueryContext QueryContext { get; set; }
+
+    [JsonPropertyName("UsageDayMetrics")]
+    public UsageDayMetrics UsageDayMetrics { get; set; }
+
+    [JsonPropertyName("UsageDayReport")]
+    public UsageDayReport UsageDayReport { get; set; }
+
+    [JsonPropertyName("UsageDeviceMetrics")]
+    public UsageDeviceMetrics UsageDeviceMetrics { get; set; }
+
+    [JsonPropertyName("UsageMetrics")]
+    public UsageMetrics UsageMetrics { get; set; }
+
+    [JsonPropertyName("UsageWeekReport")]
+    public UsageWeekReport UsageWeekReport { get; set; }
 }
 
 public partial class CredentialCreateRequest
@@ -462,6 +483,27 @@ public partial class OwnerSessionInfo
     public bool Authenticated { get; set; }
 }
 
+public partial class OwnerSettings
+{
+    /// <summary>
+    /// IANA timezone defining the default day and week boundaries for reports. Defaults to UTC
+    /// until the Owner configures another timezone; browser timezones never change a report.
+    /// </summary>
+    [JsonPropertyName("report_timezone")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string ReportTimezone { get; set; }
+}
+
+public partial class OwnerSettingsUpdate
+{
+    /// <summary>
+    /// New report timezone as an IANA timezone name.
+    /// </summary>
+    [JsonPropertyName("report_timezone")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string ReportTimezone { get; set; }
+}
+
 public partial class OwnerStatus
 {
     /// <summary>
@@ -469,6 +511,125 @@ public partial class OwnerStatus
     /// </summary>
     [JsonPropertyName("initialized")]
     public bool Initialized { get; set; }
+}
+
+public partial class UsageDayMetrics
+{
+    [JsonPropertyName("active_minutes")]
+    public long ActiveMinutes { get; set; }
+
+    /// <summary>
+    /// Local calendar day in the report timezone.
+    /// </summary>
+    [JsonPropertyName("date")]
+    public string Date { get; set; }
+
+    [JsonPropertyName("device_minutes")]
+    public long DeviceMinutes { get; set; }
+}
+
+public partial class UsageDayReport
+{
+    [JsonPropertyName("context")]
+    public QueryContext Context { get; set; }
+
+    /// <summary>
+    /// The requested local calendar day.
+    /// </summary>
+    [JsonPropertyName("date")]
+    public string Date { get; set; }
+
+    /// <summary>
+    /// One entry per device lane contributing intervals to the day.
+    /// </summary>
+    [JsonPropertyName("devices")]
+    public UsageDeviceMetrics[] Devices { get; set; }
+
+    [JsonPropertyName("metrics")]
+    public UsageMetrics Metrics { get; set; }
+
+    /// <summary>
+    /// IANA timezone the day boundaries resolved in.
+    /// </summary>
+    [JsonPropertyName("timezone")]
+    public string Timezone { get; set; }
+}
+
+public partial class UsageDeviceMetrics
+{
+    /// <summary>
+    /// Deduplicated non-AFK time of this device lane; lane unions do not de-duplicate across
+    /// devices.
+    /// </summary>
+    [JsonPropertyName("active_minutes")]
+    public long ActiveMinutes { get; set; }
+
+    /// <summary>
+    /// Device lane identifier as reported in the event envelope.
+    /// </summary>
+    [JsonPropertyName("device_id")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string DeviceId { get; set; }
+
+    /// <summary>
+    /// Device minutes attributed to this device lane.
+    /// </summary>
+    [JsonPropertyName("device_minutes")]
+    public long DeviceMinutes { get; set; }
+
+    [JsonPropertyName("platform")]
+    public Platform Platform { get; set; }
+}
+
+public partial class UsageMetrics
+{
+    /// <summary>
+    /// Active minutes: the union of qualifying non-AFK intervals over the report range.
+    /// Overlapping or adjacent device time counts once.
+    /// </summary>
+    [JsonPropertyName("active_minutes")]
+    public long ActiveMinutes { get; set; }
+
+    /// <summary>
+    /// Device minutes: the sum of qualifying device intervals overlapping the report range
+    /// across all devices, including AFK foreground time. Concurrent device use can exceed
+    /// elapsed wall-clock time.
+    /// </summary>
+    [JsonPropertyName("device_minutes")]
+    public long DeviceMinutes { get; set; }
+}
+
+public partial class UsageWeekReport
+{
+    [JsonPropertyName("context")]
+    public QueryContext Context { get; set; }
+
+    /// <summary>
+    /// One entry per local day of the week, in order.
+    /// </summary>
+    [JsonPropertyName("days")]
+    public UsageDayMetrics[] Days { get; set; }
+
+    [JsonPropertyName("metrics")]
+    public UsageMetrics Metrics { get; set; }
+
+    /// <summary>
+    /// IANA timezone the week boundaries resolved in.
+    /// </summary>
+    [JsonPropertyName("timezone")]
+    public string Timezone { get; set; }
+
+    /// <summary>
+    /// Last local day of the Monday-start week in the report timezone.
+    /// </summary>
+    [JsonPropertyName("week_end_date")]
+    public string WeekEndDate { get; set; }
+
+    /// <summary>
+    /// First local day of the Monday-start week in the report timezone.
+    /// </summary>
+    [JsonPropertyName("week_start_date")]
+    public string WeekStartDate { get; set; }
 }
 
 /// <summary>

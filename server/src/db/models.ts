@@ -137,6 +137,12 @@ const ownerSessionSchema = new Schema({
 }, commonOptions);
 ownerSessionSchema.index({ expires_at: 1 }, { expireAfterSeconds: 0 });
 
+const ownerSettingsSchema = new Schema({
+  user_id: { type: String, required: true, unique: true },
+  report_timezone: { type: String, required: true },
+  updated_at: { type: Date, required: true },
+}, commonOptions);
+
 export const BucketModel = model("Bucket", bucketSchema);
 export const EventModel = model("Event", eventSchema);
 export const EventRevisionModel = model("EventRevision", eventRevisionSchema);
@@ -146,4 +152,5 @@ export const AuditLogModel = model("AuditLog", auditLogSchema);
 export const PrivacyRuleModel = model("PrivacyRule", privacyRuleSchema);
 export const OwnerCredentialModel = model("OwnerCredential", ownerCredentialSchema);
 export const OwnerSessionModel = model("OwnerSession", ownerSessionSchema);
+export const OwnerSettingsModel = model("OwnerSettings", ownerSettingsSchema);
 export const CredentialModel = model("Credential", credentialSchema);

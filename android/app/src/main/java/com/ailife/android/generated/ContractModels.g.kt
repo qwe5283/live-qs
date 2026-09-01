@@ -63,6 +63,12 @@ data class ProtocolModels(
     @SerialName("OwnerSessionInfo")
     val ownerSessionInfo: OwnerSessionInfo,
 
+    @SerialName("OwnerSettings")
+    val ownerSettings: OwnerSettings,
+
+    @SerialName("OwnerSettingsUpdate")
+    val ownerSettingsUpdate: OwnerSettingsUpdate,
+
     @SerialName("OwnerStatus")
     val ownerStatus: OwnerStatus,
 
@@ -70,7 +76,22 @@ data class ProtocolModels(
     val pageMetadata: PageMetadata,
 
     @SerialName("QueryContext")
-    val queryContext: QueryContext
+    val queryContext: QueryContext,
+
+    @SerialName("UsageDayMetrics")
+    val usageDayMetrics: UsageDayMetrics,
+
+    @SerialName("UsageDayReport")
+    val usageDayReport: UsageDayReport,
+
+    @SerialName("UsageDeviceMetrics")
+    val usageDeviceMetrics: UsageDeviceMetrics,
+
+    @SerialName("UsageMetrics")
+    val usageMetrics: UsageMetrics,
+
+    @SerialName("UsageWeekReport")
+    val usageWeekReport: UsageWeekReport
 )
 
 @Serializable
@@ -460,9 +481,135 @@ data class OwnerSessionInfo(
 )
 
 @Serializable
+data class OwnerSettings(
+    /**
+     * IANA timezone defining the default day and week boundaries for reports. Defaults to UTC
+     * until the Owner configures another timezone; browser timezones never change a report.
+     */
+    @SerialName("report_timezone")
+    val reportTimezone: String
+)
+
+@Serializable
+data class OwnerSettingsUpdate(
+    /**
+     * New report timezone as an IANA timezone name.
+     */
+    @SerialName("report_timezone")
+    val reportTimezone: String
+)
+
+@Serializable
 data class OwnerStatus(
     /**
      * True once the single implicit Owner password has been created.
      */
     val initialized: Boolean
+)
+
+@Serializable
+data class UsageDayMetrics(
+    @SerialName("active_minutes")
+    val activeMinutes: Long,
+
+    /**
+     * Local calendar day in the report timezone.
+     */
+    val date: String,
+
+    @SerialName("device_minutes")
+    val deviceMinutes: Long
+)
+
+@Serializable
+data class UsageDayReport(
+    val context: QueryContext,
+
+    /**
+     * The requested local calendar day.
+     */
+    val date: String,
+
+    /**
+     * One entry per device lane contributing intervals to the day.
+     */
+    val devices: List<UsageDeviceMetrics>,
+
+    val metrics: UsageMetrics,
+
+    /**
+     * IANA timezone the day boundaries resolved in.
+     */
+    val timezone: String
+)
+
+@Serializable
+data class UsageDeviceMetrics(
+    /**
+     * Deduplicated non-AFK time of this device lane; lane unions do not de-duplicate across
+     * devices.
+     */
+    @SerialName("active_minutes")
+    val activeMinutes: Long,
+
+    /**
+     * Device lane identifier as reported in the event envelope.
+     */
+    @SerialName("device_id")
+    val deviceId: String,
+
+    /**
+     * Device minutes attributed to this device lane.
+     */
+    @SerialName("device_minutes")
+    val deviceMinutes: Long,
+
+    val platform: Platform
+)
+
+@Serializable
+data class UsageMetrics(
+    /**
+     * Active minutes: the union of qualifying non-AFK intervals over the report range.
+     * Overlapping or adjacent device time counts once.
+     */
+    @SerialName("active_minutes")
+    val activeMinutes: Long,
+
+    /**
+     * Device minutes: the sum of qualifying device intervals overlapping the report range
+     * across all devices, including AFK foreground time. Concurrent device use can exceed
+     * elapsed wall-clock time.
+     */
+    @SerialName("device_minutes")
+    val deviceMinutes: Long
+)
+
+@Serializable
+data class UsageWeekReport(
+    val context: QueryContext,
+
+    /**
+     * One entry per local day of the week, in order.
+     */
+    val days: List<UsageDayMetrics>,
+
+    val metrics: UsageMetrics,
+
+    /**
+     * IANA timezone the week boundaries resolved in.
+     */
+    val timezone: String,
+
+    /**
+     * Last local day of the Monday-start week in the report timezone.
+     */
+    @SerialName("week_end_date")
+    val weekEndDate: String,
+
+    /**
+     * First local day of the Monday-start week in the report timezone.
+     */
+    @SerialName("week_start_date")
+    val weekStartDate: String
 )

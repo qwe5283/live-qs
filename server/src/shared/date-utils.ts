@@ -59,6 +59,43 @@ export function zonedDayRange(date: string, timezone: string): { start: Date; en
   return start && end && end > start ? { start, end } : null;
 }
 
+/** Validates an IANA timezone name by asking Intl to resolve it. */
+export function isValidTimezone(timezone: string): boolean {
+  if (!timezone) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolves the Monday-start week containing the local calendar day in the
+ * given timezone. Day-of-week is a property of the calendar date, so the
+ * weekday offset uses UTC math on the date text while the boundaries come from
+ * zonedDayRange (which handles DST transitions per midnight). Returns the UTC
+ * boundary instants plus the seven local calendar dates Monday through Sunday.
+ */
+export function zonedWeekRange(date: string, timezone: string): { start: Date; end: Date; dates: string[] } | null {
+  if (!isValidDateText(date)) return null;
+  const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay(); // 0 = Sunday
+  const daysSinceMonday = (weekday + 6) % 7;
+  const weekStart = addUtcDays(date, -daysSinceMonday);
+  if (!weekStart) return null;
+  const dates: string[] = [];
+  for (let index = 0; index < 7; index++) {
+    const day = addUtcDays(weekStart, index);
+    if (!day) return null;
+    dates.push(day);
+  }
+  const weekEnd = addUtcDays(weekStart, 7);
+  if (!weekEnd) return null;
+  const start = localMidnight(weekStart, timezone);
+  const end = localMidnight(weekEnd, timezone);
+  return start && end && end > start ? { start, end, dates } : null;
+}
+
 export function formatZonedIso(value: Date | null, timezone: string): string | null {
   if (!value) return null;
   const offset = offsetMs(value, timezone);

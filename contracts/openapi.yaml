@@ -18,6 +18,12 @@ tags:
       expiry, and independently revocable state.
   - name: Events
     description: Versioned historical observations. Heartbeats are not events.
+  - name: Metrics
+    description: >-
+      Day and week usage metrics computed from historical intervals under one
+      report timezone. Device minutes sum qualifying device intervals and may
+      exceed elapsed time; active minutes union qualifying non-AFK intervals
+      so overlapping time counts once.
 paths:
   /api/v1/owner/status:
     get:
@@ -120,6 +126,57 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OwnerSessionInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/owner/settings:
+    get:
+      operationId: getOwnerSettings
+      summary: Show Owner report settings
+      description: >-
+        Owner-managed report preferences. The report timezone defines the
+        default day and week boundaries for every report; it is independent of
+        any browser timezone so the same report stays stable everywhere.
+      tags: [Owner]
+      security:
+        - OwnerSession: []
+      responses:
+        "200":
+          description: Current Owner report settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnerSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    post:
+      operationId: updateOwnerSettings
+      summary: Update Owner report settings
+      description: >-
+        Replaces the report timezone with a valid IANA timezone. Future day and
+        week boundaries resolve in the new timezone; stored events keep their
+        UTC instants and capture timezone context.
+      tags: [Owner]
+      security:
+        - OwnerSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OwnerSettingsUpdate"
+      responses:
+        "200":
+          description: Updated Owner report settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnerSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "429":
@@ -256,6 +313,74 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /api/v1/metrics/usage/day:
+    get:
+      operationId: getUsageDayMetrics
+      summary: Day usage metrics with device and active minutes
+      description: >-
+        Computes usage metrics for one local calendar day. Boundaries resolve
+        in the request timezone, or the Owner report timezone when the request
+        omits it. Device minutes sum qualifying device intervals over the day
+        and may exceed elapsed time; active minutes union qualifying non-AFK
+        intervals so overlapping time counts once. Aggregate only; interval
+        content is never included.
+      tags: [Metrics]
+      security:
+        - OwnerSession: []
+        - QueryToken: []
+      x-required-scopes: [events:read]
+      parameters:
+        - $ref: "#/components/parameters/Date"
+        - $ref: "#/components/parameters/ReportTimezone"
+      responses:
+        "200":
+          description: Usage metrics for the requested local day.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageDayReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/metrics/usage/week:
+    get:
+      operationId: getUsageWeekMetrics
+      summary: Week usage metrics with device and active minutes
+      description: >-
+        Computes usage metrics for the Monday-start week containing the
+        requested local day. Boundaries resolve in the request timezone, or the
+        Owner report timezone when the request omits it. Device minutes sum
+        qualifying device intervals over the week and may exceed elapsed time;
+        active minutes union qualifying non-AFK intervals so overlapping time
+        counts once. Aggregate only; interval content is never included.
+      tags: [Metrics]
+      security:
+        - OwnerSession: []
+        - QueryToken: []
+      x-required-scopes: [events:read]
+      parameters:
+        - $ref: "#/components/parameters/Date"
+        - $ref: "#/components/parameters/ReportTimezone"
+      responses:
+        "200":
+          description: Usage metrics for the week containing the requested local day.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageWeekReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 components:
   securitySchemes:
     OwnerSession:
@@ -337,6 +462,24 @@ components:
         minimum: 1
         maximum: 200
         default: 50
+    Date:
+      name: date
+      in: query
+      required: true
+      description: Local calendar day in the report timezone.
+      schema:
+        type: string
+        format: date
+    ReportTimezone:
+      name: timezone
+      in: query
+      required: false
+      description: >-
+        IANA timezone overriding the Owner report timezone for this request.
+      schema:
+        type: string
+        minLength: 1
+        example: Asia/Shanghai
   responses:
     BadRequest:
       description: Request shape or semantics are invalid.
@@ -410,6 +553,29 @@ components:
         authenticated:
           type: boolean
           description: Always true when the endpoint responds 200.
+    OwnerSettings:
+      title: Owner Settings
+      type: object
+      additionalProperties: false
+      required: [report_timezone]
+      properties:
+        report_timezone:
+          type: string
+          minLength: 1
+          description: >-
+            IANA timezone defining the default day and week boundaries for
+            reports. Defaults to UTC until the Owner configures another
+            timezone; browser timezones never change a report.
+    OwnerSettingsUpdate:
+      title: Owner Settings Update
+      type: object
+      additionalProperties: false
+      required: [report_timezone]
+      properties:
+        report_timezone:
+          type: string
+          minLength: 1
+          description: New report timezone as an IANA timezone name.
     CredentialKind:
       title: Credential Kind
       type: string
@@ -653,6 +819,112 @@ components:
         completeness:
           type: string
           enum: [complete, partial, unknown]
+    UsageMetrics:
+      title: Usage Metrics
+      type: object
+      additionalProperties: false
+      required: [device_minutes, active_minutes]
+      properties:
+        device_minutes:
+          type: integer
+          minimum: 0
+          description: >-
+            Device minutes: the sum of qualifying device intervals overlapping
+            the report range across all devices, including AFK foreground time.
+            Concurrent device use can exceed elapsed wall-clock time.
+        active_minutes:
+          type: integer
+          minimum: 0
+          description: >-
+            Active minutes: the union of qualifying non-AFK intervals over the
+            report range. Overlapping or adjacent device time counts once.
+    UsageDeviceMetrics:
+      title: Usage Device Metrics
+      type: object
+      additionalProperties: false
+      required: [device_id, platform, device_minutes, active_minutes]
+      properties:
+        device_id:
+          type: string
+          minLength: 1
+          description: Device lane identifier as reported in the event envelope.
+        platform:
+          type: string
+          enum: [windows, android]
+        device_minutes:
+          type: integer
+          minimum: 0
+          description: Device minutes attributed to this device lane.
+        active_minutes:
+          type: integer
+          minimum: 0
+          description: >-
+            Deduplicated non-AFK time of this device lane; lane unions do not
+            de-duplicate across devices.
+    UsageDayMetrics:
+      title: Usage Day Metrics
+      type: object
+      additionalProperties: false
+      required: [date, device_minutes, active_minutes]
+      properties:
+        date:
+          type: string
+          format: date
+          description: Local calendar day in the report timezone.
+        device_minutes:
+          type: integer
+          minimum: 0
+        active_minutes:
+          type: integer
+          minimum: 0
+    UsageDayReport:
+      title: Usage Day Report
+      type: object
+      additionalProperties: false
+      required: [date, timezone, metrics, devices, context]
+      properties:
+        date:
+          type: string
+          format: date
+          description: The requested local calendar day.
+        timezone:
+          type: string
+          description: IANA timezone the day boundaries resolved in.
+        metrics:
+          $ref: "#/components/schemas/UsageMetrics"
+        devices:
+          type: array
+          description: One entry per device lane contributing intervals to the day.
+          items:
+            $ref: "#/components/schemas/UsageDeviceMetrics"
+        context:
+          $ref: "#/components/schemas/QueryContext"
+    UsageWeekReport:
+      title: Usage Week Report
+      type: object
+      additionalProperties: false
+      required: [week_start_date, week_end_date, timezone, metrics, days, context]
+      properties:
+        week_start_date:
+          type: string
+          format: date
+          description: First local day of the Monday-start week in the report timezone.
+        week_end_date:
+          type: string
+          format: date
+          description: Last local day of the Monday-start week in the report timezone.
+        timezone:
+          type: string
+          description: IANA timezone the week boundaries resolved in.
+        metrics:
+          $ref: "#/components/schemas/UsageMetrics"
+        days:
+          type: array
+          description: One entry per local day of the week, in order.
+          items:
+            $ref: "#/components/schemas/UsageDayMetrics"
+        context:
+          $ref: "#/components/schemas/QueryContext"
     ErrorResponse:
       type: object
       additionalProperties: false
