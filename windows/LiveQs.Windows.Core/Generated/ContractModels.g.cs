@@ -682,7 +682,7 @@ internal class FluffyMinMaxLengthCheckConverter : JsonConverter<string>
 
     public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        var value = reader.GetString();
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
         if (value.Length >= 1)
         {
             return value;
@@ -1009,7 +1009,7 @@ internal class TentacledMinMaxLengthCheckConverter : JsonConverter<string>
 
     public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        var value = reader.GetString();
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
         if (value.Length >= 8 && value.Length <= 256)
         {
             return value;

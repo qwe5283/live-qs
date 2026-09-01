@@ -164,7 +164,7 @@ function formatCSharp(source) {
       /(\[JsonIgnore\(Condition = JsonIgnoreCondition\.WhenWritingNull\)\]\n(?:\s*\[[^\n]+\]\n)*\s*public )([A-Z][A-Za-z0-9<>]*|string)(\s+[A-Za-z][A-Za-z0-9]*\s*\{ get; set; \})/g,
       "$1$2?$3",
     )
-    .replace(
+    .replaceAll(
       "var value = reader.GetString();\n        if (value.Length",
       "var value = reader.GetString() ?? throw new JsonException(\"Expected a string.\");\n        if (value.Length",
     );
