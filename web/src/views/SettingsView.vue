@@ -6,9 +6,6 @@
         <a-form-item label="API Base URL">
           <a-input v-model:value="apiBaseInput" placeholder="http://localhost:8787" />
         </a-form-item>
-        <a-form-item label="User Token">
-          <a-input-password v-model:value="tokenInput" />
-        </a-form-item>
         <a-form-item label="主题">
           <a-segmented v-model:value="themeInput" :options="themeOptions" />
         </a-form-item>
@@ -35,7 +32,6 @@ import { useSettingsStore } from "../stores/settings";
 
 const settings = useSettingsStore();
 const apiBaseInput = ref(settings.apiBase);
-const tokenInput = ref(settings.userToken);
 const themeInput = ref(settings.theme);
 const testing = ref(false);
 const message = ref("");
@@ -47,7 +43,6 @@ const themeOptions = [
 
 function save() {
   settings.setApiBase(apiBaseInput.value);
-  settings.setUserToken(tokenInput.value);
   settings.setTheme(themeInput.value as "light" | "dark");
   message.value = "设置已保存";
   messageType.value = "success";

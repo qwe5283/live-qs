@@ -291,6 +291,35 @@ body {
   border-radius: 8px;
 }
 
+.auth-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  border-radius: 12px;
+}
+
+.auth-title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.auth-subtitle {
+  margin: 6px 0 20px;
+  color: var(--muted, #8c8c8c);
+}
+
+.auth-message {
+  margin-top: 16px;
+  border-radius: 8px;
+}
+
 @media (max-width: 1100px) {
   .metric-grid,
   .dashboard-grid {

@@ -44,6 +44,15 @@ public partial class ProtocolModels
     [JsonPropertyName("EventPage")]
     public EventPage EventPage { get; set; }
 
+    [JsonPropertyName("OwnerPasswordRequest")]
+    public OwnerPasswordRequest OwnerPasswordRequest { get; set; }
+
+    [JsonPropertyName("OwnerSessionInfo")]
+    public OwnerSessionInfo OwnerSessionInfo { get; set; }
+
+    [JsonPropertyName("OwnerStatus")]
+    public OwnerStatus OwnerStatus { get; set; }
+
     [JsonPropertyName("PageMetadata")]
     public PageMetadata PageMetadata { get; set; }
 
@@ -61,7 +70,7 @@ public partial class Error
     public Dictionary<string, object> Details { get; set; }
 
     [JsonPropertyName("message")]
-    [JsonConverter(typeof(MinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string Message { get; set; }
 }
 
@@ -71,7 +80,7 @@ public partial class ErrorResponse
     public Error Error { get; set; }
 
     [JsonPropertyName("request_id")]
-    [JsonConverter(typeof(MinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string RequestId { get; set; }
 }
 
@@ -109,7 +118,7 @@ public partial class ActivityIntervalEventV1
     /// IANA timezone observed at capture.
     /// </summary>
     [JsonPropertyName("capture_timezone")]
-    [JsonConverter(typeof(MinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string CaptureTimezone { get; set; }
 
     [JsonPropertyName("device")]
@@ -135,7 +144,7 @@ public partial class ActivityIntervalEventV1
     public bool Invalidated { get; set; }
 
     [JsonPropertyName("owner_id")]
-    [JsonConverter(typeof(MinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string OwnerId { get; set; }
 
     [JsonPropertyName("provenance")]
@@ -154,7 +163,7 @@ public partial class ActivityIntervalEventV1
 public partial class Device
 {
     [JsonPropertyName("id")]
-    [JsonConverter(typeof(MinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string Id { get; set; }
 
     [JsonPropertyName("platform")]
@@ -167,12 +176,12 @@ public partial class Payload
     /// Executable name or Android package name; never a full executable path.
     /// </summary>
     [JsonPropertyName("application_id")]
-    [JsonConverter(typeof(MinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string ApplicationId { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("application_label")]
-    [JsonConverter(typeof(MinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string? ApplicationLabel { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -190,7 +199,7 @@ public partial class Payload
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("subject_id")]
-    [JsonConverter(typeof(MinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string? SubjectId { get; set; }
 }
 
@@ -201,7 +210,7 @@ public partial class Classification
     public double Confidence { get; set; }
 
     [JsonPropertyName("rule_id")]
-    [JsonConverter(typeof(MinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string RuleId { get; set; }
 
     [JsonPropertyName("rule_version")]
@@ -235,7 +244,7 @@ public partial class Source
     /// Stable identifier supplied by the originating adapter.
     /// </summary>
     [JsonPropertyName("record_id")]
-    [JsonConverter(typeof(MinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string RecordId { get; set; }
 }
 
@@ -311,6 +320,34 @@ public partial class PageMetadata
     public long PageSize { get; set; }
 }
 
+public partial class OwnerPasswordRequest
+{
+    /// <summary>
+    /// The Owner password. Never logged or stored in plaintext.
+    /// </summary>
+    [JsonPropertyName("password")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string Password { get; set; }
+}
+
+public partial class OwnerSessionInfo
+{
+    /// <summary>
+    /// Always true when the endpoint responds 200.
+    /// </summary>
+    [JsonPropertyName("authenticated")]
+    public bool Authenticated { get; set; }
+}
+
+public partial class OwnerStatus
+{
+    /// <summary>
+    /// True once the single implicit Owner password has been created.
+    /// </summary>
+    [JsonPropertyName("initialized")]
+    public bool Initialized { get; set; }
+}
+
 public enum Platform { Android, Windows };
 
 public enum EventType { ActivityInterval };
@@ -361,7 +398,7 @@ public static class ContractJson
     };
 }
 
-internal class MinMaxLengthCheckConverter : JsonConverter<string>
+internal class PurpleMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
 
@@ -385,7 +422,7 @@ internal class MinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly MinMaxLengthCheckConverter Singleton = new MinMaxLengthCheckConverter();
+    public static readonly PurpleMinMaxLengthCheckConverter Singleton = new PurpleMinMaxLengthCheckConverter();
 }
 
 internal class PlatformConverter : JsonConverter<Platform>
@@ -686,6 +723,33 @@ internal class CompletenessConverter : JsonConverter<Completeness>
     }
 
     public static readonly CompletenessConverter Singleton = new CompletenessConverter();
+}
+
+internal class FluffyMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        if (value.Length >= 8 && value.Length <= 256)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length >= 8 && value.Length <= 256)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly FluffyMinMaxLengthCheckConverter Singleton = new FluffyMinMaxLengthCheckConverter();
 }
 
 public class DateOnlyConverter : JsonConverter<DateOnly>

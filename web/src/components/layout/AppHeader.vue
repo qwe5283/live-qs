@@ -7,6 +7,7 @@
     <div class="header-actions">
       <a-tag :color="connectionColor">{{ connectionLabel }}</a-tag>
       <a-button size="small" @click="probe">测试连接</a-button>
+      <a-button v-if="auth.phase === 'authenticated'" size="small" danger @click="logout">退出登录</a-button>
       <a-switch
         :checked="settings.theme === 'dark'"
         checked-children="暗"
@@ -19,12 +20,15 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { fetchHealthProbe } from "../../api/dashboard";
+import { useAuthStore } from "../../stores/auth";
 import { useSettingsStore } from "../../stores/settings";
 
 const route = useRoute();
+const router = useRouter();
 const settings = useSettingsStore();
+const auth = useAuthStore();
 const connection = ref<"idle" | "ok" | "error">("idle");
 
 const title = computed(() => {
@@ -52,6 +56,14 @@ async function probe() {
     connection.value = "ok";
   } catch {
     connection.value = "error";
+  }
+}
+
+async function logout() {
+  try {
+    await auth.logout();
+  } finally {
+    await router.push({ name: "login" });
   }
 }
 

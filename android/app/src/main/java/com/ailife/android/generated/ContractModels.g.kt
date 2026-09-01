@@ -36,6 +36,15 @@ data class ProtocolModels(
     @SerialName("EventPage")
     val eventPage: EventPage,
 
+    @SerialName("OwnerPasswordRequest")
+    val ownerPasswordRequest: OwnerPasswordRequest,
+
+    @SerialName("OwnerSessionInfo")
+    val ownerSessionInfo: OwnerSessionInfo,
+
+    @SerialName("OwnerStatus")
+    val ownerStatus: OwnerStatus,
+
     @SerialName("PageMetadata")
     val pageMetadata: PageMetadata,
 
@@ -293,4 +302,28 @@ data class PageMetadata(
 
     @SerialName("page_size")
     val pageSize: Long
+)
+
+@Serializable
+data class OwnerPasswordRequest(
+    /**
+     * The Owner password. Never logged or stored in plaintext.
+     */
+    val password: String
+)
+
+@Serializable
+data class OwnerSessionInfo(
+    /**
+     * Always true when the endpoint responds 200.
+     */
+    val authenticated: Boolean
+)
+
+@Serializable
+data class OwnerStatus(
+    /**
+     * True once the single implicit Owner password has been created.
+     */
+    val initialized: Boolean
 )

@@ -10,6 +10,9 @@ export interface ProtocolModels {
   EventBatchRequest: EventBatchRequest;
   EventBatchResponse: EventBatchResponse;
   EventPage: EventPage;
+  OwnerPasswordRequest: OwnerPasswordRequest;
+  OwnerSessionInfo: OwnerSessionInfo;
+  OwnerStatus: OwnerStatus;
   PageMetadata: PageMetadata;
   QueryContext: QueryContext;
 }
@@ -167,4 +170,25 @@ export interface PageMetadata {
    */
   next_cursor: null | string;
   page_size: number;
+}
+
+export interface OwnerPasswordRequest {
+  /**
+   * The Owner password. Never logged or stored in plaintext.
+   */
+  password: string;
+}
+
+export interface OwnerSessionInfo {
+  /**
+   * Always true when the endpoint responds 200.
+   */
+  authenticated: boolean;
+}
+
+export interface OwnerStatus {
+  /**
+   * True once the single implicit Owner password has been created.
+   */
+  initialized: boolean;
 }

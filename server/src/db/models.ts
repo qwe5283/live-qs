@@ -83,9 +83,30 @@ const privacyRuleSchema = new Schema({
 }, commonOptions);
 privacyRuleSchema.index({ user_id: 1, created_at: 1 });
 
+const ownerCredentialSchema = new Schema({
+  user_id: { type: String, required: true, unique: true },
+  kdf: { type: String, required: true },
+  kdf_params: { type: Schema.Types.Mixed, required: true },
+  salt: { type: String, required: true },
+  password_hash: { type: String, required: true },
+  created_at: { type: Date, required: true },
+  updated_at: { type: Date, required: true },
+}, commonOptions);
+
+const ownerSessionSchema = new Schema({
+  id: { type: String, required: true, unique: true },
+  user_id: { type: String, required: true, index: true },
+  created_at: { type: Date, required: true },
+  expires_at: { type: Date, required: true },
+  revoked_at: { type: Date, default: null },
+}, commonOptions);
+ownerSessionSchema.index({ expires_at: 1 }, { expireAfterSeconds: 0 });
+
 export const BucketModel = model("Bucket", bucketSchema);
 export const EventModel = model("Event", eventSchema);
 export const DeviceStateModel = model("DeviceState", deviceStateSchema);
 export const DailyRollupModel = model("DailyRollup", dailyRollupSchema);
 export const AuditLogModel = model("AuditLog", auditLogSchema);
 export const PrivacyRuleModel = model("PrivacyRule", privacyRuleSchema);
+export const OwnerCredentialModel = model("OwnerCredential", ownerCredentialSchema);
+export const OwnerSessionModel = model("OwnerSession", ownerSessionSchema);

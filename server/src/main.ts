@@ -7,8 +7,8 @@ const env = loadEnv();
 await connectDatabase(env.MONGODB_URI);
 
 const server = createServer(createApp(env));
-server.listen(env.PORT, () => {
-  console.log(`[server] Listening on http://localhost:${env.PORT}`);
+server.listen(env.PORT, env.HOST, () => {
+  console.log(`[server] Listening on http://${env.HOST}:${env.PORT}`);
 });
 
 async function shutdown(signal: string): Promise<void> {
