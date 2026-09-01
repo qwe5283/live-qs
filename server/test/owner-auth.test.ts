@@ -22,7 +22,6 @@ function buildEnv(overrides: Partial<Env> = {}): Env {
     SESSION_TTL_HOURS: 168,
     COOKIE_SECURE: false,
     CORS_ORIGINS: "http://localhost:5173",
-    deviceTokens: {},
     ...overrides,
   };
 }

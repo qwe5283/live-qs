@@ -15,6 +15,27 @@ import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class ProtocolModels(
+    @SerialName("CredentialCreated")
+    val credentialCreated: CredentialCreated,
+
+    @SerialName("CredentialCreateRequest")
+    val credentialCreateRequest: CredentialCreateRequest,
+
+    @SerialName("CredentialKind")
+    val credentialKind: CredentialKind,
+
+    @SerialName("CredentialList")
+    val credentialList: CredentialList,
+
+    @SerialName("CredentialPrivacyCeiling")
+    val credentialPrivacyCeiling: CredentialPrivacyCeiling,
+
+    @SerialName("CredentialScope")
+    val credentialScope: CredentialScope,
+
+    @SerialName("CredentialView")
+    val credentialView: CredentialView,
+
     @SerialName("Error")
     val error: Error,
 
@@ -50,6 +71,124 @@ data class ProtocolModels(
 
     @SerialName("QueryContext")
     val queryContext: QueryContext
+)
+
+@Serializable
+data class CredentialCreateRequest(
+    /**
+     * Event types the credential may upload or read. Empty permits every registered event type;
+     * a non-empty list is an exact allow-list.
+     */
+    @SerialName("allowed_event_types")
+    val allowedEventTypes: List<String>? = null,
+
+    /**
+     * UTC instant after which the credential is rejected at use; null means the credential
+     * never expires.
+     */
+    @SerialName("expires_at")
+    val expiresAt: String? = null,
+
+    val kind: CredentialKind,
+
+    /**
+     * Owner-chosen label, such as a collector or agent name.
+     */
+    val name: String,
+
+    @SerialName("privacy_ceiling")
+    val privacyCeiling: CredentialPrivacyCeiling? = null,
+
+    val scopes: List<CredentialScope>
+)
+
+/**
+ * Actor type the credential authenticates: a device collector uploads events, a query agent
+ * reads approved data domains.
+ */
+@Serializable
+enum class CredentialKind(val value: String) {
+    @SerialName("device_token") DEVICE_TOKEN("device_token"),
+    @SerialName("query_token") QUERY_TOKEN("query_token");
+}
+
+/**
+ * Maximum privacy level the credential may touch, ordered normal < sensitive < private.
+ * Uploads above the ceiling are rejected per item; reads exclude data above the ceiling.
+ */
+@Serializable
+enum class CredentialPrivacyCeiling(val value: String) {
+    @SerialName("normal") NORMAL("normal"),
+    @SerialName("private") PRIVATE("private"),
+    @SerialName("sensitive") SENSITIVE("sensitive");
+}
+
+/**
+ * Capability granted to the credential. Device tokens carry events:write and query tokens
+ * carry events:read; a credential never holds a scope outside its actor type.
+ */
+@Serializable
+enum class CredentialScope(val value: String) {
+    @SerialName("events:read") EVENTS_READ("events:read"),
+    @SerialName("events:write") EVENTS_WRITE("events:write");
+}
+
+@Serializable
+data class CredentialCreated(
+    val credential: CredentialView,
+
+    /**
+     * Plaintext token shown exactly once. It cannot be recovered from the server afterwards.
+     */
+    val token: String
+)
+
+@Serializable
+data class CredentialView(
+    @SerialName("allowed_event_types")
+    val allowedEventTypes: List<String>,
+
+    @SerialName("created_at")
+    val createdAt: String,
+
+    /**
+     * Public identifier used to revoke the credential.
+     */
+    @SerialName("credential_id")
+    val credentialId: String,
+
+    @SerialName("expires_at")
+    val expiresAt: String? = null,
+
+    val kind: CredentialKind,
+
+    /**
+     * UTC instant of the most recent accepted use; null while unused.
+     */
+    @SerialName("last_used_at")
+    val lastUsedAt: String? = null,
+
+    val name: String,
+
+    @SerialName("privacy_ceiling")
+    val privacyCeiling: CredentialPrivacyCeiling,
+
+    @SerialName("revoked_at")
+    val revokedAt: String? = null,
+
+    val scopes: List<CredentialScope>,
+
+    /**
+     * Recognizable prefix of the token plaintext for identification; never the full token or
+     * its digest.
+     */
+    @SerialName("token_prefix")
+    val tokenPrefix: String
+)
+
+@Serializable
+data class CredentialList(
+    val credentials: List<CredentialView>
 )
 
 @Serializable

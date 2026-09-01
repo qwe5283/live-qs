@@ -19,6 +19,16 @@ const eventSchema = new Schema({
   device_id: { type: String, required: true },
   source: { type: String, required: true },
   type: { type: String, required: true },
+  schema_version: { type: Number, default: null },
+  revision: { type: Number, default: null },
+  finalization_state: { type: String, default: null },
+  provenance: { type: Schema.Types.Mixed, default: null },
+  capture_timezone: { type: String, default: null },
+  capture_offset_minutes: { type: Number, default: null },
+  invalidated: { type: Boolean, default: null },
+  source_kind: { type: String, default: null },
+  source_record_id: { type: String, default: null },
+  device_platform: { type: String, default: null },
   start_at: { type: Date, required: true },
   end_at: { type: Date, default: null },
   duration_ms: { type: Number, default: null },
@@ -63,7 +73,7 @@ dailyRollupSchema.index({ user_id: 1, date: 1, timezone: 1 }, { unique: true });
 const auditLogSchema = new Schema({
   id: { type: String, required: true, unique: true },
   user_id: { type: String, required: true },
-  actor_type: { type: String, enum: ["user", "device", "system"], required: true },
+  actor_type: { type: String, enum: ["user", "device", "query", "system"], required: true },
   actor_id: { type: String, default: null },
   action: { type: String, required: true },
   status: { type: String, enum: ["ok", "error"], required: true },
@@ -72,6 +82,22 @@ const auditLogSchema = new Schema({
 }, commonOptions);
 auditLogSchema.index({ user_id: 1, created_at: -1 });
 auditLogSchema.index({ user_id: 1, action: 1, created_at: -1 });
+
+const credentialSchema = new Schema({
+  id: { type: String, required: true, unique: true },
+  user_id: { type: String, required: true, index: true },
+  kind: { type: String, enum: ["device_token", "query_token"], required: true },
+  name: { type: String, required: true },
+  token_hash: { type: String, required: true, unique: true },
+  token_prefix: { type: String, required: true },
+  scopes: { type: [String], required: true },
+  allowed_event_types: { type: [String], default: [] },
+  privacy_ceiling: { type: String, enum: ["normal", "sensitive", "private"], default: "normal" },
+  created_at: { type: Date, required: true },
+  expires_at: { type: Date, default: null },
+  last_used_at: { type: Date, default: null },
+  revoked_at: { type: Date, default: null },
+}, commonOptions);
 
 const privacyRuleSchema = new Schema({
   id: { type: String, required: true, unique: true },
@@ -110,3 +136,4 @@ export const AuditLogModel = model("AuditLog", auditLogSchema);
 export const PrivacyRuleModel = model("PrivacyRule", privacyRuleSchema);
 export const OwnerCredentialModel = model("OwnerCredential", ownerCredentialSchema);
 export const OwnerSessionModel = model("OwnerSession", ownerSessionSchema);
+export const CredentialModel = model("Credential", credentialSchema);

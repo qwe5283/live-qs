@@ -13,13 +13,8 @@ const schema = z.object({
   CORS_ORIGINS: z.string().default("http://localhost:5173"),
 });
 
-export type Env = z.infer<typeof schema> & { deviceTokens: Record<string, string> };
+export type Env = z.infer<typeof schema>;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
-  const parsed = schema.parse(source);
-  const deviceTokens: Record<string, string> = {};
-  for (const [key, value] of Object.entries(source)) {
-    if (key.startsWith("DEVICE_TOKEN_") && value) deviceTokens[key] = value;
-  }
-  return { ...parsed, deviceTokens };
+  return schema.parse(source);
 }

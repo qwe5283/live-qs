@@ -1,32 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { AuditLogModel, BucketModel, DailyRollupModel, DeviceStateModel, EventModel, PrivacyRuleModel } from "../../db/models.js";
 import { AppError } from "../../shared/errors.js";
+import { recordAuditLog } from "../../shared/audit.js";
 
-const sensitiveKey = /(authorization|token|secret|password|window_title|notification_body|raw|payload|body)/i;
 const targetTypes = new Set(["app", "app_id", "app_name", "window_title", "event_type"]);
 const actions = new Set(["allow_title", "hash_title", "hide_title", "drop_event", "category_only"]);
-
-export function sanitizeAuditDetails(value: unknown): unknown {
-  if (value === null || ["string", "number", "boolean"].includes(typeof value)) return value;
-  if (Array.isArray(value)) return value.slice(0, 50).map(sanitizeAuditDetails);
-  if (typeof value !== "object") return null;
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
-    .map(([key, child]) => [key, sensitiveKey.test(key) ? "[redacted]" : sanitizeAuditDetails(child)]));
-}
-
-export async function recordAuditLog(input: {
-  userId: string;
-  actorType?: "user" | "device" | "system";
-  actorId?: string | null;
-  action: string;
-  status?: "ok" | "error";
-  details?: Record<string, unknown>;
-}): Promise<void> {
-  await AuditLogModel.create({
-    id: randomUUID(), user_id: input.userId, actor_type: input.actorType ?? "user", actor_id: input.actorId ?? null,
-    action: input.action, status: input.status ?? "ok", details: sanitizeAuditDetails(input.details ?? {}), created_at: new Date(),
-  });
-}
 
 export async function exportUserData(userId: string, query: Record<string, unknown>) {
   const start = parseDate(query.start);

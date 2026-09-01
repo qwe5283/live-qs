@@ -1,20 +1,17 @@
-import { timingSafeEqual } from "node:crypto";
 import mongoose from "mongoose";
+import type { CredentialScope } from "../generated/contract-models.js";
 import type { NextFunction, Request, Response } from "express";
 import type { Env } from "../config/env.js";
-import type { DeviceIdentity, Platform } from "../types/contracts.js";
+import {
+  resolveBearerCredential,
+  touchCredentialLastUsed,
+} from "../modules/credentials/service.js";
 import { readSessionToken, resolveOwnerSession } from "../modules/owner/service.js";
+import { recordAuditLog } from "../shared/audit.js";
 import { sendError } from "../shared/errors.js";
 
 function bearer(req: Request): string | null {
   return req.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null;
-}
-
-function equalToken(actual: string | null, expected: string): boolean {
-  if (!actual) return false;
-  const left = Buffer.from(actual);
-  const right = Buffer.from(expected);
-  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 export function ownerAuth() {
@@ -33,27 +30,81 @@ export function ownerAuth() {
   };
 }
 
-export function deviceAuth(env: Env) {
-  const platforms = new Set<Platform>(["windows", "android", "macos"]);
-  const identities = new Map<string, DeviceIdentity>();
-  for (const value of Object.values(env.deviceTokens)) {
-    const parts = value.split(":");
-    const token = parts.shift() ?? "";
-    const deviceId = parts.shift() ?? "";
-    const platform = parts.pop() as Platform | undefined;
-    const deviceName = parts.join(":");
-    if (token && deviceId && deviceName && platform && platforms.has(platform)) {
-      identities.set(token, { userId: env.DEFAULT_USER_ID, deviceId, deviceName, platform });
-    }
-  }
-
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const identity = identities.get(bearer(req) ?? "");
-    if (!identity) {
-      sendError(res, 401, "unauthorized", "A valid device token is required.");
+/**
+ * Authenticates a Device or Query Token bearer credential and enforces the
+ * requested scope. Denials record a `credential.deny` audit entry; successful
+ * authentications record `credential.use` and throttle-update last_used_at.
+ */
+export function credentialBearerAuth(env: Env, options: { scope?: CredentialScope } = {}) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (mongoose.connection.readyState !== 1) {
+      sendError(res, 503, "service_unavailable", "Authentication is unavailable because the database is not connected.");
       return;
     }
-    res.locals.device = identity;
+    const token = bearer(req);
+    if (!token) {
+      sendError(res, 401, "unauthorized", "A bearer credential is required.");
+      return;
+    }
+    const resolved = await resolveBearerCredential(token);
+    if ("denial" in resolved) {
+      await recordAuditLog({
+        userId: resolved.userId ?? env.DEFAULT_USER_ID,
+        actorType: resolved.kind === "query_token" ? "query" : "system",
+        action: "credential.deny",
+        status: "error",
+        details: { reason: resolved.denial, credential_prefix: resolved.prefix, path: req.path },
+      });
+      const messages: Record<string, string> = {
+        unknown_token: "The bearer credential is unknown.",
+        token_revoked: "The bearer credential has been revoked.",
+        token_expired: "The bearer credential has expired.",
+      };
+      sendError(res, 401, resolved.denial, messages[resolved.denial] ?? "The bearer credential was rejected.");
+      return;
+    }
+    if (options.scope && !resolved.scopes.includes(options.scope)) {
+      await recordAuditLog({
+        userId: resolved.userId,
+        actorType: resolved.kind === "device_token" ? "device" : "query",
+        actorId: resolved.id,
+        action: "credential.deny",
+        status: "error",
+        details: {
+          reason: "insufficient_scope",
+          required_scope: options.scope,
+          credential_id: resolved.id,
+          path: req.path,
+        },
+      });
+      sendError(res, 403, "insufficient_scope", "The credential lacks the required scope.");
+      return;
+    }
+    res.locals.credential = resolved;
+    await touchCredentialLastUsed(resolved.id);
+    await recordAuditLog({
+      userId: resolved.userId,
+      actorType: resolved.kind === "device_token" ? "device" : "query",
+      actorId: resolved.id,
+      action: "credential.use",
+      details: { path: req.path, method: req.method },
+    });
     next();
+  };
+}
+
+/**
+ * Guard for endpoints that accept an Owner session or a Query Token: a bearer
+ * credential takes precedence, otherwise the browser session is used.
+ */
+export function sessionOrCredentialAuth(env: Env, options: { scope?: CredentialScope } = {}) {
+  const bearerAuth = credentialBearerAuth(env, options);
+  const sessionAuth = ownerAuth();
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (bearer(req)) {
+      await bearerAuth(req, res, next);
+      return;
+    }
+    await sessionAuth(req, res, next);
   };
 }

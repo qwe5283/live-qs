@@ -23,6 +23,27 @@ using System.Globalization;
 
 public partial class ProtocolModels
 {
+    [JsonPropertyName("CredentialCreated")]
+    public CredentialCreated CredentialCreated { get; set; }
+
+    [JsonPropertyName("CredentialCreateRequest")]
+    public CredentialCreateRequest CredentialCreateRequest { get; set; }
+
+    [JsonPropertyName("CredentialKind")]
+    public CredentialKind CredentialKind { get; set; }
+
+    [JsonPropertyName("CredentialList")]
+    public CredentialList CredentialList { get; set; }
+
+    [JsonPropertyName("CredentialPrivacyCeiling")]
+    public CredentialPrivacyCeiling CredentialPrivacyCeiling { get; set; }
+
+    [JsonPropertyName("CredentialScope")]
+    public CredentialScope CredentialScope { get; set; }
+
+    [JsonPropertyName("CredentialView")]
+    public CredentialView CredentialView { get; set; }
+
     [JsonPropertyName("Error")]
     public Error Error { get; set; }
 
@@ -60,6 +81,108 @@ public partial class ProtocolModels
     public QueryContext QueryContext { get; set; }
 }
 
+public partial class CredentialCreateRequest
+{
+    /// <summary>
+    /// Event types the credential may upload or read. Empty permits every registered event type;
+    /// a non-empty list is an exact allow-list.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("allowed_event_types")]
+    public string[] AllowedEventTypes { get; set; }
+
+    /// <summary>
+    /// UTC instant after which the credential is rejected at use; null means the credential
+    /// never expires.
+    /// </summary>
+    [JsonPropertyName("expires_at")]
+    public string ExpiresAt { get; set; }
+
+    [JsonPropertyName("kind")]
+    public CredentialKind Kind { get; set; }
+
+    /// <summary>
+    /// Owner-chosen label, such as a collector or agent name.
+    /// </summary>
+    [JsonPropertyName("name")]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    public string Name { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("privacy_ceiling")]
+    public CredentialPrivacyCeiling? PrivacyCeiling { get; set; }
+
+    [JsonPropertyName("scopes")]
+    public CredentialScope[] Scopes { get; set; }
+}
+
+public partial class CredentialCreated
+{
+    [JsonPropertyName("credential")]
+    public CredentialView Credential { get; set; }
+
+    /// <summary>
+    /// Plaintext token shown exactly once. It cannot be recovered from the server afterwards.
+    /// </summary>
+    [JsonPropertyName("token")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string Token { get; set; }
+}
+
+public partial class CredentialView
+{
+    [JsonPropertyName("allowed_event_types")]
+    public string[] AllowedEventTypes { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public string CreatedAt { get; set; }
+
+    /// <summary>
+    /// Public identifier used to revoke the credential.
+    /// </summary>
+    [JsonPropertyName("credential_id")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string CredentialId { get; set; }
+
+    [JsonPropertyName("expires_at")]
+    public string ExpiresAt { get; set; }
+
+    [JsonPropertyName("kind")]
+    public CredentialKind Kind { get; set; }
+
+    /// <summary>
+    /// UTC instant of the most recent accepted use; null while unused.
+    /// </summary>
+    [JsonPropertyName("last_used_at")]
+    public string LastUsedAt { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; }
+
+    [JsonPropertyName("privacy_ceiling")]
+    public CredentialPrivacyCeiling PrivacyCeiling { get; set; }
+
+    [JsonPropertyName("revoked_at")]
+    public string RevokedAt { get; set; }
+
+    [JsonPropertyName("scopes")]
+    public CredentialScope[] Scopes { get; set; }
+
+    /// <summary>
+    /// Recognizable prefix of the token plaintext for identification; never the full token or
+    /// its digest.
+    /// </summary>
+    [JsonPropertyName("token_prefix")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string TokenPrefix { get; set; }
+}
+
+public partial class CredentialList
+{
+    [JsonPropertyName("credentials")]
+    public CredentialView[] Credentials { get; set; }
+}
+
 public partial class Error
 {
     [JsonPropertyName("code")]
@@ -70,7 +193,7 @@ public partial class Error
     public Dictionary<string, object> Details { get; set; }
 
     [JsonPropertyName("message")]
-    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
     public string Message { get; set; }
 }
 
@@ -80,7 +203,7 @@ public partial class ErrorResponse
     public Error Error { get; set; }
 
     [JsonPropertyName("request_id")]
-    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
     public string RequestId { get; set; }
 }
 
@@ -118,7 +241,7 @@ public partial class ActivityIntervalEventV1
     /// IANA timezone observed at capture.
     /// </summary>
     [JsonPropertyName("capture_timezone")]
-    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
     public string CaptureTimezone { get; set; }
 
     [JsonPropertyName("device")]
@@ -144,7 +267,7 @@ public partial class ActivityIntervalEventV1
     public bool Invalidated { get; set; }
 
     [JsonPropertyName("owner_id")]
-    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
     public string OwnerId { get; set; }
 
     [JsonPropertyName("provenance")]
@@ -163,7 +286,7 @@ public partial class ActivityIntervalEventV1
 public partial class Device
 {
     [JsonPropertyName("id")]
-    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
     public string Id { get; set; }
 
     [JsonPropertyName("platform")]
@@ -176,12 +299,12 @@ public partial class Payload
     /// Executable name or Android package name; never a full executable path.
     /// </summary>
     [JsonPropertyName("application_id")]
-    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
     public string ApplicationId { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("application_label")]
-    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
     public string? ApplicationLabel { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -199,7 +322,7 @@ public partial class Payload
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("subject_id")]
-    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
     public string? SubjectId { get; set; }
 }
 
@@ -210,7 +333,7 @@ public partial class Classification
     public double Confidence { get; set; }
 
     [JsonPropertyName("rule_id")]
-    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
     public string RuleId { get; set; }
 
     [JsonPropertyName("rule_version")]
@@ -244,7 +367,7 @@ public partial class Source
     /// Stable identifier supplied by the originating adapter.
     /// </summary>
     [JsonPropertyName("record_id")]
-    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
     public string RecordId { get; set; }
 }
 
@@ -326,7 +449,7 @@ public partial class OwnerPasswordRequest
     /// The Owner password. Never logged or stored in plaintext.
     /// </summary>
     [JsonPropertyName("password")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(TentacledMinMaxLengthCheckConverter))]
     public string Password { get; set; }
 }
 
@@ -347,6 +470,24 @@ public partial class OwnerStatus
     [JsonPropertyName("initialized")]
     public bool Initialized { get; set; }
 }
+
+/// <summary>
+/// Actor type the credential authenticates: a device collector uploads events, a query agent
+/// reads approved data domains.
+/// </summary>
+public enum CredentialKind { DeviceToken, QueryToken };
+
+/// <summary>
+/// Maximum privacy level the credential may touch, ordered normal &lt; sensitive &lt; private.
+/// Uploads above the ceiling are rejected per item; reads exclude data above the ceiling.
+/// </summary>
+public enum CredentialPrivacyCeiling { Normal, Private, Sensitive };
+
+/// <summary>
+/// Capability granted to the credential. Device tokens carry events:write and query tokens
+/// carry events:read; a credential never holds a scope outside its actor type.
+/// </summary>
+public enum CredentialScope { EventsRead, EventsWrite };
 
 public enum Platform { Android, Windows };
 
@@ -383,6 +524,9 @@ public static class ContractJson
     {
         Converters =
         {
+            CredentialKindConverter.Singleton,
+            CredentialPrivacyCeilingConverter.Singleton,
+            CredentialScopeConverter.Singleton,
             PlatformConverter.Singleton,
             EventTypeConverter.Singleton,
             FinalizationStateConverter.Singleton,
@@ -398,6 +542,40 @@ public static class ContractJson
     };
 }
 
+internal class CredentialKindConverter : JsonConverter<CredentialKind>
+{
+    public override bool CanConvert(Type t) => t == typeof(CredentialKind);
+
+    public override CredentialKind Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        switch (value)
+        {
+            case "device_token":
+                return CredentialKind.DeviceToken;
+            case "query_token":
+                return CredentialKind.QueryToken;
+        }
+        throw new Exception("Cannot unmarshal type CredentialKind");
+    }
+
+    public override void Write(Utf8JsonWriter writer, CredentialKind value, JsonSerializerOptions options)
+    {
+        switch (value)
+        {
+            case CredentialKind.DeviceToken:
+                JsonSerializer.Serialize(writer, "device_token", options);
+                return;
+            case CredentialKind.QueryToken:
+                JsonSerializer.Serialize(writer, "query_token", options);
+                return;
+        }
+        throw new Exception("Cannot marshal type CredentialKind");
+    }
+
+    public static readonly CredentialKindConverter Singleton = new CredentialKindConverter();
+}
+
 internal class PurpleMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
@@ -405,6 +583,106 @@ internal class PurpleMinMaxLengthCheckConverter : JsonConverter<string>
     public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         var value = reader.GetString() ?? throw new JsonException("Expected a string.");
+        if (value.Length >= 1 && value.Length <= 100)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length >= 1 && value.Length <= 100)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly PurpleMinMaxLengthCheckConverter Singleton = new PurpleMinMaxLengthCheckConverter();
+}
+
+internal class CredentialPrivacyCeilingConverter : JsonConverter<CredentialPrivacyCeiling>
+{
+    public override bool CanConvert(Type t) => t == typeof(CredentialPrivacyCeiling);
+
+    public override CredentialPrivacyCeiling Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        switch (value)
+        {
+            case "normal":
+                return CredentialPrivacyCeiling.Normal;
+            case "private":
+                return CredentialPrivacyCeiling.Private;
+            case "sensitive":
+                return CredentialPrivacyCeiling.Sensitive;
+        }
+        throw new Exception("Cannot unmarshal type CredentialPrivacyCeiling");
+    }
+
+    public override void Write(Utf8JsonWriter writer, CredentialPrivacyCeiling value, JsonSerializerOptions options)
+    {
+        switch (value)
+        {
+            case CredentialPrivacyCeiling.Normal:
+                JsonSerializer.Serialize(writer, "normal", options);
+                return;
+            case CredentialPrivacyCeiling.Private:
+                JsonSerializer.Serialize(writer, "private", options);
+                return;
+            case CredentialPrivacyCeiling.Sensitive:
+                JsonSerializer.Serialize(writer, "sensitive", options);
+                return;
+        }
+        throw new Exception("Cannot marshal type CredentialPrivacyCeiling");
+    }
+
+    public static readonly CredentialPrivacyCeilingConverter Singleton = new CredentialPrivacyCeilingConverter();
+}
+
+internal class CredentialScopeConverter : JsonConverter<CredentialScope>
+{
+    public override bool CanConvert(Type t) => t == typeof(CredentialScope);
+
+    public override CredentialScope Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        switch (value)
+        {
+            case "events:read":
+                return CredentialScope.EventsRead;
+            case "events:write":
+                return CredentialScope.EventsWrite;
+        }
+        throw new Exception("Cannot unmarshal type CredentialScope");
+    }
+
+    public override void Write(Utf8JsonWriter writer, CredentialScope value, JsonSerializerOptions options)
+    {
+        switch (value)
+        {
+            case CredentialScope.EventsRead:
+                JsonSerializer.Serialize(writer, "events:read", options);
+                return;
+            case CredentialScope.EventsWrite:
+                JsonSerializer.Serialize(writer, "events:write", options);
+                return;
+        }
+        throw new Exception("Cannot marshal type CredentialScope");
+    }
+
+    public static readonly CredentialScopeConverter Singleton = new CredentialScopeConverter();
+}
+
+internal class FluffyMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
         if (value.Length >= 1)
         {
             return value;
@@ -422,7 +700,7 @@ internal class PurpleMinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly PurpleMinMaxLengthCheckConverter Singleton = new PurpleMinMaxLengthCheckConverter();
+    public static readonly FluffyMinMaxLengthCheckConverter Singleton = new FluffyMinMaxLengthCheckConverter();
 }
 
 internal class PlatformConverter : JsonConverter<Platform>
@@ -725,7 +1003,7 @@ internal class CompletenessConverter : JsonConverter<Completeness>
     public static readonly CompletenessConverter Singleton = new CompletenessConverter();
 }
 
-internal class FluffyMinMaxLengthCheckConverter : JsonConverter<string>
+internal class TentacledMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
 
@@ -749,7 +1027,7 @@ internal class FluffyMinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly FluffyMinMaxLengthCheckConverter Singleton = new FluffyMinMaxLengthCheckConverter();
+    public static readonly TentacledMinMaxLengthCheckConverter Singleton = new TentacledMinMaxLengthCheckConverter();
 }
 
 public class DateOnlyConverter : JsonConverter<DateOnly>

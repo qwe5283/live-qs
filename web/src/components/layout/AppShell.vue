@@ -27,6 +27,10 @@
             <HeartOutlined />
             <span>运动健康</span>
           </a-menu-item>
+          <a-menu-item key="/credentials">
+            <KeyOutlined />
+            <span>凭据管理</span>
+          </a-menu-item>
           <a-menu-item key="/settings">
             <SettingOutlined />
             <span>设置</span>
@@ -51,6 +55,7 @@ import {
   BarChartOutlined,
   DashboardOutlined,
   HeartOutlined,
+  KeyOutlined,
   SettingOutlined,
 } from "@ant-design/icons-vue";
 import AppHeader from "./AppHeader.vue";

@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Env } from "../../config/env.js";
 import { AppError } from "../../shared/errors.js";
 import { parseDateRange } from "../../shared/validation.js";
-import { recordAuditLog } from "../admin/service.js";
+import { recordAuditLog } from "../../shared/audit.js";
 import {
   backfillDayRollups, daySummary, focusBlocksReport, lifestyleAnomalies, persistDayRollup,
   sleepReport, spendingSummary, weekSummary,

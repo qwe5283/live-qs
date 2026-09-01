@@ -3,6 +3,13 @@
 // Run `npm --prefix contracts run generate`; do not edit by hand.
 
 export interface ProtocolModels {
+  CredentialCreated: CredentialCreated;
+  CredentialCreateRequest: CredentialCreateRequest;
+  CredentialKind: CredentialKind;
+  CredentialList: CredentialList;
+  CredentialPrivacyCeiling: CredentialPrivacyCeiling;
+  CredentialScope: CredentialScope;
+  CredentialView: CredentialView;
   Error: Error;
   ErrorResponse: ErrorResponse;
   Event: ActivityIntervalEventV1;
@@ -15,6 +22,80 @@ export interface ProtocolModels {
   OwnerStatus: OwnerStatus;
   PageMetadata: PageMetadata;
   QueryContext: QueryContext;
+}
+
+export interface CredentialCreateRequest {
+  /**
+   * Event types the credential may upload or read. Empty permits every registered event type;
+   * a non-empty list is an exact allow-list.
+   */
+  allowed_event_types?: string[];
+  /**
+   * UTC instant after which the credential is rejected at use; null means the credential
+   * never expires.
+   */
+  expires_at?: null | string;
+  kind: CredentialKind;
+  /**
+   * Owner-chosen label, such as a collector or agent name.
+   */
+  name: string;
+  privacy_ceiling?: CredentialPrivacyCeiling;
+  scopes: CredentialScope[];
+}
+
+/**
+ * Actor type the credential authenticates: a device collector uploads events, a query agent
+ * reads approved data domains.
+ */
+export type CredentialKind = "device_token" | "query_token";
+
+/**
+ * Maximum privacy level the credential may touch, ordered normal < sensitive < private.
+ * Uploads above the ceiling are rejected per item; reads exclude data above the ceiling.
+ */
+export type CredentialPrivacyCeiling = "normal" | "sensitive" | "private";
+
+/**
+ * Capability granted to the credential. Device tokens carry events:write and query tokens
+ * carry events:read; a credential never holds a scope outside its actor type.
+ */
+export type CredentialScope = "events:write" | "events:read";
+
+export interface CredentialCreated {
+  credential: CredentialView;
+  /**
+   * Plaintext token shown exactly once. It cannot be recovered from the server afterwards.
+   */
+  token: string;
+}
+
+export interface CredentialView {
+  allowed_event_types: string[];
+  created_at: string;
+  /**
+   * Public identifier used to revoke the credential.
+   */
+  credential_id: string;
+  expires_at: null | string;
+  kind: CredentialKind;
+  /**
+   * UTC instant of the most recent accepted use; null while unused.
+   */
+  last_used_at: null | string;
+  name: string;
+  privacy_ceiling: CredentialPrivacyCeiling;
+  revoked_at: null | string;
+  scopes: CredentialScope[];
+  /**
+   * Recognizable prefix of the token plaintext for identification; never the full token or
+   * its digest.
+   */
+  token_prefix: string;
+}
+
+export interface CredentialList {
+  credentials: CredentialView[];
 }
 
 export interface Error {

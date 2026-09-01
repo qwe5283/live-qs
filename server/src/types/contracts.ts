@@ -1,37 +1,4 @@
-export type Platform = "windows" | "android" | "macos";
 export type PrivacyLevel = "normal" | "sensitive" | "private";
-
-export interface DeviceIdentity {
-  userId: string;
-  deviceId: string;
-  deviceName: string;
-  platform: Platform;
-}
-
-export interface HeartbeatPayload {
-  type?: unknown;
-  bucket?: unknown;
-  timestamp?: unknown;
-  heartbeat_interval_ms?: unknown;
-  data?: unknown;
-}
-
-export interface EventPayload {
-  idempotency_key?: unknown;
-  type?: unknown;
-  bucket?: unknown;
-  start_at?: unknown;
-  end_at?: unknown;
-  value?: unknown;
-  unit?: unknown;
-  data?: unknown;
-  privacy_level?: unknown;
-  confidence?: unknown;
-}
-
-export interface BatchEventPayload {
-  events?: unknown;
-}
 
 export interface EventRow {
   id: string;
@@ -40,6 +7,16 @@ export interface EventRow {
   device_id: string;
   source: string;
   type: string;
+  schema_version: number | null;
+  revision: number | null;
+  finalization_state: string | null;
+  provenance: { collector_version: string; observed_at: string } | null;
+  capture_timezone: string | null;
+  capture_offset_minutes: number | null;
+  invalidated: boolean | null;
+  source_kind: string | null;
+  source_record_id: string | null;
+  device_platform: string | null;
   start_at: Date;
   end_at: Date | null;
   duration_ms: number | null;

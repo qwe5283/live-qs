@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import DashboardView from "../views/DashboardView.vue";
 import UsageView from "../views/UsageView.vue";
 import HealthView from "../views/HealthView.vue";
+import CredentialsView from "../views/CredentialsView.vue";
 import SettingsView from "../views/SettingsView.vue";
 import LoginView from "../views/LoginView.vue";
 import SetupView from "../views/SetupView.vue";
@@ -14,6 +15,7 @@ export const router = createRouter({
     { path: "/dashboard", name: "dashboard", component: DashboardView, meta: { requiresAuth: true } },
     { path: "/usage", name: "usage", component: UsageView, meta: { requiresAuth: true } },
     { path: "/health", name: "health", component: HealthView, meta: { requiresAuth: true } },
+    { path: "/credentials", name: "credentials", component: CredentialsView, meta: { requiresAuth: true } },
     { path: "/settings", name: "settings", component: SettingsView, meta: { requiresAuth: true } },
     { path: "/login", name: "login", component: LoginView },
     { path: "/setup", name: "setup", component: SetupView },

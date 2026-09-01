@@ -13,7 +13,6 @@ const env: Env = {
   SESSION_TTL_HOURS: 168,
   COOKIE_SECURE: false,
   CORS_ORIGINS: "http://localhost:5173",
-  deviceTokens: {},
 };
 
 describe("application", () => {
