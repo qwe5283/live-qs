@@ -16,6 +16,8 @@ public sealed record AppSettings
     public bool CloudSyncEnabled { get; init; }
     public string ServerBaseUrl { get; init; } = "http://localhost:8787";
     public string DeviceToken { get; init; } = "";
+    /// <summary>Server owner identity echoed in the envelope; the V1 server default is "local".</summary>
+    public string OwnerId { get; init; } = "local";
     public string DeviceId { get; init; } = Environment.MachineName.ToLowerInvariant();
     public bool LaunchOnStartup { get; init; }
     public bool CloseToTray { get; init; } = true;
@@ -28,6 +30,7 @@ public sealed record AppSettings
         RetentionDays = Math.Clamp(RetentionDays, 7, 3_650),
         ServerBaseUrl = ServerBaseUrl.Trim().TrimEnd('/'),
         DeviceToken = DeviceToken.Trim(),
+        OwnerId = string.IsNullOrWhiteSpace(OwnerId) ? "local" : OwnerId.Trim(),
         DeviceId = string.IsNullOrWhiteSpace(DeviceId) ? Environment.MachineName.ToLowerInvariant() : DeviceId.Trim(),
     };
 

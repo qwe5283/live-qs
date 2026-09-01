@@ -8,11 +8,14 @@ import type {
   QueryContext,
 } from "../../generated/contract-models.js";
 import type { Env } from "../../config/env.js";
-import { BucketModel, EventModel } from "../../db/models.js";
+import { BucketModel, EventModel, EventRevisionModel } from "../../db/models.js";
 import type { CredentialAuthContext } from "../credentials/service.js";
 import { hmacText } from "../../shared/privacy.js";
 import { AppError } from "../../shared/errors.js";
+import { REGISTERED_EVENT_TYPES, validateRegisteredEvent } from "./payload-registry.js";
 import type { EventRow } from "../../types/contracts.js";
+
+export { REGISTERED_EVENT_TYPES };
 
 export interface EventRangeQuery {
   userId: string;
@@ -28,9 +31,6 @@ export interface EventRangeQuery {
   allowedEventTypes?: string[];
 }
 
-/** Event types registered in contracts/schemas; unknown types are rejected at ingest and never mapped. */
-export const REGISTERED_EVENT_TYPES = new Set(["activity.interval"]);
-
 /** Levels a read may return per privacy ceiling; `private` cannot enter the contract envelope. */
 const PRIVACY_LEVELS_UP_TO: Record<CredentialPrivacyCeiling, string[]> = {
   normal: ["normal"],
@@ -42,8 +42,8 @@ const PRIVACY_LEVELS_UP_TO: Record<CredentialPrivacyCeiling, string[]> = {
  * Maps one stored event to the contract envelope. Rows written before the
  * versioned protocol lack envelope columns and receive neutral defaults; rows
  * marked `private` are a legacy-only state the contract cannot represent and
- * are never returned. The payload is opaque at this boundary; per-schema
- * payload validation arrives with the payload registry work.
+ * are never returned. The payload was validated at ingest against the schema
+ * registry and is passed through opaquely here.
  */
 function toEnvelopeEvent(row: EventRow): ActivityIntervalEventV1 {
   const envelope: ActivityIntervalEventV1 = {
@@ -186,7 +186,7 @@ interface ParsedBatchItem {
 
 type ParsedBatchResult = { item: ParsedBatchItem } | { error: { code: string; message: string }; eventId: string; revision: number };
 
-/** Structural envelope validation; per-schema payload validation arrives with the payload registry. */
+/** Structural envelope validation, then deep payload validation from the schema registry. */
 function parseBatchItem(raw: unknown): ParsedBatchResult {
   const invalid = (message: string): ParsedBatchResult => ({ error: { code: "invalid_event", message }, eventId: rawEventId(raw), revision: rawRevision(raw) });
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return invalid("Each event must be an object.");
@@ -249,26 +249,34 @@ function parseBatchItem(raw: unknown): ParsedBatchResult {
     return invalid("payload must be an object.");
   }
 
-  return {
-    item: {
-      eventId,
-      ownerId: event.owner_id,
-      eventType: "activity.interval",
-      schemaVersion: 1,
-      revision: event.revision,
-      privacy: event.privacy_level === "sensitive" ? "sensitive" : "normal",
-      startAt,
-      endAt,
-      source: { kind: sourceKind, recordId: sourceRecordId },
-      deviceClaimed: { id: deviceId, platform },
-      captureTimezone: event.capture_timezone,
-      captureOffsetMinutes: event.capture_offset_minutes,
-      finalizationState: event.finalization_state,
-      provenance: { collector_version: collectorVersion, observed_at: observedAt.toISOString() },
-      invalidated: event.invalidated === true,
-      payload: event.payload as Record<string, unknown>,
-    },
+  const item: ParsedBatchItem = {
+    eventId,
+    ownerId: event.owner_id,
+    eventType: "activity.interval",
+    schemaVersion: 1,
+    revision: event.revision,
+    privacy: event.privacy_level === "sensitive" ? "sensitive" : "normal",
+    startAt,
+    endAt,
+    source: { kind: sourceKind, recordId: sourceRecordId },
+    deviceClaimed: { id: deviceId, platform },
+    captureTimezone: event.capture_timezone,
+    captureOffsetMinutes: event.capture_offset_minutes,
+    finalizationState: event.finalization_state,
+    provenance: { collector_version: collectorVersion, observed_at: observedAt.toISOString() },
+    invalidated: event.invalidated === true,
+    payload: event.payload as Record<string, unknown>,
   };
+  const payloadError = validateRegisteredEvent({
+    eventType: item.eventType,
+    schemaVersion: item.schemaVersion,
+    startAt: item.startAt,
+    endAt: item.endAt,
+    finalizationState: item.finalizationState,
+    payload: item.payload,
+  });
+  if (payloadError) return { error: { code: "invalid_event", message: payloadError }, eventId, revision: item.revision };
+  return { item };
 }
 
 function rawEventId(raw: unknown): string {
@@ -286,9 +294,12 @@ function acknowledgement(ack: EventAcknowledgement): EventAcknowledgement {
 }
 
 /**
- * Upserts one batch of envelope events with per-item acknowledgements.
- * Re-delivered event identifiers answer `duplicate`; revision replacement
- * semantics (stale_revision) arrive with the collector migration ticket.
+ * Upserts one batch of envelope events with per-item acknowledgements and
+ * partial success. A revision is answered by comparing it with the stored
+ * revision of the same logical event: a redelivery of the stored revision is a
+ * `duplicate`, a lower revision is `stale_revision` and never overwrites, and
+ * a higher revision atomically replaces the stored fact after its superseded
+ * snapshot is archived (facts are never destroyed).
  */
 export async function batchUpsertEvents(env: Env, credential: CredentialAuthContext, events: unknown[]): Promise<EventBatchResponse> {
   const results: EventAcknowledgement[] = [];
@@ -296,6 +307,43 @@ export async function batchUpsertEvents(env: Env, credential: CredentialAuthCont
     results.push(await ingestBatchItem(env, credential, raw));
   }
   return { results };
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code: unknown }).code === 11000;
+}
+
+function buildEventDocument(item: ParsedBatchItem, credential: CredentialAuthContext, bucket: string, now: Date) {
+  const classification = item.payload.classification as Record<string, unknown> | undefined;
+  const confidence = typeof classification?.confidence === "number" && Number.isFinite(classification.confidence)
+    ? Math.max(0, Math.min(1, classification.confidence))
+    : 1;
+  return {
+    bucket_id: bucket,
+    user_id: credential.userId,
+    device_id: credential.id,
+    source: item.source.kind,
+    type: item.eventType,
+    schema_version: item.schemaVersion,
+    revision: item.revision,
+    finalization_state: item.finalizationState,
+    provenance: item.provenance,
+    capture_timezone: item.captureTimezone,
+    capture_offset_minutes: item.captureOffsetMinutes,
+    invalidated: item.invalidated,
+    source_kind: item.source.kind,
+    source_record_id: item.source.recordId,
+    device_platform: item.deviceClaimed.platform,
+    start_at: item.startAt,
+    end_at: item.endAt,
+    duration_ms: item.endAt ? Math.max(0, item.endAt.getTime() - item.startAt.getTime()) : null,
+    value: null,
+    unit: null,
+    data: item.payload,
+    privacy_level: item.privacy,
+    confidence,
+    updated_at: now,
+  };
 }
 
 async function ingestBatchItem(env: Env, credential: CredentialAuthContext, raw: unknown): Promise<EventAcknowledgement> {
@@ -324,62 +372,64 @@ async function ingestBatchItem(env: Env, credential: CredentialAuthContext, raw:
   }
 
   const rawHash = hmacText(env.HASH_SECRET, `event:${item.eventId}`);
-  const now = new Date();
   const bucket = `${item.deviceClaimed.platform}:${credential.id}:${item.eventType}`;
   await BucketModel.updateOne(
     { id: bucket },
     {
       $setOnInsert: {
         id: bucket, user_id: credential.userId, device_id: credential.id,
-        source: item.source.kind, type: item.eventType, metadata: {}, created_at: now,
+        source: item.source.kind, type: item.eventType, metadata: {}, created_at: new Date(),
       },
     },
     { upsert: true },
   );
 
-  const classification = item.payload.classification as Record<string, unknown> | undefined;
-  const confidence = typeof classification?.confidence === "number" && Number.isFinite(classification.confidence)
-    ? Math.max(0, Math.min(1, classification.confidence))
-    : 1;
-  const document = {
-    id: item.eventId,
-    bucket_id: bucket,
-    user_id: credential.userId,
-    device_id: credential.id,
-    source: item.source.kind,
-    type: item.eventType,
-    schema_version: item.schemaVersion,
-    revision: item.revision,
-    finalization_state: item.finalizationState,
-    provenance: item.provenance,
-    capture_timezone: item.captureTimezone,
-    capture_offset_minutes: item.captureOffsetMinutes,
-    invalidated: item.invalidated,
-    source_kind: item.source.kind,
-    source_record_id: item.source.recordId,
-    device_platform: item.deviceClaimed.platform,
-    start_at: item.startAt,
-    end_at: item.endAt,
-    duration_ms: item.endAt ? Math.max(0, item.endAt.getTime() - item.startAt.getTime()) : null,
-    value: null,
-    unit: null,
-    data: item.payload,
-    privacy_level: item.privacy,
-    confidence,
-    raw_hash: rawHash,
-    created_at: now,
-    updated_at: now,
-  };
-  try {
-    if (await EventModel.exists({ raw_hash: rawHash })) {
+  // Resolution compares revisions atomically; a lost race re-reads and
+  // re-answers from the stored state instead of overwriting blindly.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const stored = await EventModel.findOne({ raw_hash: rawHash }).lean<EventRow | null>();
+    if (!stored) {
+      const now = new Date();
+      try {
+        await EventModel.create({ id: item.eventId, raw_hash: rawHash, created_at: now, ...buildEventDocument(item, credential, bucket, now) });
+        return { event_id: item.eventId, revision: item.revision, status: "accepted" };
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) throw error;
+        continue; // A concurrent writer created the event; compare revisions next round.
+      }
+    }
+
+    const storedRevision = stored.revision ?? 0;
+    if (item.revision === storedRevision) {
       return { event_id: item.eventId, revision: item.revision, status: "duplicate" };
     }
-    await EventModel.create(document);
-    return { event_id: item.eventId, revision: item.revision, status: "accepted" };
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && (error as { code: unknown }).code === 11000) {
-      return { event_id: item.eventId, revision: item.revision, status: "duplicate" };
+    if (item.revision < storedRevision) {
+      return { event_id: item.eventId, revision: item.revision, status: "stale_revision" };
     }
-    throw error;
+
+    // Higher revision: archive the superseded snapshot first (idempotent), then
+    // replace only while the stored revision is still the one we compared.
+    await EventRevisionModel.updateOne(
+      { id: `${stored.id}:${storedRevision}` },
+      {
+        $setOnInsert: {
+          id: `${stored.id}:${storedRevision}`,
+          event_id: stored.id,
+          user_id: stored.user_id,
+          revision: storedRevision,
+          archived_at: new Date(),
+          document: stored,
+        },
+      },
+      { upsert: true },
+    );
+    const replacement = await EventModel.updateOne(
+      { raw_hash: rawHash, revision: storedRevision },
+      { $set: buildEventDocument(item, credential, bucket, new Date()) },
+    );
+    if (replacement.modifiedCount === 1) {
+      return { event_id: item.eventId, revision: item.revision, status: "accepted" };
+    }
   }
+  throw new AppError(500, "The event revision could not be resolved after repeated races.", "internal_error");
 }

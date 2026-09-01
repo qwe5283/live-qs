@@ -49,6 +49,15 @@ eventSchema.index(
   { unique: true, partialFilterExpression: { raw_hash: { $type: "string" } } },
 );
 
+const eventRevisionSchema = new Schema({
+  id: { type: String, required: true, unique: true },
+  event_id: { type: String, required: true },
+  user_id: { type: String, required: true, index: true },
+  revision: { type: Number, required: true },
+  archived_at: { type: Date, required: true },
+  document: { type: Schema.Types.Mixed, required: true },
+}, commonOptions);
+
 const deviceStateSchema = new Schema({
   device_id: { type: String, required: true, unique: true },
   user_id: { type: String, required: true, index: true },
@@ -130,6 +139,7 @@ ownerSessionSchema.index({ expires_at: 1 }, { expireAfterSeconds: 0 });
 
 export const BucketModel = model("Bucket", bucketSchema);
 export const EventModel = model("Event", eventSchema);
+export const EventRevisionModel = model("EventRevision", eventRevisionSchema);
 export const DeviceStateModel = model("DeviceState", deviceStateSchema);
 export const DailyRollupModel = model("DailyRollup", dailyRollupSchema);
 export const AuditLogModel = model("AuditLog", auditLogSchema);

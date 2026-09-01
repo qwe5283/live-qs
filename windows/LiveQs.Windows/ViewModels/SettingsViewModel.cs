@@ -35,6 +35,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _deviceToken = "";
     [ObservableProperty]
+    private string _ownerId = "";
+    [ObservableProperty]
     private string _deviceId = "";
     [ObservableProperty]
     private bool _launchOnStartup;
@@ -87,6 +89,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         CloudSyncEnabled = settings.CloudSyncEnabled;
         ServerBaseUrl = settings.ServerBaseUrl;
         DeviceToken = settings.DeviceToken;
+        OwnerId = settings.OwnerId;
         DeviceId = settings.DeviceId;
         LaunchOnStartup = _startupManager.IsEnabled();
         CloseToTray = settings.CloseToTray;
@@ -146,6 +149,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         CloudSyncEnabled = CloudSyncEnabled,
         ServerBaseUrl = ServerBaseUrl,
         DeviceToken = DeviceToken,
+        OwnerId = OwnerId,
         DeviceId = DeviceId,
         LaunchOnStartup = LaunchOnStartup,
         CloseToTray = CloseToTray,

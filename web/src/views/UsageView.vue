@@ -40,6 +40,27 @@
         row-key="key"
       />
     </section>
+
+    <section class="panel">
+      <div class="panel-title">
+        活动区间（版本化事件）
+        <a-tag v-if="eventContext === 'partial'" color="warning">数据不完整</a-tag>
+      </div>
+      <a-table
+        size="small"
+        :loading="loading"
+        :pagination="{ pageSize: 8 }"
+        :columns="eventColumns"
+        :data-source="eventRows"
+        row-key="key"
+      />
+      <a-button
+        v-if="nextEventCursor"
+        size="small"
+        :loading="loading"
+        @click="loadMoreEvents"
+      >加载更多</a-button>
+    </section>
   </div>
 </template>
 
@@ -48,7 +69,9 @@ import type { EChartsOption } from "echarts";
 import dayjs, { type Dayjs } from "dayjs";
 import { computed, ref } from "vue";
 import { AimOutlined, AppstoreOutlined, DesktopOutlined, FieldTimeOutlined } from "@ant-design/icons-vue";
+import { fetchEvents } from "../api/events";
 import { fetchUsageApps, fetchUsageSummary, fetchUsageTimeline } from "../api/dashboard";
+import type { ActivityIntervalEventV1 } from "../generated/contract-models";
 import type { UsageAppsResponse, UsageSummary, UsageTimelineResponse } from "../api/types";
 import BaseChart from "../components/charts/BaseChart.vue";
 import EmptyState from "../components/common/EmptyState.vue";
@@ -60,6 +83,9 @@ const endValue = ref<Dayjs>(dayjs(endOfToday()));
 const summary = ref<UsageSummary | null>(null);
 const apps = ref<UsageAppsResponse | null>(null);
 const timeline = ref<UsageTimelineResponse | null>(null);
+const events = ref<ActivityIntervalEventV1[]>([]);
+const nextEventCursor = ref<string | null>(null);
+const eventContext = ref<string>("");
 const loading = ref(false);
 const error = ref("");
 
@@ -104,6 +130,52 @@ const timelineRows = computed(() => (timeline.value?.segments ?? []).map((item, 
   state: item.is_afk ? "AFK" : item.category || "active",
 })));
 
+const eventColumns = [
+  { title: "开始", dataIndex: "start" },
+  { title: "结束", dataIndex: "end" },
+  { title: "应用", dataIndex: "app" },
+  { title: "设备", dataIndex: "device" },
+  { title: "时长", dataIndex: "duration" },
+  { title: "状态", dataIndex: "state" },
+  { title: "同步时间", dataIndex: "synced" },
+];
+
+const eventRows = computed(() => events.value.map((event) => ({
+  key: `${event.event_id}-${event.revision}`,
+  start: new Date(event.start_at).toLocaleString(),
+  end: event.end_at ? new Date(event.end_at).toLocaleString() : "进行中",
+  app: event.payload.application_label ?? event.payload.application_id,
+  device: event.device.id,
+  duration: formatMinutes(event.payload.duration.value / 60_000),
+  state: [
+    event.payload.is_afk ? "AFK" : "活跃",
+    event.finalization_state === "final" ? "已结束" : "检查点",
+    `修订 ${event.revision}`,
+  ].join(" · "),
+  synced: new Date(event.provenance.observed_at).toLocaleString(),
+})));
+
+async function loadEvents(cursor?: string) {
+  const start = startValue.value.toDate();
+  const end = endValue.value.endOf("day").toDate();
+  const page = await fetchEvents(start, end, cursor ? { cursor } : undefined);
+  events.value = cursor ? [...events.value, ...page.data] : page.data;
+  nextEventCursor.value = page.page.next_cursor;
+  eventContext.value = page.context.completeness;
+}
+
+async function loadMoreEvents() {
+  loading.value = true;
+  error.value = "";
+  try {
+    await loadEvents(nextEventCursor.value ?? undefined);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    loading.value = false;
+  }
+}
+
 async function load() {
   loading.value = true;
   error.value = "";
@@ -118,6 +190,7 @@ async function load() {
     summary.value = summaryResponse;
     apps.value = appsResponse;
     timeline.value = timelineResponse;
+    await loadEvents();
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {

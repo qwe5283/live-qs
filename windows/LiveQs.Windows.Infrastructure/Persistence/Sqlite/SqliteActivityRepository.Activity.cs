@@ -60,7 +60,8 @@ public sealed partial class SqliteActivityRepository
                 VALUES($id, 0, $now, '', $now)
                 ON CONFLICT(segment_id) DO UPDATE SET
                     attempt_count = 0, next_attempt_utc = excluded.next_attempt_utc,
-                    last_error = '', updated_utc = excluded.updated_utc;
+                    last_error = '', updated_utc = excluded.updated_utc
+                    WHERE permanent = 0;
                 """;
             update.Parameters.AddWithValue("$ended", UtcText(endedAt > latestEnd ? endedAt : latestEnd));
             update.Parameters.AddWithValue("$sampled", UtcText(startedAt));
@@ -74,6 +75,20 @@ public sealed partial class SqliteActivityRepository
         }
         else
         {
+            // A new segment ends the previous open interval: the merge rule only
+            // ever extends the latest segment, so the previous one is finalized
+            // now and its final revision (sync_version + 1) is queued.
+            long? openSegmentId = null;
+            await using (var open = connection.CreateCommand())
+            {
+                open.Transaction = transaction;
+                open.CommandText = """
+                    SELECT id FROM activity_segments WHERE finalized = 0 ORDER BY id DESC LIMIT 1;
+                    """;
+                var openResult = await open.ExecuteScalarAsync(cancellationToken);
+                openSegmentId = openResult is long id ? id : null;
+            }
+
             await using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
             insert.CommandText = """
@@ -105,6 +120,26 @@ public sealed partial class SqliteActivityRepository
             insert.Parameters.AddWithValue("$fingerprint", fingerprint);
             insert.Parameters.AddWithValue("$now", UtcText(now));
             var segmentId = (long)(await insert.ExecuteScalarAsync(cancellationToken) ?? 0L);
+
+            if (openSegmentId is { } closingId)
+            {
+                await using var finalize = connection.CreateCommand();
+                finalize.Transaction = transaction;
+                finalize.CommandText = """
+                    UPDATE activity_segments
+                    SET finalized = 1, sync_version = sync_version + 1, updated_utc = $now
+                    WHERE id = $id;
+                    INSERT INTO sync_queue(segment_id, attempt_count, next_attempt_utc, last_error, updated_utc)
+                    VALUES($id, 0, $now, '', $now)
+                    ON CONFLICT(segment_id) DO UPDATE SET
+                        attempt_count = 0, next_attempt_utc = excluded.next_attempt_utc,
+                        updated_utc = excluded.updated_utc
+                        WHERE permanent = 0;
+                    """;
+                finalize.Parameters.AddWithValue("$id", closingId);
+                finalize.Parameters.AddWithValue("$now", UtcText(now));
+                await finalize.ExecuteNonQueryAsync(cancellationToken);
+            }
 
             await using var queue = connection.CreateCommand();
             queue.Transaction = transaction;

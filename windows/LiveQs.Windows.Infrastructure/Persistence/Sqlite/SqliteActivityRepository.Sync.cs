@@ -12,10 +12,11 @@ public sealed partial class SqliteActivityRepository
         command.CommandText = """
             SELECT s.id, q.attempt_count, s.started_utc, s.ended_utc,
                    s.app_id, s.app_name, s.window_title, s.window_title_hash,
-                   s.is_afk, s.is_audio_playing, s.is_fullscreen
+                   s.is_afk, s.is_audio_playing, s.is_fullscreen,
+                   s.sync_version, s.finalized
             FROM sync_queue q
             JOIN activity_segments s ON s.id = q.segment_id
-            WHERE q.next_attempt_utc <= $now
+            WHERE q.next_attempt_utc <= $now AND q.permanent = 0
             ORDER BY q.next_attempt_utc, s.id
             LIMIT $limit;
             """;
@@ -28,7 +29,8 @@ public sealed partial class SqliteActivityRepository
             result.Add(new SyncQueueItem(
                 reader.GetInt64(0), reader.GetInt32(1), ParseTime(reader.GetString(2)), ParseTime(reader.GetString(3)),
                 reader.GetString(4), reader.GetString(5), reader.GetString(6), reader.GetString(7),
-                reader.GetBoolean(8), reader.GetBoolean(9), reader.GetBoolean(10)));
+                reader.GetBoolean(8), reader.GetBoolean(9), reader.GetBoolean(10),
+                (int)reader.GetInt64(11), reader.GetBoolean(12)));
         }
         return result;
     }
@@ -76,11 +78,47 @@ public sealed partial class SqliteActivityRepository
         transaction.Commit();
     }
 
+    public async Task MarkPermanentAsync(IEnumerable<long> segmentIds, string error, DateTimeOffset at, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        using var transaction = connection.BeginTransaction();
+        foreach (var id in segmentIds)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                UPDATE sync_queue
+                SET permanent = 1, next_attempt_utc = $at,
+                    last_error = $error, updated_utc = $now
+                WHERE segment_id = $id;
+                """;
+            command.Parameters.AddWithValue("$at", UtcText(at));
+            command.Parameters.AddWithValue("$error", error.Length > 500 ? error[..500] : error);
+            command.Parameters.AddWithValue("$now", UtcText(_timeProvider.GetUtcNow()));
+            command.Parameters.AddWithValue("$id", id);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        transaction.Commit();
+    }
+
+    /// <summary>
+    /// Queue depth including permanently rejected items: a dead letter is still
+    /// pending from the Owner's point of view and must stay visible.
+    /// </summary>
     public async Task<int> GetPendingSyncCountAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM sync_queue;";
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
+    }
+
+    public async Task<string> GetInstallIdAsync(CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT install_guid FROM sync_state WHERE id = 1;";
+        var value = (await command.ExecuteScalarAsync(cancellationToken)) as string;
+        return value ?? "";
     }
 }

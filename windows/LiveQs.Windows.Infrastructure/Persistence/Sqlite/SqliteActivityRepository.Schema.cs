@@ -45,6 +45,7 @@ public sealed partial class SqliteActivityRepository
                 battery_charging INTEGER NULL,
                 fingerprint TEXT NOT NULL,
                 sync_version INTEGER NOT NULL DEFAULT 1,
+                finalized INTEGER NOT NULL DEFAULT 0,
                 created_utc TEXT NOT NULL,
                 updated_utc TEXT NOT NULL
             );
@@ -54,12 +55,14 @@ public sealed partial class SqliteActivityRepository
                 attempt_count INTEGER NOT NULL DEFAULT 0,
                 next_attempt_utc TEXT NOT NULL,
                 last_error TEXT NOT NULL DEFAULT '',
+                permanent INTEGER NOT NULL DEFAULT 0,
                 updated_utc TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS sync_state (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
-                last_success_utc TEXT NULL
+                last_success_utc TEXT NULL,
+                install_guid TEXT NULL
             );
 
             CREATE INDEX IF NOT EXISTS ix_activity_segments_range
@@ -73,6 +76,11 @@ public sealed partial class SqliteActivityRepository
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
 
+        // Columns added after the first release; existing databases migrate in place.
+        await AddColumnIfMissingAsync(connection, "activity_segments", "finalized", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "sync_queue", "permanent", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "sync_state", "install_guid", "TEXT NULL", cancellationToken);
+
         await using var seed = connection.CreateCommand();
         seed.CommandText = """
             INSERT INTO app_settings(id, json, updated_utc)
@@ -85,5 +93,48 @@ public sealed partial class SqliteActivityRepository
         seed.Parameters.AddWithValue("$json", JsonSerializer.Serialize(new AppSettings(), JsonOptions));
         seed.Parameters.AddWithValue("$now", UtcText(_timeProvider.GetUtcNow()));
         await seed.ExecuteNonQueryAsync(cancellationToken);
+
+        await EnsureInstallGuidAsync(connection, cancellationToken);
+    }
+
+    /// <summary>
+    /// The install guid scopes event identity: it is stable for the lifetime of
+    /// this local store, so retries and checkpoints keep one event id, while a
+    /// wiped database starts with fresh identities instead of colliding with
+    /// already uploaded history.
+    /// </summary>
+    private async Task EnsureInstallGuidAsync(Microsoft.Data.Sqlite.SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await using var read = connection.CreateCommand();
+        read.CommandText = "SELECT install_guid FROM sync_state WHERE id = 1;";
+        var existing = (await read.ExecuteScalarAsync(cancellationToken)) as string;
+        if (!string.IsNullOrWhiteSpace(existing)) return;
+
+        await using var write = connection.CreateCommand();
+        write.CommandText = "UPDATE sync_state SET install_guid = $guid WHERE id = 1;";
+        write.Parameters.AddWithValue("$guid", Guid.NewGuid().ToString());
+        await write.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task AddColumnIfMissingAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        string table,
+        string column,
+        string definition,
+        CancellationToken cancellationToken)
+    {
+        var columns = new List<string>();
+        await using var info = connection.CreateCommand();
+        info.CommandText = $"PRAGMA table_info({table});";
+        await using var reader = await info.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            columns.Add(reader.GetString(1));
+        }
+        if (columns.Contains(column, StringComparer.OrdinalIgnoreCase)) return;
+
+        await using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
+        await alter.ExecuteNonQueryAsync(cancellationToken);
     }
 }

@@ -45,7 +45,10 @@ public interface ISyncQueueStore
     Task<IReadOnlyList<SyncQueueItem>> GetPendingSyncAsync(int limit, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task MarkSyncedAsync(IEnumerable<long> segmentIds, DateTimeOffset syncedAt, CancellationToken cancellationToken = default);
     Task MarkSyncFailedAsync(IEnumerable<long> segmentIds, string error, DateTimeOffset nextAttemptAt, CancellationToken cancellationToken = default);
+    Task MarkPermanentAsync(IEnumerable<long> segmentIds, string error, DateTimeOffset at, CancellationToken cancellationToken = default);
     Task<int> GetPendingSyncCountAsync(CancellationToken cancellationToken = default);
+    /// <summary>Stable identity of the local database, used to derive event identifiers that never collide with a wiped store.</summary>
+    Task<string> GetInstallIdAsync(CancellationToken cancellationToken = default);
 }
 
 public interface IActivityMaintenance
@@ -64,7 +67,8 @@ public interface IStartupManager
 
 public interface ISyncClient
 {
-    Task UploadAsync(IReadOnlyList<SyncQueueItem> items, AppSettings settings, CancellationToken cancellationToken);
+    /// <summary>Uploads one batch and returns exactly one outcome per item; transport-level failure throws.</summary>
+    Task<IReadOnlyList<SyncOutcome>> UploadAsync(IReadOnlyList<SyncQueueItem> items, AppSettings settings, CancellationToken cancellationToken);
 }
 
 public interface ISyncStatusService

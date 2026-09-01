@@ -87,6 +87,59 @@ public sealed class RepositoryTests : IDisposable
         Assert.Null(page.NextCursor);
     }
 
+    [Fact]
+    public async Task PendingSync_CarriesRevisionAndFinalizesWhenIntervalEnds()
+    {
+        var repository = await CreateRepositoryAsync();
+        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+
+        // Two contiguous samples of the same app merge into one logical interval at revision 2.
+        await repository.RecordSampleAsync(Sample(localNoon, false), TimeSpan.FromSeconds(5));
+        await repository.RecordSampleAsync(Sample(localNoon.AddSeconds(5), false), TimeSpan.FromSeconds(5));
+        var openItem = Assert.Single(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1)));
+        Assert.Equal(2, openItem.SyncVersion);
+        Assert.False(openItem.Finalized);
+
+        // A different foreground app starts a new segment and finalizes the previous one.
+        await repository.RecordSampleAsync(Sample(localNoon.AddSeconds(20), false, "editor.exe"), TimeSpan.FromSeconds(5));
+        var pending = await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1));
+        Assert.Equal(2, pending.Count);
+
+        var finalized = pending.Single(item => item.AppId == "browser.exe");
+        Assert.True(finalized.Finalized);
+        Assert.Equal(3, finalized.SyncVersion);
+
+        var fresh = pending.Single(item => item.AppId == "editor.exe");
+        Assert.False(fresh.Finalized);
+        Assert.Equal(1, fresh.SyncVersion);
+    }
+
+    [Fact]
+    public async Task MarkPermanent_StopsRetryingRejectedSegments()
+    {
+        var repository = await CreateRepositoryAsync();
+        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+        await repository.RecordSampleAsync(Sample(localNoon, false), TimeSpan.FromSeconds(5));
+        var item = Assert.Single(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1)));
+
+        await repository.MarkPermanentAsync(new[] { item.SegmentId }, "privacy_ceiling_exceeded", DateTimeOffset.UtcNow);
+
+        // The dead letter never retries, but stays visible in the queue depth.
+        Assert.Empty(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1)));
+        Assert.Equal(1, await repository.GetPendingSyncCountAsync());
+    }
+
+    [Fact]
+    public async Task InstallId_IsStableAcrossReopen()
+    {
+        var first = await CreateRepositoryAsync();
+        var installId = await first.GetInstallIdAsync();
+        Assert.False(string.IsNullOrWhiteSpace(installId));
+
+        var reopened = await CreateRepositoryAsync();
+        Assert.Equal(installId, await reopened.GetInstallIdAsync());
+    }
+
     private async Task<SqliteActivityRepository> CreateRepositoryAsync()
     {
         var repository = new SqliteActivityRepository(_paths, TimeProvider.System);
@@ -94,8 +147,8 @@ public sealed class RepositoryTests : IDisposable
         return repository;
     }
 
-    private static ActivitySample Sample(DateTimeOffset time, bool afk) => new(
-        time.ToUniversalTime(), "browser.exe", "Browser", "C:\\Browser.exe", "Docs", "hash",
+    private static ActivitySample Sample(DateTimeOffset time, bool afk, string appId = "browser.exe") => new(
+        time.ToUniversalTime(), appId, "Browser", "C:\\Browser.exe", "Docs", "hash",
         afk ? 120 : 0, afk, false, false, null, null);
 
     public void Dispose()

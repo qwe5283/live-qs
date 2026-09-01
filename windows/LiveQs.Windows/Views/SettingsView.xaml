@@ -75,14 +75,16 @@
                             <CheckBox Content="启用云同步" IsChecked="{Binding CloudSyncEnabled}" Margin="0,0,0,16" />
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="190" /><ColumnDefinition Width="390" /></Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions><RowDefinition Height="50" /><RowDefinition Height="50" /><RowDefinition Height="50" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="50" /><RowDefinition Height="50" /><RowDefinition Height="50" /><RowDefinition Height="50" /></Grid.RowDefinitions>
                                 <TextBlock Text="服务端 Base URL" VerticalAlignment="Center" />
                                 <TextBox Grid.Column="1" Text="{Binding ServerBaseUrl, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"/>
                                 <TextBlock Grid.Row="1" Text="Device Token" VerticalAlignment="Center" />
                                 <PasswordBox x:Name="TokenBox" Grid.Row="1" Grid.Column="1" Padding="9,7" BorderBrush="{DynamicResource BorderBrush}"
                                              PasswordChanged="TokenBox_PasswordChanged" />
-                                <TextBlock Grid.Row="2" Text="Device ID" VerticalAlignment="Center" />
-                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding DeviceId, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Row="2" Text="Owner ID" VerticalAlignment="Center" />
+                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding OwnerId, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Row="3" Text="Device ID" VerticalAlignment="Center" />
+                                <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding DeviceId, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"/>
                             </Grid>
                             <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="4" Padding="14,11" Margin="0,20,0,0">
                                 <StackPanel Orientation="Horizontal">
