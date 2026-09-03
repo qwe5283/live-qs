@@ -1,5 +1,8 @@
 import { Schema, model } from "mongoose";
 
+/** TTL backstop purging projections hours after their device went silent; expiry semantics live in the status service. */
+const DEVICE_STATUS_TTL_SECONDS = 21600;
+
 const commonOptions = { versionKey: false, id: false } as const;
 
 const bucketSchema = new Schema({
@@ -68,6 +71,20 @@ const deviceStateSchema = new Schema({
   last_seen_at: { type: Date, required: true },
   is_online: { type: Boolean, default: true },
 }, commonOptions);
+
+const deviceStatusSchema = new Schema({
+  // Server-bound device identity: the Device Token credential that reported the heartbeat.
+  device_key: { type: String, required: true, unique: true },
+  user_id: { type: String, required: true, index: true },
+  platform: { type: String, enum: ["windows", "android"], required: true },
+  device_name: { type: String, default: null },
+  captured_at: { type: Date, required: true },
+  activity: { type: Schema.Types.Mixed, default: null },
+}, commonOptions);
+// Heartbeats are ephemeral projections: freshness and offline expiry are
+// computed from captured_at at read time so devices keep showing as offline.
+// This TTL index only bounds collection growth long after a device stops.
+deviceStatusSchema.index({ captured_at: 1 }, { expireAfterSeconds: DEVICE_STATUS_TTL_SECONDS });
 
 const dailyRollupSchema = new Schema({
   user_id: { type: String, required: true },
@@ -147,6 +164,7 @@ export const BucketModel = model("Bucket", bucketSchema);
 export const EventModel = model("Event", eventSchema);
 export const EventRevisionModel = model("EventRevision", eventRevisionSchema);
 export const DeviceStateModel = model("DeviceState", deviceStateSchema);
+export const DeviceStatusModel = model("DeviceStatus", deviceStatusSchema);
 export const DailyRollupModel = model("DailyRollup", dailyRollupSchema);
 export const AuditLogModel = model("AuditLog", auditLogSchema);
 export const PrivacyRuleModel = model("PrivacyRule", privacyRuleSchema);

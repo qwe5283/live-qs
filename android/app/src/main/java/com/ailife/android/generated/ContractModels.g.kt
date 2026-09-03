@@ -36,6 +36,12 @@ data class ProtocolModels(
     @SerialName("CredentialView")
     val credentialView: CredentialView,
 
+    @SerialName("DeviceStatus")
+    val deviceStatus: DeviceStatus,
+
+    @SerialName("DeviceStatusList")
+    val deviceStatusList: DeviceStatusList,
+
     @SerialName("Error")
     val error: Error,
 
@@ -56,6 +62,12 @@ data class ProtocolModels(
 
     @SerialName("EventPage")
     val eventPage: EventPage,
+
+    @SerialName("HeartbeatActivity")
+    val heartbeatActivity: HeartbeatActivity,
+
+    @SerialName("HeartbeatRequest")
+    val heartbeatRequest: HeartbeatRequest,
 
     @SerialName("OwnerPasswordRequest")
     val ownerPasswordRequest: OwnerPasswordRequest,
@@ -213,6 +225,95 @@ data class CredentialList(
 )
 
 @Serializable
+data class DeviceStatus(
+    val activity: HeartbeatActivity,
+
+    /**
+     * Seconds elapsed since the latest heartbeat capture time, clamped at zero. While a
+     * collector reports at its normal cadence this stays at or below thirty.
+     */
+    @SerialName("age_seconds")
+    val ageSeconds: Long,
+
+    /**
+     * UTC instant of the latest accepted heartbeat capture.
+     */
+    @SerialName("captured_at")
+    val capturedAt: String,
+
+    /**
+     * Server-bound device identity: the identifier of the Device Token credential that reported
+     * the heartbeat, matching the device lane of its historical events.
+     */
+    @SerialName("device_id")
+    val deviceId: String,
+
+    /**
+     * Last reported display label, or null when the collector sent none.
+     */
+    @SerialName("device_name")
+    val deviceName: String? = null,
+
+    /**
+     * True while the latest heartbeat capture time is less than sixty seconds old; a device
+     * whose heartbeats stop shows offline within sixty seconds.
+     */
+    val online: Boolean,
+
+    val platform: Platform
+)
+
+/**
+ * Minimal structured current-activity context. Unknown fields are rejected so raw window
+ * titles and executable paths cannot be smuggled into the projection.
+ */
+@Serializable
+data class HeartbeatActivity(
+    /**
+     * Foreground application identifier such as a package name or executable name. Never a full
+     * executable path; values containing path separators or drive-letter prefixes are rejected.
+     */
+    @SerialName("application_id")
+    val applicationId: String? = null,
+
+    /**
+     * Short local display label for the application, such as file description metadata; never
+     * raw window text.
+     */
+    @SerialName("application_label")
+    val applicationLabel: String? = null,
+
+    /**
+     * Whether the user is currently away from the device.
+     */
+    @SerialName("is_afk")
+    val isAfk: Boolean
+)
+
+/**
+ * Collector platform the heartbeat originates from.
+ */
+@Serializable
+enum class Platform(val value: String) {
+    @SerialName("android") ANDROID("android"),
+    @SerialName("windows") WINDOWS("windows");
+}
+
+@Serializable
+data class DeviceStatusList(
+    /**
+     * One independent entry per device that has reported a heartbeat.
+     */
+    val devices: List<DeviceStatus>,
+
+    /**
+     * UTC instant at which the ages and online flags were computed.
+     */
+    @SerialName("server_time")
+    val serverTime: String
+)
+
+@Serializable
 data class Error(
     val code: String,
     val details: JsonObject? = null,
@@ -298,12 +399,6 @@ data class Device(
     val id: String,
     val platform: Platform
 )
-
-@Serializable
-enum class Platform(val value: String) {
-    @SerialName("android") ANDROID("android"),
-    @SerialName("windows") WINDOWS("windows");
-}
 
 @Serializable
 enum class EventType(val value: String) {
@@ -462,6 +557,31 @@ data class PageMetadata(
 
     @SerialName("page_size")
     val pageSize: Long
+)
+
+@Serializable
+data class HeartbeatRequest(
+    val activity: HeartbeatActivity,
+
+    /**
+     * UTC instant at which the device observed the reported current state. Heartbeat ordering,
+     * freshness, and expiry are decided from this instant, so a heartbeat queued during an
+     * outage can never pretend to be fresher than the moment it describes.
+     */
+    @SerialName("captured_at")
+    val capturedAt: String,
+
+    /**
+     * Optional human-readable display label of the device. It is display metadata only; the
+     * server-bound device identity always comes from the authenticated Device Token.
+     */
+    @SerialName("device_name")
+    val deviceName: String? = null,
+
+    /**
+     * Collector platform the heartbeat originates from.
+     */
+    val platform: Platform
 )
 
 @Serializable

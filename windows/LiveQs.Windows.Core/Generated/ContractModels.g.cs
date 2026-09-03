@@ -44,6 +44,12 @@ public partial class ProtocolModels
     [JsonPropertyName("CredentialView")]
     public CredentialView CredentialView { get; set; }
 
+    [JsonPropertyName("DeviceStatus")]
+    public DeviceStatus DeviceStatus { get; set; }
+
+    [JsonPropertyName("DeviceStatusList")]
+    public DeviceStatusList DeviceStatusList { get; set; }
+
     [JsonPropertyName("Error")]
     public Error Error { get; set; }
 
@@ -64,6 +70,12 @@ public partial class ProtocolModels
 
     [JsonPropertyName("EventPage")]
     public EventPage EventPage { get; set; }
+
+    [JsonPropertyName("HeartbeatActivity")]
+    public HeartbeatActivity HeartbeatActivity { get; set; }
+
+    [JsonPropertyName("HeartbeatRequest")]
+    public HeartbeatRequest HeartbeatRequest { get; set; }
 
     [JsonPropertyName("OwnerPasswordRequest")]
     public OwnerPasswordRequest OwnerPasswordRequest { get; set; }
@@ -202,6 +214,95 @@ public partial class CredentialList
 {
     [JsonPropertyName("credentials")]
     public CredentialView[] Credentials { get; set; }
+}
+
+public partial class DeviceStatus
+{
+    [JsonPropertyName("activity")]
+    public HeartbeatActivity Activity { get; set; }
+
+    /// <summary>
+    /// Seconds elapsed since the latest heartbeat capture time, clamped at zero. While a
+    /// collector reports at its normal cadence this stays at or below thirty.
+    /// </summary>
+    [JsonPropertyName("age_seconds")]
+    public long AgeSeconds { get; set; }
+
+    /// <summary>
+    /// UTC instant of the latest accepted heartbeat capture.
+    /// </summary>
+    [JsonPropertyName("captured_at")]
+    public string CapturedAt { get; set; }
+
+    /// <summary>
+    /// Server-bound device identity: the identifier of the Device Token credential that reported
+    /// the heartbeat, matching the device lane of its historical events.
+    /// </summary>
+    [JsonPropertyName("device_id")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string DeviceId { get; set; }
+
+    /// <summary>
+    /// Last reported display label, or null when the collector sent none.
+    /// </summary>
+    [JsonPropertyName("device_name")]
+    public string DeviceName { get; set; }
+
+    /// <summary>
+    /// True while the latest heartbeat capture time is less than sixty seconds old; a device
+    /// whose heartbeats stop shows offline within sixty seconds.
+    /// </summary>
+    [JsonPropertyName("online")]
+    public bool Online { get; set; }
+
+    [JsonPropertyName("platform")]
+    public Platform Platform { get; set; }
+}
+
+/// <summary>
+/// Minimal structured current-activity context. Unknown fields are rejected so raw window
+/// titles and executable paths cannot be smuggled into the projection.
+/// </summary>
+public partial class HeartbeatActivity
+{
+    /// <summary>
+    /// Foreground application identifier such as a package name or executable name. Never a full
+    /// executable path; values containing path separators or drive-letter prefixes are rejected.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("application_id")]
+    [JsonConverter(typeof(TentacledMinMaxLengthCheckConverter))]
+    public string? ApplicationId { get; set; }
+
+    /// <summary>
+    /// Short local display label for the application, such as file description metadata; never
+    /// raw window text.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("application_label")]
+    [JsonConverter(typeof(TentacledMinMaxLengthCheckConverter))]
+    public string? ApplicationLabel { get; set; }
+
+    /// <summary>
+    /// Whether the user is currently away from the device.
+    /// </summary>
+    [JsonPropertyName("is_afk")]
+    public bool IsAfk { get; set; }
+}
+
+public partial class DeviceStatusList
+{
+    /// <summary>
+    /// One independent entry per device that has reported a heartbeat.
+    /// </summary>
+    [JsonPropertyName("devices")]
+    public DeviceStatus[] Devices { get; set; }
+
+    /// <summary>
+    /// UTC instant at which the ages and online flags were computed.
+    /// </summary>
+    [JsonPropertyName("server_time")]
+    public string ServerTime { get; set; }
 }
 
 public partial class Error
@@ -464,13 +565,42 @@ public partial class PageMetadata
     public long PageSize { get; set; }
 }
 
+public partial class HeartbeatRequest
+{
+    [JsonPropertyName("activity")]
+    public HeartbeatActivity Activity { get; set; }
+
+    /// <summary>
+    /// UTC instant at which the device observed the reported current state. Heartbeat ordering,
+    /// freshness, and expiry are decided from this instant, so a heartbeat queued during an
+    /// outage can never pretend to be fresher than the moment it describes.
+    /// </summary>
+    [JsonPropertyName("captured_at")]
+    public string CapturedAt { get; set; }
+
+    /// <summary>
+    /// Optional human-readable display label of the device. It is display metadata only; the
+    /// server-bound device identity always comes from the authenticated Device Token.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("device_name")]
+    [JsonConverter(typeof(StickyMinMaxLengthCheckConverter))]
+    public string? DeviceName { get; set; }
+
+    /// <summary>
+    /// Collector platform the heartbeat originates from.
+    /// </summary>
+    [JsonPropertyName("platform")]
+    public Platform Platform { get; set; }
+}
+
 public partial class OwnerPasswordRequest
 {
     /// <summary>
     /// The Owner password. Never logged or stored in plaintext.
     /// </summary>
     [JsonPropertyName("password")]
-    [JsonConverter(typeof(TentacledMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(IndigoMinMaxLengthCheckConverter))]
     public string Password { get; set; }
 }
 
@@ -650,6 +780,9 @@ public enum CredentialPrivacyCeiling { Normal, Private, Sensitive };
 /// </summary>
 public enum CredentialScope { EventsRead, EventsWrite };
 
+/// <summary>
+/// Collector platform the heartbeat originates from.
+/// </summary>
 public enum Platform { Android, Windows };
 
 public enum EventType { ActivityInterval };
@@ -862,6 +995,33 @@ internal class FluffyMinMaxLengthCheckConverter : JsonConverter<string>
     }
 
     public static readonly FluffyMinMaxLengthCheckConverter Singleton = new FluffyMinMaxLengthCheckConverter();
+}
+
+internal class TentacledMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
+        if (value.Length <= 200)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length <= 200)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly TentacledMinMaxLengthCheckConverter Singleton = new TentacledMinMaxLengthCheckConverter();
 }
 
 internal class PlatformConverter : JsonConverter<Platform>
@@ -1164,7 +1324,34 @@ internal class CompletenessConverter : JsonConverter<Completeness>
     public static readonly CompletenessConverter Singleton = new CompletenessConverter();
 }
 
-internal class TentacledMinMaxLengthCheckConverter : JsonConverter<string>
+internal class StickyMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
+        if (value.Length <= 100)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length <= 100)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly StickyMinMaxLengthCheckConverter Singleton = new StickyMinMaxLengthCheckConverter();
+}
+
+internal class IndigoMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
 
@@ -1188,7 +1375,7 @@ internal class TentacledMinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly TentacledMinMaxLengthCheckConverter Singleton = new TentacledMinMaxLengthCheckConverter();
+    public static readonly IndigoMinMaxLengthCheckConverter Singleton = new IndigoMinMaxLengthCheckConverter();
 }
 
 public class DateOnlyConverter : JsonConverter<DateOnly>

@@ -14,6 +14,7 @@ import { hmacText } from "../../shared/privacy.js";
 import { AppError } from "../../shared/errors.js";
 import { REGISTERED_EVENT_TYPES, validateRegisteredEvent } from "./payload-registry.js";
 import type { EventRow } from "../../types/contracts.js";
+import { isDuplicateKeyError } from "../../shared/mongo.js";
 
 export { REGISTERED_EVENT_TYPES };
 
@@ -313,10 +314,6 @@ export async function batchUpsertEvents(env: Env, credential: CredentialAuthCont
     results.push(await ingestBatchItem(env, credential, raw));
   }
   return { results };
-}
-
-function isDuplicateKeyError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && (error as { code: unknown }).code === 11000;
 }
 
 function buildEventDocument(item: ParsedBatchItem, credential: CredentialAuthContext, bucket: string, now: Date) {

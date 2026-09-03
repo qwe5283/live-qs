@@ -1,25 +1,32 @@
 package com.ailife.android.data.queue
 
 import android.content.Context
-import com.ailife.android.data.model.LifeHeartbeat
-import com.ailife.android.data.model.lifeHeartbeatFromJsonObject
-import com.ailife.android.data.model.toJsonObject
+import com.ailife.android.generated.HeartbeatRequest
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.json.JSONObject
 import java.io.File
 import java.time.Instant
 import java.util.UUID
 
+/**
+ * Durable spool for current-state heartbeats captured while the collector is
+ * alive. Heartbeats are ephemeral projections, so the spool only bridges short
+ * outages: the drainer drops entries older than its freshness window instead
+ * of replaying stale states as if they were current.
+ */
 class HeartbeatSpoolQueue(context: Context) {
     private val queueFile = File(context.filesDir, QUEUE_FILE_NAME)
+    private val json = Json
 
     @Synchronized
-    fun enqueue(heartbeat: LifeHeartbeat) {
+    fun enqueue(heartbeat: HeartbeatRequest) {
         queueFile.parentFile?.mkdirs()
         queueFile.appendText(
             JSONObject().apply {
                 put("id", UUID.randomUUID().toString())
                 put("created_at", Instant.now().toString())
-                put("heartbeat", heartbeat.toJsonObject())
+                put("heartbeat", json.encodeToString(heartbeat))
             }.toString() + "\n",
         )
         compactIfNeeded()
@@ -34,11 +41,13 @@ class HeartbeatSpoolQueue(context: Context) {
             .filter { it.isNotBlank() }
             .mapNotNull { line ->
                 runCatching {
-                    val json = JSONObject(line)
+                    val envelope = JSONObject(line)
                     QueuedHeartbeat(
-                        id = json.getString("id"),
-                        createdAt = json.optString("created_at"),
-                        heartbeat = lifeHeartbeatFromJsonObject(json.getJSONObject("heartbeat")),
+                        id = envelope.getString("id"),
+                        createdAt = envelope.optString("created_at"),
+                        heartbeat = json.decodeFromString<HeartbeatRequest>(
+                            envelope.getJSONObject("heartbeat").toString(),
+                        ),
                     )
                 }.getOrNull()
             }
@@ -57,7 +66,7 @@ class HeartbeatSpoolQueue(context: Context) {
             JSONObject().apply {
                 put("id", item.id)
                 put("created_at", item.createdAt)
-                put("heartbeat", item.heartbeat.toJsonObject())
+                put("heartbeat", json.encodeToString(item.heartbeat))
             }.toString()
         })
         tempFile.copyTo(queueFile, overwrite = true)
@@ -76,7 +85,7 @@ class HeartbeatSpoolQueue(context: Context) {
     data class QueuedHeartbeat(
         val id: String,
         val createdAt: String,
-        val heartbeat: LifeHeartbeat,
+        val heartbeat: HeartbeatRequest,
     )
 
     companion object {

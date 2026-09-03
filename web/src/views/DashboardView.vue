@@ -18,8 +18,8 @@
     <div class="dashboard-grid">
       <section class="panel">
         <div class="panel-title">设备状态</div>
-        <div v-if="current?.devices.length" class="device-list">
-          <DeviceCard v-for="device in current.devices" :key="device.device_id" :device="device" />
+        <div v-if="deviceStatuses.length" class="device-list">
+          <DeviceCard v-for="device in deviceStatuses" :key="device.device_id" :device="device" />
         </div>
         <EmptyState v-else description="暂无设备上报" />
       </section>
@@ -50,7 +50,9 @@ import type { EChartsOption } from "echarts";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { AimOutlined, ClockCircleOutlined, DesktopOutlined, RiseOutlined } from "@ant-design/icons-vue";
 import { fetchCurrent, fetchHealthTimeline } from "../api/dashboard";
+import { fetchDeviceStatuses } from "../api/status";
 import type { CurrentContext, HealthTimelineResponse } from "../api/types";
+import type { DeviceStatusList } from "../generated/contract-models";
 import BaseChart from "../components/charts/BaseChart.vue";
 import DeviceCard from "../components/common/DeviceCard.vue";
 import EmptyState from "../components/common/EmptyState.vue";
@@ -58,10 +60,14 @@ import MetricCard from "../components/common/MetricCard.vue";
 import { endOfToday, formatMinutes, startOfToday } from "../utils/date";
 
 const current = ref<CurrentContext | null>(null);
+const statusList = ref<DeviceStatusList | null>(null);
 const health = ref<HealthTimelineResponse | null>(null);
 const loading = ref(false);
 const error = ref("");
 let timer: number | undefined;
+
+// Each device is rendered as its own lane; no single global focus is inferred.
+const deviceStatuses = computed(() => statusList.value?.devices ?? []);
 
 const screenTime = computed(() => current.value ? formatMinutes(current.value.today.active_screen_minutes) : "--");
 const focusTime = computed(() => current.value ? formatMinutes(current.value.today.focus_minutes) : "--");
@@ -101,11 +107,13 @@ async function load() {
   loading.value = true;
   error.value = "";
   try {
-    const [currentResponse, healthResponse] = await Promise.all([
+    const [currentResponse, statusResponse, healthResponse] = await Promise.all([
       fetchCurrent(),
+      fetchDeviceStatuses(),
       fetchHealthTimeline(startOfToday(), endOfToday()),
     ]);
     current.value = currentResponse;
+    statusList.value = statusResponse;
     health.value = healthResponse;
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);

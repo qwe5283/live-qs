@@ -2,19 +2,24 @@ package com.ailife.android.service
 
 import android.content.Context
 import com.ailife.android.data.SettingsStore
-import com.ailife.android.data.model.LifeHeartbeat
+import com.ailife.android.generated.HeartbeatRequest
 import com.ailife.android.data.queue.HeartbeatSpoolQueue
 import com.ailife.android.network.ReportClient
 import java.time.Duration
 import java.time.Instant
 
+/**
+ * Sends queued current-state heartbeats through the versioned heartbeat
+ * contract. Entries whose capture time has fallen outside the freshness
+ * window are dropped: replaying them would present a stale state as current.
+ */
 class HeartbeatQueueDrainer(
     context: Context,
     private val settings: SettingsStore,
 ) {
     private val queue = HeartbeatSpoolQueue(context)
 
-    fun enqueue(heartbeat: LifeHeartbeat) {
+    fun enqueue(heartbeat: HeartbeatRequest) {
         queue.enqueue(heartbeat)
     }
 
@@ -51,9 +56,9 @@ class HeartbeatQueueDrainer(
 
     fun queuedCount(): Int = queue.size()
 
-    private fun isFresh(heartbeat: LifeHeartbeat): Boolean {
-        val timestamp = runCatching { Instant.parse(heartbeat.timestamp) }.getOrNull() ?: return false
-        return Duration.between(timestamp, Instant.now()) <= MAX_HEARTBEAT_AGE
+    private fun isFresh(heartbeat: HeartbeatRequest): Boolean {
+        val capturedAt = runCatching { Instant.parse(heartbeat.capturedAt) }.getOrNull() ?: return false
+        return Duration.between(capturedAt, Instant.now()) <= MAX_HEARTBEAT_AGE
     }
 
     companion object {

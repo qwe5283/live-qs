@@ -4,6 +4,7 @@ import type { ScryptParams } from "./password.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import { OwnerCredentialModel, OwnerSessionModel } from "../../db/models.js";
 import { AppError } from "../../shared/errors.js";
+import { isDuplicateKeyError } from "../../shared/mongo.js";
 
 export const SESSION_COOKIE_NAME = "liveqs_session";
 
@@ -107,6 +108,3 @@ function sessionTokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-function isDuplicateKeyError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && (error as { code: unknown }).code === 11000;
-}

@@ -11,6 +11,22 @@ public interface IForegroundSampler
     ActivitySample? Capture(AppSettings settings);
 }
 
+/// <summary>
+/// The device current state asserted by one heartbeat: an ephemeral, expiring
+/// projection, never a historical event and never part of the events outbox.
+/// </summary>
+public sealed record HeartbeatState(
+    DateTimeOffset CapturedAt,
+    string ApplicationId,
+    string ApplicationLabel,
+    bool IsAfk);
+
+public interface IHeartbeatClient
+{
+    /// <summary>Uploads one heartbeat; a transport-level failure throws and the next cadence retries.</summary>
+    Task SendAsync(HeartbeatState state, AppSettings settings, CancellationToken cancellationToken = default);
+}
+
 public interface IDatabaseInitializer
 {
     Task InitializeAsync(CancellationToken cancellationToken = default);

@@ -18,6 +18,12 @@ tags:
       expiry, and independently revocable state.
   - name: Events
     description: Versioned historical observations. Heartbeats are not events.
+  - name: Heartbeats
+    description: >-
+      TTL-backed ephemeral current-state projections. A heartbeat is the device
+      claim of what it observes right now; it is never a historical Event,
+      never generates one, and never contributes to usage-time aggregation.
+      Devices show offline within sixty seconds after heartbeats stop.
   - name: Metrics
     description: >-
       Day and week usage metrics computed from historical intervals under one
@@ -251,6 +257,65 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/heartbeats:
+    post:
+      operationId: recordHeartbeat
+      summary: Report the device current state as an expiring heartbeat
+      description: >-
+        Replaces the device current-state projection with the reported state
+        unless the reported capture time is older than the stored one, in which
+        case the heartbeat is acknowledged without regressing the stored state.
+        Device identity is server-bound to the authenticated Device Token; the
+        heartbeat never creates or modifies historical events.
+      tags: [Heartbeats]
+      security:
+        - DeviceToken: []
+      x-required-scopes: [events:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HeartbeatRequest"
+      responses:
+        "204":
+          description: >-
+            The heartbeat was accepted and the projection now reflects the
+            newest reported state, or the heartbeat was older than the stored
+            state and was acknowledged without regressing it.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/status:
+    get:
+      operationId: listDeviceStatuses
+      summary: Show every device latest current state and online-ness
+      description: >-
+        One entry per device that has ever reported a heartbeat, oldest to
+        newest by capture time. Each device is reported independently; the
+        response never infers a single global attention focus. A device is
+        online while its latest heartbeat capture time is less than sixty
+        seconds old. Projections expire automatically and are never part of
+        historical events or usage metrics.
+      tags: [Heartbeats]
+      security:
+        - OwnerSession: []
+      responses:
+        "200":
+          description: The current-state projection of every reporting device.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceStatusList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/RateLimited"
   /api/v1/events/batch:
@@ -717,6 +782,112 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CredentialView"
+    HeartbeatRequest:
+      title: Heartbeat Request
+      type: object
+      additionalProperties: false
+      required: [platform, captured_at, activity]
+      properties:
+        platform:
+          type: string
+          enum: [windows, android]
+          description: Collector platform the heartbeat originates from.
+        device_name:
+          type: string
+          maxLength: 100
+          description: >-
+            Optional human-readable display label of the device. It is display
+            metadata only; the server-bound device identity always comes from
+            the authenticated Device Token.
+        captured_at:
+          type: string
+          format: date-time
+          description: >-
+            UTC instant at which the device observed the reported current
+            state. Heartbeat ordering, freshness, and expiry are decided from
+            this instant, so a heartbeat queued during an outage can never
+            pretend to be fresher than the moment it describes.
+        activity:
+          $ref: "#/components/schemas/HeartbeatActivity"
+    HeartbeatActivity:
+      title: Heartbeat Activity
+      type: object
+      additionalProperties: false
+      required: [is_afk]
+      description: >-
+        Minimal structured current-activity context. Unknown fields are
+        rejected so raw window titles and executable paths cannot be smuggled
+        into the projection.
+      properties:
+        application_id:
+          type: string
+          maxLength: 200
+          description: >-
+            Foreground application identifier such as a package name or
+            executable name. Never a full executable path; values containing
+            path separators or drive-letter prefixes are rejected.
+        application_label:
+          type: string
+          maxLength: 200
+          description: >-
+            Short local display label for the application, such as file
+            description metadata; never raw window text.
+        is_afk:
+          type: boolean
+          description: Whether the user is currently away from the device.
+    DeviceStatus:
+      title: Device Status
+      type: object
+      additionalProperties: false
+      required: [device_id, platform, online, age_seconds, captured_at, activity]
+      properties:
+        device_id:
+          type: string
+          minLength: 1
+          description: >-
+            Server-bound device identity: the identifier of the Device Token
+            credential that reported the heartbeat, matching the device lane of
+            its historical events.
+        device_name:
+          type: [string, "null"]
+          description: Last reported display label, or null when the collector sent none.
+        platform:
+          type: string
+          enum: [windows, android]
+        online:
+          type: boolean
+          description: >-
+            True while the latest heartbeat capture time is less than sixty
+            seconds old; a device whose heartbeats stop shows offline within
+            sixty seconds.
+        age_seconds:
+          type: integer
+          minimum: 0
+          description: >-
+            Seconds elapsed since the latest heartbeat capture time, clamped at
+            zero. While a collector reports at its normal cadence this stays at
+            or below thirty.
+        captured_at:
+          type: string
+          format: date-time
+          description: UTC instant of the latest accepted heartbeat capture.
+        activity:
+          $ref: "#/components/schemas/HeartbeatActivity"
+    DeviceStatusList:
+      title: Device Status List
+      type: object
+      additionalProperties: false
+      required: [server_time, devices]
+      properties:
+        server_time:
+          type: string
+          format: date-time
+          description: UTC instant at which the ages and online flags were computed.
+        devices:
+          type: array
+          description: One independent entry per device that has reported a heartbeat.
+          items:
+            $ref: "#/components/schemas/DeviceStatus"
     Event:
       $ref: "./schemas/event.schema.json"
     EventBatchRequest:

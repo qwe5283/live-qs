@@ -265,30 +265,6 @@ public sealed class SyncTests : IDisposable
         public string LogPath => Path.Combine(DataDirectory, "test.log");
     }
 
-    private sealed class SingleClientFactory(HttpMessageHandler handler) : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => new(handler);
-    }
-
-    private sealed class RecordingHandler : HttpMessageHandler
-    {
-        public Func<string, string> ResponseFactory { get; set; } = _ => """{"results":[]}""";
-        public HttpRequestMessage? Request { get; private set; }
-        public string? Body { get; private set; }
-        public List<string> Bodies { get; } = new();
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Request = request;
-            Body = await request.Content!.ReadAsStringAsync(cancellationToken);
-            Bodies.Add(Body);
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(ResponseFactory(Body), Encoding.UTF8, "application/json"),
-            };
-        }
-    }
-
     private sealed class StubSyncClient : ISyncClient
     {
         public IReadOnlyList<SyncOutcome>? Outcomes { get; set; }

@@ -1,8 +1,10 @@
 package com.ailife.android.network
 
 import com.ailife.android.data.model.LifeEvent
-import com.ailife.android.data.model.LifeHeartbeat
 import com.ailife.android.data.model.toJsonObject
+import com.ailife.android.generated.HeartbeatRequest
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -10,7 +12,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
-import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 class ReportClient(
@@ -24,28 +25,18 @@ class ReportClient(
         .build()
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+    private val json = Json
 
-    fun postForegroundHeartbeat(
-        deviceId: String,
-        packageName: String,
-        appName: String,
-        heartbeatIntervalMs: Long,
-    ): Result<Unit> {
-        return postHeartbeat(
-            foregroundHeartbeat(
-                deviceId = deviceId,
-                packageName = packageName,
-                appName = appName,
-                heartbeatIntervalMs = heartbeatIntervalMs,
-            ),
-        )
-    }
-
-    fun postHeartbeat(heartbeat: LifeHeartbeat): Result<Unit> {
+    /**
+     * Uploads one heartbeat as the device current-state projection. The server
+     * acknowledges even out-of-order heartbeats without regressing state, so a
+     * plain 2xx is the only confirmation the spool needs.
+     */
+    fun postHeartbeat(heartbeat: HeartbeatRequest): Result<Unit> {
         val request = Request.Builder()
-            .url("${serverUrl.trimEnd('/')}/api/v1/ingest/heartbeat")
+            .url("${serverUrl.trimEnd('/')}/api/v1/heartbeats")
             .addHeader("Authorization", "Bearer $token")
-            .post(heartbeat.toJsonObject().toString().toRequestBody(jsonMediaType))
+            .post(json.encodeToString(heartbeat).toRequestBody(jsonMediaType))
             .build()
 
         return try {
@@ -88,27 +79,5 @@ class ReportClient(
     fun close() {
         client.dispatcher.executorService.shutdown()
         client.connectionPool.evictAll()
-    }
-
-    companion object {
-        fun foregroundHeartbeat(
-            deviceId: String,
-            packageName: String,
-            appName: String,
-            heartbeatIntervalMs: Long,
-        ): LifeHeartbeat {
-            return LifeHeartbeat(
-                bucket = "android:$deviceId:foreground",
-                type = "app.foreground",
-                timestamp = Instant.now().toString(),
-                heartbeatIntervalMs = heartbeatIntervalMs,
-                data = mapOf(
-                    "app_id" to packageName,
-                    "app_name" to appName,
-                    "is_afk" to false,
-                    "source" to "accessibility",
-                ),
-            )
-        }
     }
 }

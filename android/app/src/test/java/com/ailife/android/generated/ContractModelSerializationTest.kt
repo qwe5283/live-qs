@@ -41,4 +41,31 @@ class ContractModelSerializationTest {
         assertTrue(json.contains("\"kind\":\"android.accessibility\""))
         assertTrue(json.contains("\"unit\":\"ms\""))
     }
+
+    @Test
+    fun heartbeatRequestUsesContractWireNamesAndOmitsDisplayOnlyNulls() {
+        val model = HeartbeatRequest(
+            activity = HeartbeatActivity(
+                applicationId = "tv.danmaku.bili",
+                applicationLabel = "BiliBili",
+                isAfk = false,
+            ),
+            capturedAt = "2026-07-28T01:05:00.000Z",
+            deviceName = "Pixel 8",
+            platform = Platform.ANDROID,
+        )
+
+        val json = Json.encodeToString(model)
+
+        assertTrue(json.contains("\"platform\":\"android\""))
+        assertTrue(json.contains("\"captured_at\":\"2026-07-28T01:05:00.000Z\""))
+        assertTrue(json.contains("\"application_id\":\"tv.danmaku.bili\""))
+        assertTrue(json.contains("\"is_afk\":false"))
+        assertTrue(json.contains("\"device_name\":\"Pixel 8\""))
+
+        val anonymous = model.copy(deviceName = null, activity = model.activity.copy(applicationLabel = null))
+        val minimalJson = Json.encodeToString(anonymous)
+        assertTrue(!minimalJson.contains("device_name"))
+        assertTrue(!minimalJson.contains("application_label"))
+    }
 }

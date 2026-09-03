@@ -28,9 +28,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IStartupManager, StartupManager>();
         services.AddSingleton<ISyncStatusService, SyncStatusService>();
         services.AddSingleton<ISyncClient, CloudSyncClient>();
+        services.AddSingleton<IHeartbeatClient, HeartbeatClient>();
         services.AddHttpClient("cloud-sync", client => client.Timeout = TimeSpan.FromSeconds(15));
         services.AddHostedService<SamplingWorker>();
         services.AddHostedService<SyncWorker>();
+        services.AddHostedService<HeartbeatWorker>();
         services.AddHostedService<MaintenanceWorker>();
         return services;
     }

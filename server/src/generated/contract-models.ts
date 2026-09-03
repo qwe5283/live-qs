@@ -10,6 +10,8 @@ export interface ProtocolModels {
   CredentialPrivacyCeiling: CredentialPrivacyCeiling;
   CredentialScope: CredentialScope;
   CredentialView: CredentialView;
+  DeviceStatus: DeviceStatus;
+  DeviceStatusList: DeviceStatusList;
   Error: Error;
   ErrorResponse: ErrorResponse;
   Event: ActivityIntervalEventV1;
@@ -17,6 +19,8 @@ export interface ProtocolModels {
   EventBatchRequest: EventBatchRequest;
   EventBatchResponse: EventBatchResponse;
   EventPage: EventPage;
+  HeartbeatActivity: HeartbeatActivity;
+  HeartbeatRequest: HeartbeatRequest;
   OwnerPasswordRequest: OwnerPasswordRequest;
   OwnerSessionInfo: OwnerSessionInfo;
   OwnerSettings: OwnerSettings;
@@ -105,6 +109,71 @@ export interface CredentialList {
   credentials: CredentialView[];
 }
 
+export interface DeviceStatus {
+  activity: HeartbeatActivity;
+  /**
+   * Seconds elapsed since the latest heartbeat capture time, clamped at zero. While a
+   * collector reports at its normal cadence this stays at or below thirty.
+   */
+  age_seconds: number;
+  /**
+   * UTC instant of the latest accepted heartbeat capture.
+   */
+  captured_at: string;
+  /**
+   * Server-bound device identity: the identifier of the Device Token credential that reported
+   * the heartbeat, matching the device lane of its historical events.
+   */
+  device_id: string;
+  /**
+   * Last reported display label, or null when the collector sent none.
+   */
+  device_name?: null | string;
+  /**
+   * True while the latest heartbeat capture time is less than sixty seconds old; a device
+   * whose heartbeats stop shows offline within sixty seconds.
+   */
+  online: boolean;
+  platform: Platform;
+}
+
+/**
+ * Minimal structured current-activity context. Unknown fields are rejected so raw window
+ * titles and executable paths cannot be smuggled into the projection.
+ */
+export interface HeartbeatActivity {
+  /**
+   * Foreground application identifier such as a package name or executable name. Never a full
+   * executable path; values containing path separators or drive-letter prefixes are rejected.
+   */
+  application_id?: string;
+  /**
+   * Short local display label for the application, such as file description metadata; never
+   * raw window text.
+   */
+  application_label?: string;
+  /**
+   * Whether the user is currently away from the device.
+   */
+  is_afk: boolean;
+}
+
+/**
+ * Collector platform the heartbeat originates from.
+ */
+export type Platform = "windows" | "android";
+
+export interface DeviceStatusList {
+  /**
+   * One independent entry per device that has reported a heartbeat.
+   */
+  devices: DeviceStatus[];
+  /**
+   * UTC instant at which the ages and online flags were computed.
+   */
+  server_time: string;
+}
+
 export interface Error {
   code: string;
   details?: { [key: string]: unknown };
@@ -161,8 +230,6 @@ export interface Device {
   id: string;
   platform: Platform;
 }
-
-export type Platform = "windows" | "android";
 
 export type EventType = "activity.interval";
 
@@ -258,6 +325,25 @@ export interface PageMetadata {
    */
   next_cursor: null | string;
   page_size: number;
+}
+
+export interface HeartbeatRequest {
+  activity: HeartbeatActivity;
+  /**
+   * UTC instant at which the device observed the reported current state. Heartbeat ordering,
+   * freshness, and expiry are decided from this instant, so a heartbeat queued during an
+   * outage can never pretend to be fresher than the moment it describes.
+   */
+  captured_at: string;
+  /**
+   * Optional human-readable display label of the device. It is display metadata only; the
+   * server-bound device identity always comes from the authenticated Device Token.
+   */
+  device_name?: string;
+  /**
+   * Collector platform the heartbeat originates from.
+   */
+  platform: Platform;
 }
 
 export interface OwnerPasswordRequest {
