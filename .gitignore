@@ -24,6 +24,7 @@ keystore.properties
 # Signing keys and private certificates
 *.jks
 *.keystore
+android/keystore/
 *.p12
 *.pfx
 *.pem
