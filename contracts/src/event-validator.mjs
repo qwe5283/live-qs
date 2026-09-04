@@ -71,6 +71,16 @@ export function createEventValidator() {
     const validate = validators.get(`${event.event_type}@${event.schema_version}`);
     if (!validate || !validateRegisteredEvent(event)) {
       const errors = validateRegisteredEvent.errors ?? validate?.errors ?? [];
+      // Payload-specific semantic codes keep rejected payment facts diagnosable:
+      // exact minor-unit amounts and ISO 4217 currency codes are contract terms.
+      const amountValueError = errors.find((error) => error.instancePath.startsWith("/payload/amount/value"));
+      if (amountValueError) {
+        return invalid("invalid_amount", amountValueError.instancePath, "Amount must be a positive integer in minor currency units.");
+      }
+      const amountCurrencyError = errors.find((error) => error.instancePath.startsWith("/payload/amount/currency"));
+      if (amountCurrencyError) {
+        return invalid("invalid_currency", amountCurrencyError.instancePath, "Currency must be an upper-case ISO 4217 alphabetic code.");
+      }
       const unitError = errors.find((error) => error.instancePath.endsWith("/unit"));
       return invalid(
         unitError ? "invalid_unit" : "schema_invalid",

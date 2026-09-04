@@ -1,54 +1,102 @@
 package com.ailife.android.service
 
+import android.content.Context
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.ailife.android.data.SettingsStore
-import com.ailife.android.data.model.LifeEvent
+import com.ailife.android.identity.resolveCollectorVersion
+import com.ailife.android.payment.PaymentNotificationFailure
+import com.ailife.android.payment.PaymentNotificationFailures
+import com.ailife.android.payment.PaymentParseResult
+import com.ailife.android.payment.WechatPayNotificationParser
+import com.ailife.android.payment.WechatPaySyncState
+import com.ailife.android.payment.WechatPayTransactionPlanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import java.security.MessageDigest
+import java.io.File
 import java.time.Instant
+import java.time.ZoneId
 
+/**
+ * Notification-listener collector for WeChat payment notifications. The
+ * listener registration, permission flow, and on-device parsing behavior are
+ * unchanged; the output path is the versioned contract protocol:
+ *
+ * - each notification is parsed on-device into minimal structured facts
+ *   (amount, currency, direction, approved merchant label, category);
+ * - the raw notification text never leaves the device — it exists only in the
+ *   local failure queue when a payment notification cannot be parsed, and
+ *   never enters the outbox, upload requests, server events, or logs;
+ * - parsed transactions get a stable UUIDv5 event identity (device id +
+ *   install GUID + notification key + post time) so duplicate deliveries and
+ *   retries are answered as duplicates and never double-book;
+ * - notifications that look like an already-reported payment are uploaded
+ *   flagged `pending_confirmation` instead of being merged on amount and
+ *   time.
+ */
 class WechatPayNotificationService : NotificationListenerService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val recentIds = ArrayDeque<String>()
-    private val recentSet = mutableSetOf<String>()
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn?.packageName != WECHAT_PACKAGE) return
+        val notificationKey = sbn.key ?: return
+        val postedAtMillis = sbn.postTime
 
-        val parsed = parsePaymentNotification(sbn) ?: return
         val settings = SettingsStore(this)
         if (!settings.isReady()) return
 
-        val idempotencyKey = "wechat-notification-${sha256("${sbn.key}|${sbn.postTime}|${parsed.amount}|${parsed.merchant}")}"
-        if (!remember(idempotencyKey)) return
+        val extras = sbn.notification.extras
+        val title = extras.getCharSequence(EXTRA_TITLE)?.toString().orEmpty()
+        val text = extras.getCharSequence(EXTRA_TEXT)?.toString().orEmpty()
+        val bigText = extras.getCharSequence(EXTRA_BIG_TEXT)?.toString().orEmpty()
 
-        val event = LifeEvent(
-            idempotencyKey = idempotencyKey,
-            bucket = "android:${settings.deviceId}:wechat-pay",
-            type = "payment.transaction",
-            startAt = Instant.ofEpochMilli(sbn.postTime).toString(),
-            value = if (parsed.direction == "income") parsed.amount else -parsed.amount,
-            unit = "CNY",
-            privacyLevel = "sensitive",
-            data = mapOf(
-                "merchant" to parsed.merchant,
-                "direction" to parsed.direction,
-                "category" to categorize(parsed.merchant),
-                "payment_method" to "wechat",
-                "source" to "notification",
-            ),
+        when (val parsed = WechatPayNotificationParser.parse(notificationKey, postedAtMillis, title, text, bigText)) {
+            is PaymentParseResult.NotPayment -> return
+            is PaymentParseResult.Failure -> scope.launch {
+                // Local diagnosis only: the raw text is written to the local
+                // failure file and never reaches the upload path.
+                PaymentNotificationFailures(File(filesDir, PAYMENT_NOTIFICATION_FAILURES)).record(
+                    PaymentNotificationFailure(
+                        sourceFingerprint = "$notificationKey|$postedAtMillis",
+                        reason = parsed.reason,
+                        postedAt = Instant.ofEpochMilli(postedAtMillis).toString(),
+                        title = title,
+                        text = text,
+                        recordedAt = Instant.now().toString(),
+                    ),
+                )
+            }
+            is PaymentParseResult.Transaction -> scope.launch { upload(parsed) }
+        }
+    }
+
+    private suspend fun upload(transaction: PaymentParseResult.Transaction) {
+        val settings = SettingsStore(this)
+        val state = WechatPaySyncState(stateFile(this))
+        val nowMillis = System.currentTimeMillis()
+        val plan = WechatPayTransactionPlanner.plan(
+            transactions = listOf(transaction),
+            state = state.transactions,
+            deviceId = settings.deviceId,
+            ownerId = settings.ownerId,
+            installGuid = state.installGuid,
+            nowMillis = nowMillis,
+            collectorVersion = resolveCollectorVersion(this),
+            zone = ZoneId.systemDefault(),
         )
 
-        scope.launch {
-            val drainer = EventQueueDrainer(this@WechatPayNotificationService, settings)
-            drainer.enqueue(listOf(event))
-            drainer.drainOnce()
+        for ((eventId, transactionState) in plan.states) {
+            state.record(eventId, transactionState)
         }
+        state.prunePostedBefore(nowMillis - STATE_RETENTION_MS)
+        state.save()
+
+        val drainer = ContractEventQueueDrainer(this, settings, PAYMENT_QUEUE, PAYMENT_FAILURES)
+        drainer.enqueue(plan.events)
+        drainer.drainOnce()
     }
 
     override fun onDestroy() {
@@ -56,79 +104,21 @@ class WechatPayNotificationService : NotificationListenerService() {
         super.onDestroy()
     }
 
-    private fun parsePaymentNotification(sbn: StatusBarNotification): ParsedPayment? {
-        val extras = sbn.notification.extras
-        val title = extras.getCharSequence("android.title")?.toString().orEmpty()
-        val text = extras.getCharSequence("android.text")?.toString().orEmpty()
-        val bigText = extras.getCharSequence("android.bigText")?.toString().orEmpty()
-        val content = listOf(title, text, bigText).filter { it.isNotBlank() }.joinToString(" ")
-        if (content.isBlank()) return null
-        if (!PAYMENT_KEYWORDS.any { content.contains(it) }) return null
-
-        val amount = AMOUNT_REGEX.find(content)?.groups?.get(1)?.value?.toDoubleOrNull() ?: return null
-        if (amount <= 0.0) return null
-
-        val direction = if (INCOME_KEYWORDS.any { content.contains(it) }) "income" else "expense"
-        return ParsedPayment(
-            amount = amount,
-            direction = direction,
-            merchant = extractMerchant(title, text, direction),
-        )
-    }
-
-    private fun extractMerchant(title: String, text: String, direction: String): String {
-        val candidate = if (direction == "income") title else text.ifBlank { title }
-        return candidate
-            .replace(AMOUNT_REGEX, "")
-            .replace("微信支付", "")
-            .replace("支付成功", "")
-            .replace("收款到账", "")
-            .replace("已收款", "")
-            .trim(' ', '-', '，', ',', ':', '：')
-            .take(80)
-            .ifBlank { "WeChat Pay" }
-    }
-
-    private fun categorize(merchant: String): String {
-        return when {
-            Regex("美团|饿了么|大众点评|餐|饭|食堂|咖啡|奶茶|茶饮|超市|便利店|盒马|麦当劳|肯德基|必胜客|星巴克|瑞幸|喜茶|奈雪|kfc|starbucks|luckin|coffee", RegexOption.IGNORE_CASE).containsMatchIn(merchant) -> "food"
-            Regex("滴滴|小拉|打车|地铁|公交|铁路|12306|机票|航旅|高德|停车|加油|充电|高速|etc|taxi|metro", RegexOption.IGNORE_CASE).containsMatchIn(merchant) -> "transport"
-            Regex("京东|淘宝|天猫|拼多多|抖音商城|小红书|唯品会|得物|苏宁|商城|购物|数码|服饰|家居").containsMatchIn(merchant) -> "shopping"
-            Regex("水费|电费|燃气|话费|宽带|物业|房租|租金|保险|税|账单|生活缴费").containsMatchIn(merchant) -> "bills"
-            Regex("医院|药|医保|体检|诊所|口腔|牙|挂号|pharmacy|clinic|hospital", RegexOption.IGNORE_CASE).containsMatchIn(merchant) -> "health"
-            Regex("课程|教育|培训|学校|大学|考试|书店|图书|知识付费|得到|极客时间|coursera|udemy", RegexOption.IGNORE_CASE).containsMatchIn(merchant) -> "education"
-            Regex("电影|影院|游戏|音乐|会员|视频|优酷|腾讯视频|爱奇艺|哔哩|bilibili|steam|spotify|netflix", RegexOption.IGNORE_CASE).containsMatchIn(merchant) -> "entertainment"
-            Regex("转账|红包").containsMatchIn(merchant) -> "transfer"
-            else -> "uncategorized"
-        }
-    }
-
-    private fun remember(id: String): Boolean {
-        if (id in recentSet) return false
-        recentIds.addLast(id)
-        recentSet.add(id)
-        while (recentIds.size > MAX_RECENT_IDS) {
-            recentSet.remove(recentIds.removeFirst())
-        }
-        return true
-    }
-
-    private data class ParsedPayment(
-        val amount: Double,
-        val direction: String,
-        val merchant: String,
-    )
-
     companion object {
         private const val WECHAT_PACKAGE = "com.tencent.mm"
-        private const val MAX_RECENT_IDS = 100
-        private val AMOUNT_REGEX = Regex("""(?:￥|¥)?\s*(\d+(?:\.\d{1,2})?)\s*元""")
-        private val PAYMENT_KEYWORDS = listOf("微信支付", "支付成功", "已支付", "付款", "收款到账", "已收款")
-        private val INCOME_KEYWORDS = listOf("收款到账", "已收款", "收款", "收入")
+        private const val EXTRA_TITLE = "android.title"
+        private const val EXTRA_TEXT = "android.text"
+        private const val EXTRA_BIG_TEXT = "android.bigText"
+        private const val STATE_RETENTION_MS = 7L * 24 * 60 * 60 * 1000
+        private const val STATE_FILE_NAME = "payment-sync-state.json"
 
-        private fun sha256(value: String): String {
-            val bytes = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
-            return bytes.joinToString("") { "%02x".format(it) }
-        }
+        /** Local-only failure file for unparseable payment notifications. */
+        const val PAYMENT_NOTIFICATION_FAILURES = "payment-notification-failures.ndjson"
+
+        /** Outbox and rejection-queue file names, shared with the sync/status screens. */
+        const val PAYMENT_QUEUE = "payment-events.ndjson"
+        const val PAYMENT_FAILURES = "payment-sync-failures.ndjson"
+
+        fun stateFile(context: Context) = File(context.filesDir, STATE_FILE_NAME)
     }
 }

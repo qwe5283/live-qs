@@ -36,6 +36,14 @@ tags:
       Health Connect with their data origin. Sleep appears only as
       source-provided intervals; the system never infers sleep from device
       idle time and never renders missing coverage as zero.
+  - name: Payment
+    description: >-
+      Versioned payment transaction facts extracted on-device from payment
+      notifications. Only the extracted amount, direction, approved merchant
+      label, category, and source metadata are uploaded; notification bodies,
+      titles, and other free text never leave the device. Transactions
+      suspected to be duplicates stay flagged pending confirmation instead of
+      being merged on amount and time alone.
 paths:
   /api/v1/owner/status:
     get:
@@ -331,13 +339,14 @@ paths:
       tags: [Events]
       security:
         - DeviceToken: []
-      x-required-scopes: [events:write, health:write]
+      x-required-scopes: [events:write, health:write, payment:write]
       description: >-
         Requires one of the listed write scopes. Enforcement is per item:
-        activity.interval items require events:write and health.* items
-        require health:write, so a credential holding only one domain's scope
-        still receives per-item `insufficient_scope` rejections for the other
-        domain instead of a whole-batch failure.
+        activity.interval items require events:write, health.* items require
+        health:write, and payment.transaction items require payment:write, so
+        a credential holding only one domain's scope still receives per-item
+        `insufficient_scope` rejections for the other domains instead of a
+        whole-batch failure.
       requestBody:
         required: true
         content:
@@ -370,9 +379,10 @@ paths:
       x-required-scopes: [events:read]
       description: >-
         Credential reads are domain-scoped: events:read grants the activity
-        domain and health:read grants the health domain, so a query token
-        without health:read never sees health observations here. Owner
-        sessions read every registered domain.
+        domain, health:read grants the health domain, and payment:read grants
+        the payment domain, so a query token without a domain's read scope
+        never sees that domain's observations here. Owner sessions read every
+        registered domain.
       parameters:
         - $ref: "#/components/parameters/From"
         - $ref: "#/components/parameters/To"
@@ -419,6 +429,43 @@ paths:
       responses:
         "200":
           description: A page of latest, non-invalidated health event revisions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/payment/events:
+    get:
+      operationId: listPaymentEvents
+      summary: List latest valid payment transaction revisions
+      description: >-
+        Payment-domain read of structured transaction facts (amount, currency,
+        direction, approved merchant label, category, occurrence time,
+        pending-confirmation flag). Requires payment:read for credentials;
+        Owner sessions read without a scope. Payment facts are sensitive by
+        default, so credentials additionally need an adequate privacy ceiling.
+        Notification text never existed anywhere in this data domain.
+      tags: [Payment]
+      security:
+        - OwnerSession: []
+        - QueryToken: []
+      x-required-scopes: [payment:read]
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Timezone"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: A page of latest, non-invalidated payment transaction revisions.
           content:
             application/json:
               schema:
@@ -704,14 +751,14 @@ components:
     CredentialScope:
       title: Credential Scope
       type: string
-      enum: [events:write, events:read, health:write, health:read]
+      enum: [events:write, events:read, health:write, health:read, payment:write, payment:read]
       description: >-
         Capability granted to the credential. Scopes are domain-scoped:
-        events:write and health:write restrict which event domains a device
-        token may upload (activity intervals versus Health Connect
-        observations), events:read and health:read restrict which domains a
-        query token may read. A credential never holds a scope outside its
-        actor type.
+        events:write, health:write, and payment:write restrict which event
+        domains a device token may upload (activity intervals, Health Connect
+        observations, payment transactions), while events:read, health:read,
+        and payment:read restrict which domains a query token may read. A
+        credential never holds a scope outside its actor type.
     CredentialPrivacyCeiling:
       title: Credential Privacy Ceiling
       type: string
@@ -742,8 +789,8 @@ components:
             $ref: "#/components/schemas/CredentialScope"
           description: >-
             Non-empty subset of the actor type's scopes: device tokens may
-            hold events:write and health:write; query tokens may hold
-            events:read and health:read.
+            hold events:write, health:write, and payment:write; query tokens
+            may hold events:read, health:read, and payment:read.
         allowed_event_types:
           type: array
           default: []

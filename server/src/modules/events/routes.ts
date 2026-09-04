@@ -2,12 +2,14 @@ import { Router } from "express";
 import { z } from "zod";
 import type { Request } from "express";
 import type { Env } from "../../config/env.js";
+import type { CredentialScope } from "../../generated/contract-models.js";
 import { credentialBearerAuth, sessionOrCredentialAuth } from "../../middleware/auth.js";
 import type { CredentialAuthContext } from "../credentials/service.js";
 import { AppError } from "../../shared/errors.js";
 import { batchUpsertEvents, eventTypesForReadScopes, listEvents } from "./service.js";
 import type { EventRangeQuery } from "./service.js";
-import { HEALTH_EVENT_TYPES } from "./payload-registry.js";
+import { HEALTH_EVENT_TYPES, PAYMENT_EVENT_TYPES } from "./payload-registry.js";
+import type { RegisteredEventType } from "./payload-registry.js";
 
 function requiredInstant(value: unknown, name: string): Date {
   if (typeof value !== "string" || value.length === 0) {
@@ -80,7 +82,7 @@ export function eventsRouter(env: Env): Router {
     res.json(await listEvents(query));
   });
 
-  router.post("/batch", credentialBearerAuth(env, { anyScope: ["events:write", "health:write"] }), async (req, res) => {
+  router.post("/batch", credentialBearerAuth(env, { anyScope: ["events:write", "health:write", "payment:write"] }), async (req, res) => {
     const credential = res.locals.credential as CredentialAuthContext;
     if (credential.kind !== "device_token") {
       throw new AppError(403, "Only device tokens may upload events.", "insufficient_scope");
@@ -96,24 +98,26 @@ export function eventsRouter(env: Env): Router {
 }
 
 /**
- * Health-domain read: every registered health event type, guarded by the
- * health:read scope for credentials. Sleep appears only as source-provided
- * intervals; the query context reports completeness so missing coverage is
- * never rendered as zero.
+ * Domain-scoped read of one event domain's latest revisions, guarded by the
+ * domain's read scope for credentials. Completeness is relative to the domain
+ * this endpoint promises, so out-of-domain data never marks a page partial;
+ * credential reads are further bounded by their privacy ceiling and
+ * allowed-event-type list. Sleep appears only as source-provided intervals;
+ * payments only as extracted transaction facts.
  */
-export function healthEventsRouter(env: Env): Router {
+function domainEventsRouter(env: Env, domainTypes: RegisteredEventType[], readScope: CredentialScope): Router {
   const router = Router();
+  const domainTypeStrings: string[] = [...domainTypes];
 
-  router.get("/events", sessionOrCredentialAuth(env, { scope: "health:read" }), async (req, res) => {
+  router.get("/events", sessionOrCredentialAuth(env, { scope: readScope }), async (req, res) => {
     const query = parseEventQuery(req, env.DEFAULT_USER_ID);
-    query.scopeGrantedEventTypes = [...HEALTH_EVENT_TYPES];
-    // Completeness is relative to the health domain this endpoint promises.
-    query.completenessBaseline = [...HEALTH_EVENT_TYPES];
+    query.scopeGrantedEventTypes = domainTypeStrings;
+    query.completenessBaseline = domainTypeStrings;
     const credential = res.locals.credential as CredentialAuthContext | undefined;
     if (credential) {
       query.privacyCeiling = credential.privacy_ceiling;
       query.scopeGrantedEventTypes = eventTypesForReadScopes(credential.scopes).filter(
-        (type) => (HEALTH_EVENT_TYPES as string[]).includes(type),
+        (type) => domainTypeStrings.includes(type),
       );
       if (credential.allowed_event_types.length > 0) query.allowedEventTypes = credential.allowed_event_types;
     }
@@ -121,4 +125,21 @@ export function healthEventsRouter(env: Env): Router {
   });
 
   return router;
+}
+
+/**
+ * Health-domain read: every registered health event type, guarded by the
+ * health:read scope for credentials.
+ */
+export function healthEventsRouter(env: Env): Router {
+  return domainEventsRouter(env, HEALTH_EVENT_TYPES, "health:read");
+}
+
+/**
+ * Payment-domain read: extracted transaction facts, guarded by the
+ * payment:read scope for credentials. Payment facts are sensitive by default,
+ * so a credential also needs an adequate privacy ceiling to see them.
+ */
+export function paymentEventsRouter(env: Env): Router {
+  return domainEventsRouter(env, PAYMENT_EVENT_TYPES, "payment:read");
 }

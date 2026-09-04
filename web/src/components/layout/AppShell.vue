@@ -27,6 +27,10 @@
             <HeartOutlined />
             <span>运动健康</span>
           </a-menu-item>
+          <a-menu-item key="/spending">
+            <PayCircleOutlined />
+            <span>消费支出</span>
+          </a-menu-item>
           <a-menu-item key="/credentials">
             <KeyOutlined />
             <span>凭据管理</span>
@@ -56,6 +60,7 @@ import {
   DashboardOutlined,
   HeartOutlined,
   KeyOutlined,
+  PayCircleOutlined,
   SettingOutlined,
 } from "@ant-design/icons-vue";
 import AppHeader from "./AppHeader.vue";

@@ -1,7 +1,5 @@
 package com.ailife.android.network
 
-import com.ailife.android.data.model.LifeEvent
-import com.ailife.android.data.model.toJsonObject
 import com.ailife.android.generated.VersionedEvent
 import com.ailife.android.generated.EventBatchRequest
 import com.ailife.android.generated.EventBatchResponse
@@ -12,8 +10,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -74,33 +70,6 @@ class ReportClient(
                     return Result.failure(IOException("HTTP ${response.code}: $body"))
                 }
                 Result.success(json.decodeFromString<EventBatchResponse>(body))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    fun postEvents(events: List<LifeEvent>): Result<Unit> {
-        if (events.isEmpty()) return Result.success(Unit)
-
-        val body = JSONObject().apply {
-            put("events", JSONArray().apply {
-                for (event in events) {
-                    put(event.toJsonObject())
-                }
-            })
-        }
-
-        val request = Request.Builder()
-            .url("${serverUrl.trimEnd('/')}/api/v1/ingest/events")
-            .addHeader("Authorization", "Bearer $token")
-            .post(body.toString().toRequestBody(jsonMediaType))
-            .build()
-
-        return try {
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) Result.success(Unit)
-                else Result.failure(IOException("HTTP ${response.code}: ${response.body?.string().orEmpty()}"))
             }
         } catch (e: Exception) {
             Result.failure(e)

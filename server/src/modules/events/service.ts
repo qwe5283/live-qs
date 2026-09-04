@@ -15,6 +15,7 @@ import { AppError } from "../../shared/errors.js";
 import {
   ACTIVITY_EVENT_TYPES,
   HEALTH_EVENT_TYPES,
+  PAYMENT_EVENT_TYPES,
   REGISTERED_EVENT_TYPES,
   defaultPrivacyLevel,
   requiredWriteScope,
@@ -31,6 +32,7 @@ export function eventTypesForReadScopes(scopes: string[] | undefined): string[] 
   const granted = new Set<string>();
   if (scopes?.includes("events:read")) ACTIVITY_EVENT_TYPES.forEach((type) => granted.add(type));
   if (scopes?.includes("health:read")) HEALTH_EVENT_TYPES.forEach((type) => granted.add(type));
+  if (scopes?.includes("payment:read")) PAYMENT_EVENT_TYPES.forEach((type) => granted.add(type));
   return [...granted];
 }
 

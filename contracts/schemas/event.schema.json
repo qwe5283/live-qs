@@ -15,6 +15,9 @@
     },
     {
       "$ref": "./events/health.step.sample.v1.schema.json"
+    },
+    {
+      "$ref": "./events/payment.transaction.v1.schema.json"
     }
   ]
 }

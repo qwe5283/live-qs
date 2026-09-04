@@ -2,6 +2,7 @@ package com.ailife.android.health
 
 import android.content.Context
 import com.ailife.android.data.SettingsStore
+import com.ailife.android.identity.resolveCollectorVersion
 import com.ailife.android.generated.VersionedEvent
 import java.io.File
 import java.time.Instant
@@ -48,7 +49,7 @@ class HealthConnectEventSource(
             ownerId = settings.ownerId,
             installGuid = state.installGuid,
             nowMillis = now.toEpochMilli(),
-            collectorVersion = resolveCollectorVersion(),
+            collectorVersion = resolveCollectorVersion(context),
             zone = ZoneId.systemDefault(),
         )
 
@@ -72,17 +73,6 @@ class HealthConnectEventSource(
             now.minus(INITIAL_LOOKBACK_DAYS, ChronoUnit.DAYS)
         } else {
             Instant.ofEpochMilli(lastSync).minus(WATERMARK_OVERLAP_MINUTES, ChronoUnit.MINUTES)
-        }
-    }
-
-    private fun resolveCollectorVersion(): String {
-        return try {
-            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            packageInfo.versionName?.takeIf { version ->
-                Regex("^[0-9]+\\.[0-9]+\\.[0-9]+").containsMatchIn(version)
-            } ?: "0.0.0"
-        } catch (_: Exception) {
-            "0.0.0"
         }
     }
 

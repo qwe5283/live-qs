@@ -146,8 +146,9 @@ public partial class CredentialCreateRequest
     public CredentialPrivacyCeiling? PrivacyCeiling { get; set; }
 
     /// <summary>
-    /// Non-empty subset of the actor type's scopes: device tokens may hold events:write and
-    /// health:write; query tokens may hold events:read and health:read.
+    /// Non-empty subset of the actor type's scopes: device tokens may hold events:write,
+    /// health:write, and payment:write; query tokens may hold events:read, health:read, and
+    /// payment:read.
     /// </summary>
     [JsonPropertyName("scopes")]
     public CredentialScope[] Scopes { get; set; }
@@ -351,6 +352,12 @@ public partial class ErrorResponse
 /// A source-provided cumulative step count observed over a bounded interval. Health Connect
 /// reports one record per origin application; the count is the total steps during [start_at,
 /// end_at], never a rate.
+///
+/// A minimal structured transaction fact extracted on-device from a payment notification.
+/// start_at is the occurrence instant and the event carries no end_at because a transaction
+/// has no duration. Notification bodies, titles, and other free text never enter this
+/// contract: only the extracted amount, direction, approved merchant label, on-device rule
+/// category, and source metadata are uploaded.
 /// </summary>
 public partial class VersionedEvent
 {
@@ -365,6 +372,9 @@ public partial class VersionedEvent
     ///
     /// Health observations default to sensitive; credentials need an adequate privacy ceiling to
     /// upload or read them.
+    ///
+    /// Financial observations default to sensitive; credentials need an adequate privacy ceiling
+    /// to upload or read them.
     /// </summary>
     [JsonPropertyName("privacy_level")]
     public PrivacyLevel PrivacyLevel { get; set; }
@@ -498,6 +508,59 @@ public partial class Payload
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("count")]
     public Count? Count { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("amount")]
+    public Amount? Amount { get; set; }
+
+    /// <summary>
+    /// Spending category produced by on-device classification rules over the merchant label.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("category")]
+    public Category? Category { get; set; }
+
+    /// <summary>
+    /// Whether the transaction credited (income) or debited (expense) the Owner.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("direction")]
+    public Direction? Direction { get; set; }
+
+    /// <summary>
+    /// Approved merchant label extracted on-device by the versioned extraction rule; never the
+    /// notification text itself.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("merchant")]
+    [JsonConverter(typeof(StickyMinMaxLengthCheckConverter))]
+    public string? Merchant { get; set; }
+
+    /// <summary>
+    /// True when the transaction lacks a stable payment-network identifier and is suspected to
+    /// duplicate another observation (matching amount, direction, merchant, and nearby
+    /// occurrence time). Suspected duplicates are kept as distinct, flagged observations and are
+    /// never merged on amount and time alone; the Owner confirms or dismisses them.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("pending_confirmation")]
+    public bool? PendingConfirmation { get; set; }
+}
+
+public partial class Amount
+{
+    /// <summary>
+    /// ISO 4217 alphabetic currency code in upper case.
+    /// </summary>
+    [JsonPropertyName("currency")]
+    public string Currency { get; set; }
+
+    /// <summary>
+    /// Exact amount in minor currency units (for CNY: fen), never a float, so sums reconcile
+    /// without rounding.
+    /// </summary>
+    [JsonPropertyName("value")]
+    public long Value { get; set; }
 }
 
 public partial class Classification
@@ -557,6 +620,11 @@ public partial class Source
     ///
     /// Stable record identifier supplied by Health Connect for the originating record; retained
     /// so source record counts reconcile against server acknowledgements.
+    ///
+    /// Stable identifier of the originating source record (the notification), retained so source
+    /// record counts reconcile against server acknowledgements. It identifies the notification,
+    /// not a payment-network transaction; transactions without a network identifier that are
+    /// suspected duplicates carry pending_confirmation instead of being merged.
     /// </summary>
     [JsonPropertyName("record_id")]
     [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
@@ -654,7 +722,7 @@ public partial class HeartbeatRequest
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("device_name")]
-    [JsonConverter(typeof(StickyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(IndigoMinMaxLengthCheckConverter))]
     public string? DeviceName { get; set; }
 
     /// <summary>
@@ -670,7 +738,7 @@ public partial class OwnerPasswordRequest
     /// The Owner password. Never logged or stored in plaintext.
     /// </summary>
     [JsonPropertyName("password")]
-    [JsonConverter(typeof(IndigoMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(IndecentMinMaxLengthCheckConverter))]
     public string Password { get; set; }
 }
 
@@ -845,23 +913,34 @@ public enum CredentialKind { DeviceToken, QueryToken };
 public enum CredentialPrivacyCeiling { Normal, Private, Sensitive };
 
 /// <summary>
-/// Capability granted to the credential. Scopes are domain-scoped: events:write and
-/// health:write restrict which event domains a device token may upload (activity intervals
-/// versus Health Connect observations), events:read and health:read restrict which domains a
-/// query token may read. A credential never holds a scope outside its actor type.
+/// Capability granted to the credential. Scopes are domain-scoped: events:write,
+/// health:write, and payment:write restrict which event domains a device token may upload
+/// (activity intervals, Health Connect observations, payment transactions), while
+/// events:read, health:read, and payment:read restrict which domains a query token may read.
+/// A credential never holds a scope outside its actor type.
 /// </summary>
-public enum CredentialScope { EventsRead, EventsWrite, HealthRead, HealthWrite };
+public enum CredentialScope { EventsRead, EventsWrite, HealthRead, HealthWrite, PaymentRead, PaymentWrite };
 
 /// <summary>
 /// Collector platform the heartbeat originates from.
 /// </summary>
 public enum Platform { Android, Windows };
 
-public enum EventType { ActivityInterval, HealthHeartrateSample, HealthSleepSession, HealthStepSample };
+public enum EventType { ActivityInterval, HealthHeartrateSample, HealthSleepSession, HealthStepSample, PaymentTransaction };
 
 public enum FinalizationState { Checkpoint, Final };
 
+/// <summary>
+/// Spending category produced by on-device classification rules over the merchant label.
+/// </summary>
+public enum Category { Bills, Education, Entertainment, Food, Health, Shopping, Transfer, Transport, Uncategorized };
+
 public enum StepUnit { Steps };
+
+/// <summary>
+/// Whether the transaction credited (income) or debited (expense) the Owner.
+/// </summary>
+public enum Direction { Expense, Income };
 
 public enum DurationUnit { Ms };
 
@@ -870,6 +949,9 @@ public enum DurationUnit { Ms };
 ///
 /// Health observations default to sensitive; credentials need an adequate privacy ceiling to
 /// upload or read them.
+///
+/// Financial observations default to sensitive; credentials need an adequate privacy ceiling
+/// to upload or read them.
 /// </summary>
 public enum PrivacyLevel { Normal, Sensitive };
 
@@ -880,8 +962,11 @@ public enum PrivacyLevel { Normal, Sensitive };
 ///
 /// Health Connect records read by the Android collector. The origin application inside each
 /// payload is the data origin; the collector itself is only the transport.
+///
+/// Payment notifications parsed by the Android collector; the collector extracts structured
+/// fields locally and the raw notification never leaves the device.
 /// </summary>
-public enum SourceKind { AndroidAccessibility, AndroidHealthconnect, AndroidUsagestats, WindowsForeground };
+public enum SourceKind { AndroidAccessibility, AndroidHealthconnect, AndroidUsagestats, AndroidWechatpay, WindowsForeground };
 
 public enum Status { Accepted, Duplicate, Rejected, StaleRevision };
 
@@ -909,7 +994,9 @@ public static class ContractJson
             PlatformConverter.Singleton,
             EventTypeConverter.Singleton,
             FinalizationStateConverter.Singleton,
+            CategoryConverter.Singleton,
             StepUnitConverter.Singleton,
+            DirectionConverter.Singleton,
             DurationUnitConverter.Singleton,
             PrivacyLevelConverter.Singleton,
             SourceKindConverter.Singleton,
@@ -1039,6 +1126,10 @@ internal class CredentialScopeConverter : JsonConverter<CredentialScope>
                 return CredentialScope.HealthRead;
             case "health:write":
                 return CredentialScope.HealthWrite;
+            case "payment:read":
+                return CredentialScope.PaymentRead;
+            case "payment:write":
+                return CredentialScope.PaymentWrite;
         }
         throw new Exception("Cannot unmarshal type CredentialScope");
     }
@@ -1058,6 +1149,12 @@ internal class CredentialScopeConverter : JsonConverter<CredentialScope>
                 return;
             case CredentialScope.HealthWrite:
                 JsonSerializer.Serialize(writer, "health:write", options);
+                return;
+            case CredentialScope.PaymentRead:
+                JsonSerializer.Serialize(writer, "payment:read", options);
+                return;
+            case CredentialScope.PaymentWrite:
+                JsonSerializer.Serialize(writer, "payment:write", options);
                 return;
         }
         throw new Exception("Cannot marshal type CredentialScope");
@@ -1171,6 +1268,8 @@ internal class EventTypeConverter : JsonConverter<EventType>
                 return EventType.HealthSleepSession;
             case "health.step.sample":
                 return EventType.HealthStepSample;
+            case "payment.transaction":
+                return EventType.PaymentTransaction;
         }
         throw new Exception("Cannot unmarshal type EventType");
     }
@@ -1190,6 +1289,9 @@ internal class EventTypeConverter : JsonConverter<EventType>
                 return;
             case EventType.HealthStepSample:
                 JsonSerializer.Serialize(writer, "health.step.sample", options);
+                return;
+            case EventType.PaymentTransaction:
+                JsonSerializer.Serialize(writer, "payment.transaction", options);
                 return;
         }
         throw new Exception("Cannot marshal type EventType");
@@ -1230,6 +1332,75 @@ internal class FinalizationStateConverter : JsonConverter<FinalizationState>
     }
 
     public static readonly FinalizationStateConverter Singleton = new FinalizationStateConverter();
+}
+
+internal class CategoryConverter : JsonConverter<Category>
+{
+    public override bool CanConvert(Type t) => t == typeof(Category);
+
+    public override Category Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        switch (value)
+        {
+            case "bills":
+                return Category.Bills;
+            case "education":
+                return Category.Education;
+            case "entertainment":
+                return Category.Entertainment;
+            case "food":
+                return Category.Food;
+            case "health":
+                return Category.Health;
+            case "shopping":
+                return Category.Shopping;
+            case "transfer":
+                return Category.Transfer;
+            case "transport":
+                return Category.Transport;
+            case "uncategorized":
+                return Category.Uncategorized;
+        }
+        throw new Exception("Cannot unmarshal type Category");
+    }
+
+    public override void Write(Utf8JsonWriter writer, Category value, JsonSerializerOptions options)
+    {
+        switch (value)
+        {
+            case Category.Bills:
+                JsonSerializer.Serialize(writer, "bills", options);
+                return;
+            case Category.Education:
+                JsonSerializer.Serialize(writer, "education", options);
+                return;
+            case Category.Entertainment:
+                JsonSerializer.Serialize(writer, "entertainment", options);
+                return;
+            case Category.Food:
+                JsonSerializer.Serialize(writer, "food", options);
+                return;
+            case Category.Health:
+                JsonSerializer.Serialize(writer, "health", options);
+                return;
+            case Category.Shopping:
+                JsonSerializer.Serialize(writer, "shopping", options);
+                return;
+            case Category.Transfer:
+                JsonSerializer.Serialize(writer, "transfer", options);
+                return;
+            case Category.Transport:
+                JsonSerializer.Serialize(writer, "transport", options);
+                return;
+            case Category.Uncategorized:
+                JsonSerializer.Serialize(writer, "uncategorized", options);
+                return;
+        }
+        throw new Exception("Cannot marshal type Category");
+    }
+
+    public static readonly CategoryConverter Singleton = new CategoryConverter();
 }
 
 internal class MinMaxValueCheckConverter : JsonConverter<double>
@@ -1286,6 +1457,40 @@ internal class StepUnitConverter : JsonConverter<StepUnit>
     public static readonly StepUnitConverter Singleton = new StepUnitConverter();
 }
 
+internal class DirectionConverter : JsonConverter<Direction>
+{
+    public override bool CanConvert(Type t) => t == typeof(Direction);
+
+    public override Direction Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        switch (value)
+        {
+            case "expense":
+                return Direction.Expense;
+            case "income":
+                return Direction.Income;
+        }
+        throw new Exception("Cannot unmarshal type Direction");
+    }
+
+    public override void Write(Utf8JsonWriter writer, Direction value, JsonSerializerOptions options)
+    {
+        switch (value)
+        {
+            case Direction.Expense:
+                JsonSerializer.Serialize(writer, "expense", options);
+                return;
+            case Direction.Income:
+                JsonSerializer.Serialize(writer, "income", options);
+                return;
+        }
+        throw new Exception("Cannot marshal type Direction");
+    }
+
+    public static readonly DirectionConverter Singleton = new DirectionConverter();
+}
+
 internal class DurationUnitConverter : JsonConverter<DurationUnit>
 {
     public override bool CanConvert(Type t) => t == typeof(DurationUnit);
@@ -1311,6 +1516,33 @@ internal class DurationUnitConverter : JsonConverter<DurationUnit>
     }
 
     public static readonly DurationUnitConverter Singleton = new DurationUnitConverter();
+}
+
+internal class StickyMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
+        if (value.Length >= 1 && value.Length <= 80)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length >= 1 && value.Length <= 80)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly StickyMinMaxLengthCheckConverter Singleton = new StickyMinMaxLengthCheckConverter();
 }
 
 internal class PrivacyLevelConverter : JsonConverter<PrivacyLevel>
@@ -1362,6 +1594,8 @@ internal class SourceKindConverter : JsonConverter<SourceKind>
                 return SourceKind.AndroidHealthconnect;
             case "android.usagestats":
                 return SourceKind.AndroidUsagestats;
+            case "android.wechatpay":
+                return SourceKind.AndroidWechatpay;
             case "windows.foreground":
                 return SourceKind.WindowsForeground;
         }
@@ -1380,6 +1614,9 @@ internal class SourceKindConverter : JsonConverter<SourceKind>
                 return;
             case SourceKind.AndroidUsagestats:
                 JsonSerializer.Serialize(writer, "android.usagestats", options);
+                return;
+            case SourceKind.AndroidWechatpay:
+                JsonSerializer.Serialize(writer, "android.wechatpay", options);
                 return;
             case SourceKind.WindowsForeground:
                 JsonSerializer.Serialize(writer, "windows.foreground", options);
@@ -1474,33 +1711,6 @@ internal class CompletenessConverter : JsonConverter<Completeness>
     public static readonly CompletenessConverter Singleton = new CompletenessConverter();
 }
 
-internal class StickyMinMaxLengthCheckConverter : JsonConverter<string>
-{
-    public override bool CanConvert(Type t) => t == typeof(string);
-
-    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
-        if (value.Length <= 100)
-        {
-            return value;
-        }
-        throw new Exception("Cannot unmarshal type string");
-    }
-
-    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
-    {
-        if (value.Length <= 100)
-        {
-            JsonSerializer.Serialize(writer, value, options);
-            return;
-        }
-        throw new Exception("Cannot marshal type string");
-    }
-
-    public static readonly StickyMinMaxLengthCheckConverter Singleton = new StickyMinMaxLengthCheckConverter();
-}
-
 internal class IndigoMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
@@ -1508,7 +1718,7 @@ internal class IndigoMinMaxLengthCheckConverter : JsonConverter<string>
     public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         var value = reader.GetString() ?? throw new JsonException("Expected a string.");
-        if (value.Length >= 8 && value.Length <= 256)
+        if (value.Length <= 100)
         {
             return value;
         }
@@ -1517,7 +1727,7 @@ internal class IndigoMinMaxLengthCheckConverter : JsonConverter<string>
 
     public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
     {
-        if (value.Length >= 8 && value.Length <= 256)
+        if (value.Length <= 100)
         {
             JsonSerializer.Serialize(writer, value, options);
             return;
@@ -1526,6 +1736,33 @@ internal class IndigoMinMaxLengthCheckConverter : JsonConverter<string>
     }
 
     public static readonly IndigoMinMaxLengthCheckConverter Singleton = new IndigoMinMaxLengthCheckConverter();
+}
+
+internal class IndecentMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
+        if (value.Length >= 8 && value.Length <= 256)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length >= 8 && value.Length <= 256)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly IndecentMinMaxLengthCheckConverter Singleton = new IndecentMinMaxLengthCheckConverter();
 }
 
 public class DateOnlyConverter : JsonConverter<DateOnly>

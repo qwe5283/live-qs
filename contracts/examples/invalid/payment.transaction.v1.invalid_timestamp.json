@@ -1,0 +1,35 @@
+{
+  "event_id": "3f6a9c2e-8b14-4c7d-9a52-0e6d4b8f1a31",
+  "event_type": "payment.transaction",
+  "schema_version": 1,
+  "owner_id": "local",
+  "source": {
+    "kind": "android.wechatpay",
+    "record_id": "wechat-notification-9f2c1d4e8a7b3f64"
+  },
+  "device": {
+    "id": "phone",
+    "platform": "android"
+  },
+  "start_at": "2026-08-20T11:26:03.000+08:00",
+  "capture_timezone": "Asia/Shanghai",
+  "capture_offset_minutes": 480,
+  "privacy_level": "sensitive",
+  "revision": 1,
+  "finalization_state": "final",
+  "provenance": {
+    "collector_version": "0.3.0",
+    "observed_at": "2026-08-20T03:26:05.000Z"
+  },
+  "invalidated": false,
+  "payload": {
+    "amount": {
+      "value": 2150,
+      "currency": "CNY"
+    },
+    "direction": "expense",
+    "merchant": "瑞幸咖啡",
+    "category": "food",
+    "pending_confirmation": false
+  }
+}

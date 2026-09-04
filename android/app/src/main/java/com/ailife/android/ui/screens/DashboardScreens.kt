@@ -75,10 +75,11 @@ import com.ailife.android.health.HealthSleepSample
 import com.ailife.android.health.HealthStepsSample
 import com.ailife.android.health.UsageStatsCollector
 import com.ailife.android.network.testServerReachability
+import com.ailife.android.payment.PaymentNotificationFailures
 import com.ailife.android.service.ContractEventQueueDrainer
-import com.ailife.android.service.EventQueueDrainer
 import com.ailife.android.service.HeartbeatQueueDrainer
 import com.ailife.android.service.LifeSyncWorker
+import com.ailife.android.service.WechatPayNotificationService
 import com.ailife.android.system.deviceSupportsNotificationPermission
 import com.ailife.android.system.hasUsageAccess
 import com.ailife.android.system.isForegroundAccessibilityEnabled
@@ -100,6 +101,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -305,11 +307,13 @@ fun SyncScreen(settings: SettingsStore) {
 
     var healthAvailable by remember { mutableStateOf(HealthConnectCollector.isAvailable(context)) }
     var grantedCount by remember { mutableIntStateOf(0) }
-    var queuedEvents by remember { mutableIntStateOf(0) }
     var queuedUsageEvents by remember { mutableIntStateOf(0) }
     var usageFailures by remember { mutableIntStateOf(0) }
     var queuedHealthEvents by remember { mutableIntStateOf(0) }
     var healthFailures by remember { mutableIntStateOf(0) }
+    var queuedPaymentEvents by remember { mutableIntStateOf(0) }
+    var paymentFailures by remember { mutableIntStateOf(0) }
+    var paymentNotificationFailures by remember { mutableIntStateOf(0) }
     var queuedHeartbeats by remember { mutableIntStateOf(0) }
     var statusMsg by remember { mutableStateOf<String?>(null) }
 
@@ -322,7 +326,6 @@ fun SyncScreen(settings: SettingsStore) {
         } else {
             0
         }
-        queuedEvents = EventQueueDrainer(context, settings).queuedCount()
         val usageDrainer = ContractEventQueueDrainer(
             context,
             settings,
@@ -339,6 +342,17 @@ fun SyncScreen(settings: SettingsStore) {
         )
         queuedHealthEvents = healthDrainer.queuedCount()
         healthFailures = healthDrainer.failureCount()
+        val paymentDrainer = ContractEventQueueDrainer(
+            context,
+            settings,
+            LifeSyncWorker.PAYMENT_QUEUE,
+            LifeSyncWorker.PAYMENT_FAILURES,
+        )
+        queuedPaymentEvents = paymentDrainer.queuedCount()
+        paymentFailures = paymentDrainer.failureCount()
+        paymentNotificationFailures = PaymentNotificationFailures(
+            File(context.filesDir, WechatPayNotificationService.PAYMENT_NOTIFICATION_FAILURES),
+        ).size()
         queuedHeartbeats = HeartbeatQueueDrainer(context, settings).queuedCount()
     }
 
@@ -405,7 +419,9 @@ fun SyncScreen(settings: SettingsStore) {
                 InfoRow("使用事件永久失败", usageFailures.toString())
                 InfoRow("待上传健康事件（版本化）", queuedHealthEvents.toString())
                 InfoRow("健康事件永久失败", healthFailures.toString())
-                InfoRow("待上传支付事件（旧通道）", queuedEvents.toString())
+                InfoRow("待上传支付事件（版本化）", queuedPaymentEvents.toString())
+                InfoRow("支付事件永久失败", paymentFailures.toString())
+                InfoRow("支付通知解析失败（本地留存，不上传）", paymentNotificationFailures.toString())
                 InfoRow("待上传心跳", queuedHeartbeats.toString())
                 InfoRow("上次健康同步", formatInstantMillis(settings.lastHealthSyncMillis))
             }
@@ -646,7 +662,6 @@ fun StatusScreen(settings: SettingsStore) {
     val foregroundEnabled = remember(tick) { isForegroundAccessibilityEnabled(context) }
     val notificationEnabled = remember(tick) { isNotificationListenerEnabled(context) }
     val manufacturer = remember { Build.MANUFACTURER.lowercase(Locale.ROOT) }
-    val queuedEvents = remember(tick) { EventQueueDrainer(context, settings).queuedCount() }
     val usageDrainer = remember(tick) {
         ContractEventQueueDrainer(context, settings, LifeSyncWorker.USAGE_QUEUE, LifeSyncWorker.USAGE_FAILURES)
     }
@@ -657,6 +672,16 @@ fun StatusScreen(settings: SettingsStore) {
     }
     val queuedHealthEvents = healthDrainer.queuedCount()
     val healthFailures = healthDrainer.failureCount()
+    val paymentDrainer = remember(tick) {
+        ContractEventQueueDrainer(context, settings, LifeSyncWorker.PAYMENT_QUEUE, LifeSyncWorker.PAYMENT_FAILURES)
+    }
+    val queuedPaymentEvents = paymentDrainer.queuedCount()
+    val paymentFailures = paymentDrainer.failureCount()
+    val paymentNotificationFailures = remember(tick) {
+        PaymentNotificationFailures(
+            File(context.filesDir, WechatPayNotificationService.PAYMENT_NOTIFICATION_FAILURES),
+        ).size()
+    }
     val queuedHeartbeats = remember(tick) { HeartbeatQueueDrainer(context, settings).queuedCount() }
 
     Column(
@@ -757,7 +782,9 @@ fun StatusScreen(settings: SettingsStore) {
                 InfoRow("Usage Sync Failures", usageFailures.toString())
                 InfoRow("Queued Health Events", queuedHealthEvents.toString())
                 InfoRow("Health Sync Failures", healthFailures.toString())
-                InfoRow("Queued Events", queuedEvents.toString())
+                InfoRow("Queued Payment Events", queuedPaymentEvents.toString())
+                InfoRow("Payment Sync Failures", paymentFailures.toString())
+                InfoRow("Payment Notification Failures (local)", paymentNotificationFailures.toString())
                 InfoRow("Queued Heartbeats", queuedHeartbeats.toString())
                 InfoRow("Last Usage Day", settings.lastUsageSyncDay.ifBlank { "无" })
             }

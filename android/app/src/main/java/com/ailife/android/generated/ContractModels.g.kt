@@ -133,8 +133,9 @@ data class CredentialCreateRequest(
     val privacyCeiling: CredentialPrivacyCeiling? = null,
 
     /**
-     * Non-empty subset of the actor type's scopes: device tokens may hold events:write and
-     * health:write; query tokens may hold events:read and health:read.
+     * Non-empty subset of the actor type's scopes: device tokens may hold events:write,
+     * health:write, and payment:write; query tokens may hold events:read, health:read, and
+     * payment:read.
      */
     val scopes: List<CredentialScope>
 )
@@ -161,17 +162,20 @@ enum class CredentialPrivacyCeiling(val value: String) {
 }
 
 /**
- * Capability granted to the credential. Scopes are domain-scoped: events:write and
- * health:write restrict which event domains a device token may upload (activity intervals
- * versus Health Connect observations), events:read and health:read restrict which domains a
- * query token may read. A credential never holds a scope outside its actor type.
+ * Capability granted to the credential. Scopes are domain-scoped: events:write,
+ * health:write, and payment:write restrict which event domains a device token may upload
+ * (activity intervals, Health Connect observations, payment transactions), while
+ * events:read, health:read, and payment:read restrict which domains a query token may read.
+ * A credential never holds a scope outside its actor type.
  */
 @Serializable
 enum class CredentialScope(val value: String) {
     @SerialName("events:read") EVENTS_READ("events:read"),
     @SerialName("events:write") EVENTS_WRITE("events:write"),
     @SerialName("health:read") HEALTH_READ("health:read"),
-    @SerialName("health:write") HEALTH_WRITE("health:write");
+    @SerialName("health:write") HEALTH_WRITE("health:write"),
+    @SerialName("payment:read") PAYMENT_READ("payment:read"),
+    @SerialName("payment:write") PAYMENT_WRITE("payment:write");
 }
 
 @Serializable
@@ -354,6 +358,12 @@ data class ErrorResponse(
  * A source-provided cumulative step count observed over a bounded interval. Health Connect
  * reports one record per origin application; the count is the total steps during [start_at,
  * end_at], never a rate.
+ *
+ * A minimal structured transaction fact extracted on-device from a payment notification.
+ * start_at is the occurrence instant and the event carries no end_at because a transaction
+ * has no duration. Notification bodies, titles, and other free text never enter this
+ * contract: only the extracted amount, direction, approved merchant label, on-device rule
+ * category, and source metadata are uploaded.
  */
 @Serializable
 data class VersionedEvent(
@@ -367,6 +377,9 @@ data class VersionedEvent(
      *
      * Health observations default to sensitive; credentials need an adequate privacy ceiling to
      * upload or read them.
+     *
+     * Financial observations default to sensitive; credentials need an adequate privacy ceiling
+     * to upload or read them.
      */
     @SerialName("privacy_level")
     val privacyLevel: PrivacyLevel,
@@ -432,7 +445,8 @@ enum class EventType(val value: String) {
     @SerialName("activity.interval") ACTIVITY_INTERVAL("activity.interval"),
     @SerialName("health.heartrate.sample") HEALTH_HEARTRATE_SAMPLE("health.heartrate.sample"),
     @SerialName("health.sleep.session") HEALTH_SLEEP_SESSION("health.sleep.session"),
-    @SerialName("health.step.sample") HEALTH_STEP_SAMPLE("health.step.sample");
+    @SerialName("health.step.sample") HEALTH_STEP_SAMPLE("health.step.sample"),
+    @SerialName("payment.transaction") PAYMENT_TRANSACTION("payment.transaction");
 }
 
 @Serializable
@@ -483,8 +497,64 @@ data class Payload(
     @SerialName("data_origin")
     val dataOrigin: String? = null,
 
-    val count: Count? = null
+    val count: Count? = null,
+    val amount: Amount? = null,
+
+    /**
+     * Spending category produced by on-device classification rules over the merchant label.
+     */
+    val category: Category? = null,
+
+    /**
+     * Whether the transaction credited (income) or debited (expense) the Owner.
+     */
+    val direction: Direction? = null,
+
+    /**
+     * Approved merchant label extracted on-device by the versioned extraction rule; never the
+     * notification text itself.
+     */
+    val merchant: String? = null,
+
+    /**
+     * True when the transaction lacks a stable payment-network identifier and is suspected to
+     * duplicate another observation (matching amount, direction, merchant, and nearby
+     * occurrence time). Suspected duplicates are kept as distinct, flagged observations and are
+     * never merged on amount and time alone; the Owner confirms or dismisses them.
+     */
+    @SerialName("pending_confirmation")
+    val pendingConfirmation: Boolean? = null
 )
+
+@Serializable
+data class Amount(
+    /**
+     * ISO 4217 alphabetic currency code in upper case.
+     */
+    val currency: String,
+
+    /**
+     * Exact amount in minor currency units (for CNY: fen), never a float, so sums reconcile
+     * without rounding.
+     */
+    val value: Long
+)
+
+/**
+ * Spending category produced by on-device classification rules over the merchant label.
+ */
+@Serializable
+enum class Category(val value: String) {
+    @SerialName("bills") BILLS("bills"),
+    @SerialName("education") EDUCATION("education"),
+    @SerialName("entertainment") ENTERTAINMENT("entertainment"),
+    @SerialName("food") FOOD("food"),
+    @SerialName("health") HEALTH("health"),
+    @SerialName("shopping") SHOPPING("shopping"),
+    @SerialName("transfer") TRANSFER("transfer"),
+    @SerialName("transport") TRANSPORT("transport"),
+    @SerialName("uncategorized") UNCATEGORIZED("uncategorized");
+}
 
 @Serializable
 data class Classification(
@@ -512,6 +582,15 @@ enum class StepUnit(val value: String) {
     @SerialName("steps") STEPS("steps");
 }
 
+/**
+ * Whether the transaction credited (income) or debited (expense) the Owner.
+ */
+@Serializable
+enum class Direction(val value: String) {
+    @SerialName("expense") EXPENSE("expense"),
+    @SerialName("income") INCOME("income");
+}
+
 @Serializable
 data class Duration(
     val unit: DurationUnit,
@@ -532,6 +611,9 @@ enum class DurationUnit(val value: String) {
  *
  * Health observations default to sensitive; credentials need an adequate privacy ceiling to
  * upload or read them.
+ *
+ * Financial observations default to sensitive; credentials need an adequate privacy ceiling
+ * to upload or read them.
  */
 @Serializable
 enum class PrivacyLevel(val value: String) {
@@ -557,6 +639,11 @@ data class Source(
      *
      * Stable record identifier supplied by Health Connect for the originating record; retained
      * so source record counts reconcile against server acknowledgements.
+     *
+     * Stable identifier of the originating source record (the notification), retained so source
+     * record counts reconcile against server acknowledgements. It identifies the notification,
+     * not a payment-network transaction; transactions without a network identifier that are
+     * suspected duplicates carry pending_confirmation instead of being merged.
      */
     @SerialName("record_id")
     val recordId: String
@@ -569,12 +656,16 @@ data class Source(
  *
  * Health Connect records read by the Android collector. The origin application inside each
  * payload is the data origin; the collector itself is only the transport.
+ *
+ * Payment notifications parsed by the Android collector; the collector extracts structured
+ * fields locally and the raw notification never leaves the device.
  */
 @Serializable
 enum class SourceKind(val value: String) {
     @SerialName("android.accessibility") ANDROID_ACCESSIBILITY("android.accessibility"),
     @SerialName("android.healthconnect") ANDROID_HEALTHCONNECT("android.healthconnect"),
     @SerialName("android.usagestats") ANDROID_USAGESTATS("android.usagestats"),
+    @SerialName("android.wechatpay") ANDROID_WECHATPAY("android.wechatpay"),
     @SerialName("windows.foreground") WINDOWS_FOREGROUND("windows.foreground");
 }
 

@@ -25,10 +25,12 @@ class LifeSyncWorker(
         if (!settings.isReady()) return Result.success()
 
         // UsageStats is the authoritative daily usage source; Health Connect
-        // observations are sensitive, origin-attributed health facts. Both ride
-        // the versioned contract protocol through the shared durable outbox:
-        // stable identities, monotonic revisions, per-item acknowledgements,
-        // and a visible local failure queue for permanent rejections.
+        // observations are sensitive, origin-attributed health facts; payment
+        // transactions are sensitive, notification-extracted spending facts.
+        // All three ride the versioned contract protocol through the shared
+        // durable outbox: stable identities, monotonic revisions, per-item
+        // acknowledgements, and a visible local failure queue for permanent
+        // rejections.
         val usageDrainer = ContractEventQueueDrainer(
             applicationContext,
             settings,
@@ -45,10 +47,21 @@ class LifeSyncWorker(
         )
         healthDrainer.enqueue(HealthConnectEventSource(applicationContext, settings).collectPendingEvents())
 
+        // Payment events are enqueued by the notification listener; the
+        // periodic pass retries anything a transport failure left in the
+        // outbox.
+        val paymentDrainer = ContractEventQueueDrainer(
+            applicationContext,
+            settings,
+            PAYMENT_QUEUE,
+            PAYMENT_FAILURES,
+        )
+
         val heartbeatResult = HeartbeatQueueDrainer(applicationContext, settings).drainOnce(MAX_HEARTBEATS_PER_SYNC)
         val usageResult = usageDrainer.drainOnce(MAX_EVENTS_PER_SYNC)
         val healthResult = healthDrainer.drainOnce(MAX_EVENTS_PER_SYNC)
-        return if (heartbeatResult.isSuccess && usageResult.isSuccess && healthResult.isSuccess) {
+        val paymentResult = paymentDrainer.drainOnce(MAX_EVENTS_PER_SYNC)
+        return if (heartbeatResult.isSuccess && usageResult.isSuccess && healthResult.isSuccess && paymentResult.isSuccess) {
             Result.success()
         } else {
             Result.retry()
@@ -65,6 +78,8 @@ class LifeSyncWorker(
         const val USAGE_FAILURES = "usage-sync-failures.ndjson"
         const val HEALTH_QUEUE = "health-events.ndjson"
         const val HEALTH_FAILURES = "health-sync-failures.ndjson"
+        const val PAYMENT_QUEUE = WechatPayNotificationService.PAYMENT_QUEUE
+        const val PAYMENT_FAILURES = WechatPayNotificationService.PAYMENT_FAILURES
 
         fun schedule(context: Context) {
             val constraints = Constraints.Builder()

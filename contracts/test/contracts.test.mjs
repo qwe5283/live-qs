@@ -32,6 +32,7 @@ test("event registry exposes the registered V1 event types", () => {
       { eventType: "health.heartrate.sample", schemaVersion: 1 },
       { eventType: "health.sleep.session", schemaVersion: 1 },
       { eventType: "health.step.sample", schemaVersion: 1 },
+      { eventType: "payment.transaction", schemaVersion: 1 },
     ],
   );
 });

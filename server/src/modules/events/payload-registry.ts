@@ -6,6 +6,7 @@ export const REGISTERED_EVENT_TYPES = [
   "health.heartrate.sample",
   "health.sleep.session",
   "health.step.sample",
+  "payment.transaction",
 ] as const;
 
 export type RegisteredEventType = (typeof REGISTERED_EVENT_TYPES)[number];
@@ -16,6 +17,9 @@ export const HEALTH_EVENT_TYPES: RegisteredEventType[] = [
   "health.sleep.session",
   "health.step.sample",
 ];
+
+/** Payment-domain event types (structured transaction facts). */
+export const PAYMENT_EVENT_TYPES: RegisteredEventType[] = ["payment.transaction"];
 
 /** Activity-domain event types consumed by usage metrics and timelines. */
 export const ACTIVITY_EVENT_TYPES: RegisteredEventType[] = ["activity.interval"];
@@ -30,6 +34,7 @@ export const LEGAL_SOURCE_KINDS = [
   "android.accessibility",
   "android.usagestats",
   "android.healthconnect",
+  "android.wechatpay",
 ] as const;
 
 /**
@@ -89,6 +94,45 @@ const healthSleepSessionPayloadSchema = z.strictObject({
   data_origin: dataOriginSchema,
 });
 
+/**
+ * Spending categories produced by on-device classification rules; the enum
+ * mirrors contracts/schemas/events/payment.transaction.v1.schema.json.
+ */
+const PAYMENT_CATEGORIES = [
+  "food",
+  "transport",
+  "shopping",
+  "bills",
+  "health",
+  "education",
+  "entertainment",
+  "transfer",
+  "uncategorized",
+] as const;
+
+/** ISO 4217 alphabetic currency code in upper case. */
+const currencyCodeSchema = z.string().regex(/^[A-Z]{3}$/, "currency must be an upper-case ISO 4217 alphabetic code.");
+
+/**
+ * The exact transaction amount in minor currency units. The approved merchant
+ * label names a payee, never a filesystem path, and the strict payload shape
+ * keeps free text (notification bodies, titles) out of the contract.
+ */
+const paymentTransactionPayloadSchema = z.strictObject({
+  amount: z.strictObject({
+    value: z.number().int().min(1).max(10_000_000_000),
+    currency: currencyCodeSchema,
+  }),
+  direction: z.enum(["income", "expense"]),
+  merchant: z
+    .string()
+    .min(1)
+    .max(80)
+    .refine(isOpaqueApplicationId, "merchant must be an extracted label, never a path."),
+  category: z.enum(PAYMENT_CATEGORIES),
+  pending_confirmation: z.boolean(),
+});
+
 export interface RegisteredEventEnvelope {
   eventType: RegisteredEventType;
   schemaVersion: number;
@@ -115,6 +159,7 @@ interface RegisteredEventSchema {
 
 const ACTIVITY_SOURCE_KINDS = ["windows.foreground", "android.accessibility", "android.usagestats"] as const;
 const HEALTH_SOURCE_KINDS = ["android.healthconnect"] as const;
+const PAYMENT_SOURCE_KINDS = ["android.wechatpay"] as const;
 
 const registeredSchemas = new Map<string, RegisteredEventSchema>([
   [
@@ -159,6 +204,17 @@ const registeredSchemas = new Map<string, RegisteredEventSchema>([
       defaultPrivacy: "sensitive",
       timeSemantics: "interval",
       requiresEndAt: true,
+    },
+  ],
+  [
+    "payment.transaction@1",
+    {
+      payloadSchema: paymentTransactionPayloadSchema,
+      sourceKinds: PAYMENT_SOURCE_KINDS,
+      requiredWriteScope: "payment:write",
+      defaultPrivacy: "sensitive",
+      timeSemantics: "instant",
+      requiresEndAt: false,
     },
   ],
 ]);

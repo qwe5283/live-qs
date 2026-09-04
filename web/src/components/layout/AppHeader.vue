@@ -34,6 +34,7 @@ const connection = ref<"idle" | "ok" | "error">("idle");
 const title = computed(() => {
   if (route.path.startsWith("/usage")) return "应用使用";
   if (route.path.startsWith("/health")) return "运动健康";
+  if (route.path.startsWith("/spending")) return "消费支出";
   if (route.path.startsWith("/credentials")) return "凭据管理";
   if (route.path.startsWith("/settings")) return "设置";
   return "总览";
