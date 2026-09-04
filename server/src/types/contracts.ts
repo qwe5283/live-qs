@@ -14,6 +14,7 @@ export interface EventRow {
   capture_timezone: string | null;
   capture_offset_minutes: number | null;
   invalidated: boolean | null;
+  correction: { corrected_at: string; reason: string | null } | null;
   source_kind: string | null;
   source_record_id: string | null;
   device_platform: string | null;

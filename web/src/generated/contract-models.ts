@@ -3,6 +3,8 @@
 // Run `npm --prefix contracts run generate`; do not edit by hand.
 
 export interface ProtocolModels {
+  CorrectionField: CorrectionField;
+  CorrectionImpact: CorrectionImpact;
   CredentialCreated: CredentialCreated;
   CredentialCreateRequest: CredentialCreateRequest;
   CredentialKind: CredentialKind;
@@ -18,6 +20,8 @@ export interface ProtocolModels {
   EventAcknowledgement: EventAcknowledgement;
   EventBatchRequest: EventBatchRequest;
   EventBatchResponse: EventBatchResponse;
+  EventCorrectionRequest: EventCorrectionRequest;
+  EventCorrectionResult: EventCorrectionResult;
   EventPage: EventPage;
   HeartbeatActivity: HeartbeatActivity;
   HeartbeatRequest: HeartbeatRequest;
@@ -38,6 +42,46 @@ export interface ProtocolModels {
   UsageDeviceMetrics: UsageDeviceMetrics;
   UsageMetrics: UsageMetrics;
   UsageWeekReport: UsageWeekReport;
+}
+
+export interface CorrectionField {
+  /**
+   * Dotted path of one contract-approved structured field, such as payload.amount.value,
+   * payload.category, payload.pending_confirmation, or start_at. The correctable set is
+   * governed per registered event type by the payload registry; identity, source, device,
+   * provenance, and free text are never correctable.
+   */
+  path: string;
+  /**
+   * Replacement value for the field. Types are validated against the event's registered
+   * schema; an invalid merged payload is rejected.
+   */
+  value: any;
+}
+
+export interface CorrectionImpact {
+  /**
+   * Report-day ranges whose derived summaries rebuild on the next read.
+   */
+  affected_ranges: CorrectionImpactAffectedRange[];
+  /**
+   * Metric key whose derived results the correction touches, such as usage.app_minutes or
+   * payment.transaction_totals.
+   */
+  metric: string;
+  /**
+   * Number of normalized day results the correction affects.
+   */
+  result_count: number;
+  /**
+   * IANA report timezone the affected ranges resolve in.
+   */
+  timezone: string;
+}
+
+export interface CorrectionImpactAffectedRange {
+  from: string;
+  to: string;
 }
 
 export interface CredentialCreateRequest {
@@ -249,6 +293,7 @@ export interface VersionedEvent {
    * IANA timezone observed at capture.
    */
   capture_timezone: string;
+  correction?: CorrectionProvenance;
   device: Device;
   /**
    * Exclusive UTC instant when known.
@@ -271,6 +316,22 @@ export interface VersionedEvent {
    * Inclusive UTC instant.
    */
   start_at: string;
+}
+
+/**
+ * Present only when the latest valid revision is a manual Owner correction; absent means
+ * the latest revision is the device's automatic interpretation. The original observation,
+ * its source, and the full revision history stay archived regardless.
+ */
+export interface CorrectionProvenance {
+  /**
+   * UTC instant at which the Owner submitted the manual correction.
+   */
+  corrected_at: string;
+  /**
+   * Optional Owner-provided reason recorded with the correction; null when none was given.
+   */
+  reason: null | string;
 }
 
 export interface Device {
@@ -466,6 +527,52 @@ export interface EventBatchResponse {
   results: EventAcknowledgement[];
 }
 
+export interface EventCorrectionRequest {
+  /**
+   * Structured field corrections to apply. Omitted or empty is allowed only when the request
+   * changes the invalidation state.
+   */
+  fields?: CorrectionField[];
+  /**
+   * Marks the observation invalid (a false positive) so it leaves default timeline views and
+   * statistics while staying retained and auditable. Omitted keeps the current validity; a
+   * request that neither changes fields nor the invalidation state is rejected.
+   */
+  invalidate?: boolean;
+  /**
+   * Optional Owner-provided reason recorded in the audit trail; never device raw text.
+   */
+  reason?: null | string;
+}
+
+export interface EventCorrectionResult {
+  /**
+   * Dotted paths of the fields this correction changed.
+   */
+  changed_fields: string[];
+  /**
+   * UTC instant at which the correction was applied.
+   */
+  corrected_at: string;
+  event: VersionedEvent;
+  /**
+   * Per affected metric, the report-day ranges and result count that rebuild.
+   */
+  impact: CorrectionImpact[];
+  /**
+   * Validity of the latest revision after this correction.
+   */
+  invalidated: boolean;
+  /**
+   * The recorded reason, or null when the correction carried none.
+   */
+  reason: null | string;
+  /**
+   * Revision allocated by this correction in the reserved manual-correction space.
+   */
+  revision: number;
+}
+
 export interface EventPage {
   context: QueryContext;
   data: VersionedEvent[];
@@ -657,7 +764,7 @@ export interface SourcePolicyImpact {
    * Report-day ranges whose normalized selection differs between the old and new policy.
    * Empty when no stored observation competes differently.
    */
-  affected_ranges: AffectedRange[];
+  affected_ranges: SourcePolicyImpactAffectedRange[];
   from_version: number;
   /**
    * Metric key whose priority changed.
@@ -675,7 +782,7 @@ export interface SourcePolicyImpact {
   to_version: number;
 }
 
-export interface AffectedRange {
+export interface SourcePolicyImpactAffectedRange {
   from: string;
   to: string;
 }

@@ -88,11 +88,33 @@
     "invalidated": {
       "type": "boolean"
     },
+    "correction": {
+      "$ref": "#/$defs/correction"
+    },
     "payload": {
       "type": "object"
     }
   },
   "$defs": {
+    "correction": {
+      "title": "Correction Provenance",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["corrected_at", "reason"],
+      "description": "Present only when the latest valid revision is a manual Owner correction; absent means the latest revision is the device's automatic interpretation. The original observation, its source, and the full revision history stay archived regardless.",
+      "properties": {
+        "corrected_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$",
+          "description": "UTC instant at which the Owner submitted the manual correction."
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "description": "Optional Owner-provided reason recorded with the correction; null when none was given."
+        }
+      }
+    },
     "source": {
       "type": "object",
       "additionalProperties": false,

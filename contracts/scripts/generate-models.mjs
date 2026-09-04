@@ -174,7 +174,7 @@ function formatKotlin(source) {
   return source
     .replace(
       /import kotlinx\.serialization\.\*\nimport kotlinx\.serialization\.json\.\*\nimport kotlinx\.serialization\.descriptors\.\*\nimport kotlinx\.serialization\.encoding\.\*\n/,
-      "import kotlinx.serialization.SerialName\nimport kotlinx.serialization.Serializable\nimport kotlinx.serialization.json.JsonObject\n",
+      "import kotlinx.serialization.SerialName\nimport kotlinx.serialization.Serializable\nimport kotlinx.serialization.json.JsonObject\nimport kotlinx.serialization.json.JsonElement\n",
     )
     .replace(/(data|enum) class ([A-Za-z0-9_]+) \(/g, "$1 class $2(")
     .replace(

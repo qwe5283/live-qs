@@ -107,6 +107,13 @@
               <span>{{ record.eventId }}</span>
             </a-tooltip>
           </template>
+          <template v-else-if="column.key === 'provenanceKind'">
+            <a-tag v-if="record.manual" color="purple">人工修正</a-tag>
+            <a-tag v-else color="default">自动分类</a-tag>
+          </template>
+          <template v-else-if="column.key === 'actions'">
+            <a-button size="small" @click="openCorrection(record.raw)">修正</a-button>
+          </template>
           <template v-else>{{ record[column.key] }}</template>
         </template>
       </a-table>
@@ -117,6 +124,8 @@
         @click="loadMoreEvents"
       >加载更多</a-button>
     </section>
+
+    <EventCorrectionModal :event="correctingEvent" @corrected="onCorrected" @closed="correctingEvent = null" />
   </div>
 </template>
 
@@ -132,6 +141,7 @@ import type { VersionedEvent, UsageDayReport, UsageWeekReport } from "../generat
 import type { UsageAppsResponse, UsageTimelineResponse } from "../api/types";
 import BaseChart from "../components/charts/BaseChart.vue";
 import EmptyState from "../components/common/EmptyState.vue";
+import EventCorrectionModal from "../components/common/EventCorrectionModal.vue";
 import MetricCard from "../components/common/MetricCard.vue";
 import SourcePolicyPanel from "../components/common/SourcePolicyPanel.vue";
 import { formatCaptureZone, formatMinutes, formatUtcText, todayInTimezone } from "../utils/date";
@@ -160,10 +170,12 @@ const eventColumns = [
   { title: "应用", dataIndex: "app" },
   { title: "设备", dataIndex: "device" },
   { title: "事件", dataIndex: "eventId", key: "eventId" },
+  { title: "解释", key: "provenanceKind" },
   { title: "采集时区", dataIndex: "captureZone" },
   { title: "时长", dataIndex: "duration" },
   { title: "状态", dataIndex: "state" },
   { title: "同步时间", dataIndex: "synced" },
+  { title: "操作", key: "actions" },
 ];
 
 const weekRows = computed(() => (weekReport.value?.days ?? []).map((day) => ({
@@ -250,6 +262,8 @@ const eventRows = computed(() => events.value.map((event) => ({
   device: `${event.device.platform} · ${event.device.id}`,
   eventId: event.event_id.slice(0, 8),
   fullEventId: event.event_id,
+  manual: event.correction !== undefined,
+  raw: event,
   captureZone: formatCaptureZone(event.capture_timezone, event.capture_offset_minutes),
   duration: formatMinutes((event.payload.duration?.value ?? 0) / 60_000),
   state: [
@@ -260,6 +274,20 @@ const eventRows = computed(() => events.value.map((event) => ({
   ].filter(Boolean).join(" · "),
   synced: formatUtcText(event.provenance.observed_at),
 })));
+
+const correctingEvent = ref<VersionedEvent | null>(null);
+
+function openCorrection(event: VersionedEvent) {
+  correctingEvent.value = event;
+}
+
+async function onCorrected() {
+  correctingEvent.value = null;
+  // Key time or classification corrections rebuild the derived summaries; the
+  // compute-on-read reports are refetched so every view shows the latest valid
+  // revision's numbers.
+  await loadReport();
+}
 
 async function loadEvents(cursor?: string) {
   const report = dayReport.value;

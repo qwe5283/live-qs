@@ -12,9 +12,16 @@ package com.ailife.android.generated
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class ProtocolModels(
+    @SerialName("CorrectionField")
+    val correctionField: CorrectionField,
+
+    @SerialName("CorrectionImpact")
+    val correctionImpact: CorrectionImpact,
+
     @SerialName("CredentialCreated")
     val credentialCreated: CredentialCreated,
 
@@ -59,6 +66,12 @@ data class ProtocolModels(
 
     @SerialName("EventBatchResponse")
     val eventBatchResponse: EventBatchResponse,
+
+    @SerialName("EventCorrectionRequest")
+    val eventCorrectionRequest: EventCorrectionRequest,
+
+    @SerialName("EventCorrectionResult")
+    val eventCorrectionResult: EventCorrectionResult,
 
     @SerialName("EventPage")
     val eventPage: EventPage,
@@ -119,6 +132,55 @@ data class ProtocolModels(
 
     @SerialName("UsageWeekReport")
     val usageWeekReport: UsageWeekReport
+)
+
+@Serializable
+data class CorrectionField(
+    /**
+     * Dotted path of one contract-approved structured field, such as payload.amount.value,
+     * payload.category, payload.pending_confirmation, or start_at. The correctable set is
+     * governed per registered event type by the payload registry; identity, source, device,
+     * provenance, and free text are never correctable.
+     */
+    val path: String,
+
+    /**
+     * Replacement value for the field. Types are validated against the event's registered
+     * schema; an invalid merged payload is rejected.
+     */
+    val value: JsonElement?
+)
+
+@Serializable
+data class CorrectionImpact(
+    /**
+     * Report-day ranges whose derived summaries rebuild on the next read.
+     */
+    @SerialName("affected_ranges")
+    val affectedRanges: List<CorrectionImpactAffectedRange>,
+
+    /**
+     * Metric key whose derived results the correction touches, such as usage.app_minutes or
+     * payment.transaction_totals.
+     */
+    val metric: String,
+
+    /**
+     * Number of normalized day results the correction affects.
+     */
+    @SerialName("result_count")
+    val resultCount: Long,
+
+    /**
+     * IANA report timezone the affected ranges resolve in.
+     */
+    val timezone: String
+)
+
+@Serializable
+data class CorrectionImpactAffectedRange(
+    val from: String,
+    val to: String
 )
 
 @Serializable
@@ -413,6 +475,7 @@ data class VersionedEvent(
     @SerialName("capture_timezone")
     val captureTimezone: String,
 
+    val correction: CorrectionProvenance? = null,
     val device: Device,
 
     /**
@@ -447,6 +510,25 @@ data class VersionedEvent(
      */
     @SerialName("start_at")
     val startAt: String
+)
+
+/**
+ * Present only when the latest valid revision is a manual Owner correction; absent means
+ * the latest revision is the device's automatic interpretation. The original observation,
+ * its source, and the full revision history stay archived regardless.
+ */
+@Serializable
+data class CorrectionProvenance(
+    /**
+     * UTC instant at which the Owner submitted the manual correction.
+     */
+    @SerialName("corrected_at")
+    val correctedAt: String,
+
+    /**
+     * Optional Owner-provided reason recorded with the correction; null when none was given.
+     */
+    val reason: String? = null
 )
 
 @Serializable
@@ -717,6 +799,64 @@ data class EventBatchResponse(
 )
 
 @Serializable
+data class EventCorrectionRequest(
+    /**
+     * Structured field corrections to apply. Omitted or empty is allowed only when the request
+     * changes the invalidation state.
+     */
+    val fields: List<CorrectionField>? = null,
+
+    /**
+     * Marks the observation invalid (a false positive) so it leaves default timeline views and
+     * statistics while staying retained and auditable. Omitted keeps the current validity; a
+     * request that neither changes fields nor the invalidation state is rejected.
+     */
+    val invalidate: Boolean? = null,
+
+    /**
+     * Optional Owner-provided reason recorded in the audit trail; never device raw text.
+     */
+    val reason: String? = null
+)
+
+@Serializable
+data class EventCorrectionResult(
+    /**
+     * Dotted paths of the fields this correction changed.
+     */
+    @SerialName("changed_fields")
+    val changedFields: List<String>,
+
+    /**
+     * UTC instant at which the correction was applied.
+     */
+    @SerialName("corrected_at")
+    val correctedAt: String,
+
+    val event: VersionedEvent,
+
+    /**
+     * Per affected metric, the report-day ranges and result count that rebuild.
+     */
+    val impact: List<CorrectionImpact>,
+
+    /**
+     * Validity of the latest revision after this correction.
+     */
+    val invalidated: Boolean,
+
+    /**
+     * The recorded reason, or null when the correction carried none.
+     */
+    val reason: String? = null,
+
+    /**
+     * Revision allocated by this correction in the reserved manual-correction space.
+     */
+    val revision: Long
+)
+
+@Serializable
 data class EventPage(
     val context: QueryContext,
     val data: List<VersionedEvent>,
@@ -969,7 +1109,7 @@ data class SourcePolicyImpact(
      * Empty when no stored observation competes differently.
      */
     @SerialName("affected_ranges")
-    val affectedRanges: List<AffectedRange>,
+    val affectedRanges: List<SourcePolicyImpactAffectedRange>,
 
     @SerialName("from_version")
     val fromVersion: Long,
@@ -996,7 +1136,7 @@ data class SourcePolicyImpact(
 )
 
 @Serializable
-data class AffectedRange(
+data class SourcePolicyImpactAffectedRange(
     val from: String,
     val to: String
 )

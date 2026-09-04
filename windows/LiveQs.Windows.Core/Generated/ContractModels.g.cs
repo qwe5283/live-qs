@@ -23,6 +23,12 @@ using System.Globalization;
 
 public partial class ProtocolModels
 {
+    [JsonPropertyName("CorrectionField")]
+    public CorrectionField CorrectionField { get; set; }
+
+    [JsonPropertyName("CorrectionImpact")]
+    public CorrectionImpact CorrectionImpact { get; set; }
+
     [JsonPropertyName("CredentialCreated")]
     public CredentialCreated CredentialCreated { get; set; }
 
@@ -67,6 +73,12 @@ public partial class ProtocolModels
 
     [JsonPropertyName("EventBatchResponse")]
     public EventBatchResponse EventBatchResponse { get; set; }
+
+    [JsonPropertyName("EventCorrectionRequest")]
+    public EventCorrectionRequest EventCorrectionRequest { get; set; }
+
+    [JsonPropertyName("EventCorrectionResult")]
+    public EventCorrectionResult EventCorrectionResult { get; set; }
 
     [JsonPropertyName("EventPage")]
     public EventPage EventPage { get; set; }
@@ -129,6 +141,64 @@ public partial class ProtocolModels
     public UsageWeekReport UsageWeekReport { get; set; }
 }
 
+public partial class CorrectionField
+{
+    /// <summary>
+    /// Dotted path of one contract-approved structured field, such as payload.amount.value,
+    /// payload.category, payload.pending_confirmation, or start_at. The correctable set is
+    /// governed per registered event type by the payload registry; identity, source, device,
+    /// provenance, and free text are never correctable.
+    /// </summary>
+    [JsonPropertyName("path")]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    public string Path { get; set; }
+
+    /// <summary>
+    /// Replacement value for the field. Types are validated against the event's registered
+    /// schema; an invalid merged payload is rejected.
+    /// </summary>
+    [JsonPropertyName("value")]
+    public object Value { get; set; }
+}
+
+public partial class CorrectionImpact
+{
+    /// <summary>
+    /// Report-day ranges whose derived summaries rebuild on the next read.
+    /// </summary>
+    [JsonPropertyName("affected_ranges")]
+    public CorrectionImpactAffectedRange[] AffectedRanges { get; set; }
+
+    /// <summary>
+    /// Metric key whose derived results the correction touches, such as usage.app_minutes or
+    /// payment.transaction_totals.
+    /// </summary>
+    [JsonPropertyName("metric")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string Metric { get; set; }
+
+    /// <summary>
+    /// Number of normalized day results the correction affects.
+    /// </summary>
+    [JsonPropertyName("result_count")]
+    public long ResultCount { get; set; }
+
+    /// <summary>
+    /// IANA report timezone the affected ranges resolve in.
+    /// </summary>
+    [JsonPropertyName("timezone")]
+    public string Timezone { get; set; }
+}
+
+public partial class CorrectionImpactAffectedRange
+{
+    [JsonPropertyName("from")]
+    public string From { get; set; }
+
+    [JsonPropertyName("to")]
+    public string To { get; set; }
+}
+
 public partial class CredentialCreateRequest
 {
     /// <summary>
@@ -153,7 +223,7 @@ public partial class CredentialCreateRequest
     /// Owner-chosen label, such as a collector or agent name.
     /// </summary>
     [JsonPropertyName("name")]
-    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(TentacledMinMaxLengthCheckConverter))]
     public string Name { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -291,7 +361,7 @@ public partial class HeartbeatActivity
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("application_id")]
-    [JsonConverter(typeof(TentacledMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(StickyMinMaxLengthCheckConverter))]
     public string? ApplicationId { get; set; }
 
     /// <summary>
@@ -300,7 +370,7 @@ public partial class HeartbeatActivity
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("application_label")]
-    [JsonConverter(typeof(TentacledMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(StickyMinMaxLengthCheckConverter))]
     public string? ApplicationLabel { get; set; }
 
     /// <summary>
@@ -410,6 +480,10 @@ public partial class VersionedEvent
     [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
     public string CaptureTimezone { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("correction")]
+    public CorrectionProvenance? Correction { get; set; }
+
     [JsonPropertyName("device")]
     public Device Device { get; set; }
 
@@ -451,6 +525,26 @@ public partial class VersionedEvent
     /// </summary>
     [JsonPropertyName("start_at")]
     public string StartAt { get; set; }
+}
+
+/// <summary>
+/// Present only when the latest valid revision is a manual Owner correction; absent means
+/// the latest revision is the device's automatic interpretation. The original observation,
+/// its source, and the full revision history stay archived regardless.
+/// </summary>
+public partial class CorrectionProvenance
+{
+    /// <summary>
+    /// UTC instant at which the Owner submitted the manual correction.
+    /// </summary>
+    [JsonPropertyName("corrected_at")]
+    public string CorrectedAt { get; set; }
+
+    /// <summary>
+    /// Optional Owner-provided reason recorded with the correction; null when none was given.
+    /// </summary>
+    [JsonPropertyName("reason")]
+    public string Reason { get; set; }
 }
 
 public partial class Device
@@ -548,7 +642,7 @@ public partial class Payload
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("merchant")]
-    [JsonConverter(typeof(StickyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(IndigoMinMaxLengthCheckConverter))]
     public string? Merchant { get; set; }
 
     /// <summary>
@@ -674,6 +768,75 @@ public partial class EventBatchResponse
     /// </summary>
     [JsonPropertyName("results")]
     public EventAcknowledgement[] Results { get; set; }
+}
+
+public partial class EventCorrectionRequest
+{
+    /// <summary>
+    /// Structured field corrections to apply. Omitted or empty is allowed only when the request
+    /// changes the invalidation state.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("fields")]
+    public CorrectionField[] Fields { get; set; }
+
+    /// <summary>
+    /// Marks the observation invalid (a false positive) so it leaves default timeline views and
+    /// statistics while staying retained and auditable. Omitted keeps the current validity; a
+    /// request that neither changes fields nor the invalidation state is rejected.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("invalidate")]
+    public bool? Invalidate { get; set; }
+
+    /// <summary>
+    /// Optional Owner-provided reason recorded in the audit trail; never device raw text.
+    /// </summary>
+    [JsonPropertyName("reason")]
+    [JsonConverter(typeof(IndecentMinMaxLengthCheckConverter))]
+    public string Reason { get; set; }
+}
+
+public partial class EventCorrectionResult
+{
+    /// <summary>
+    /// Dotted paths of the fields this correction changed.
+    /// </summary>
+    [JsonPropertyName("changed_fields")]
+    public string[] ChangedFields { get; set; }
+
+    /// <summary>
+    /// UTC instant at which the correction was applied.
+    /// </summary>
+    [JsonPropertyName("corrected_at")]
+    public string CorrectedAt { get; set; }
+
+    [JsonPropertyName("event")]
+    public VersionedEvent Event { get; set; }
+
+    /// <summary>
+    /// Per affected metric, the report-day ranges and result count that rebuild.
+    /// </summary>
+    [JsonPropertyName("impact")]
+    public CorrectionImpact[] Impact { get; set; }
+
+    /// <summary>
+    /// Validity of the latest revision after this correction.
+    /// </summary>
+    [JsonPropertyName("invalidated")]
+    public bool Invalidated { get; set; }
+
+    /// <summary>
+    /// The recorded reason, or null when the correction carried none.
+    /// </summary>
+    [JsonPropertyName("reason")]
+    public string Reason { get; set; }
+
+    /// <summary>
+    /// Revision allocated by this correction in the reserved manual-correction space.
+    /// </summary>
+    [JsonPropertyName("revision")]
+    public long Revision { get; set; }
 }
 
 public partial class EventPage
@@ -832,7 +995,7 @@ public partial class HeartbeatRequest
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("device_name")]
-    [JsonConverter(typeof(IndigoMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(HilariousMinMaxLengthCheckConverter))]
     public string? DeviceName { get; set; }
 
     /// <summary>
@@ -848,7 +1011,7 @@ public partial class OwnerPasswordRequest
     /// The Owner password. Never logged or stored in plaintext.
     /// </summary>
     [JsonPropertyName("password")]
-    [JsonConverter(typeof(IndecentMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(AmbitiousMinMaxLengthCheckConverter))]
     public string Password { get; set; }
 }
 
@@ -945,7 +1108,7 @@ public partial class SourcePolicyImpact
     /// Empty when no stored observation competes differently.
     /// </summary>
     [JsonPropertyName("affected_ranges")]
-    public AffectedRange[] AffectedRanges { get; set; }
+    public SourcePolicyImpactAffectedRange[] AffectedRanges { get; set; }
 
     [JsonPropertyName("from_version")]
     public long FromVersion { get; set; }
@@ -974,7 +1137,7 @@ public partial class SourcePolicyImpact
     public long ToVersion { get; set; }
 }
 
-public partial class AffectedRange
+public partial class SourcePolicyImpactAffectedRange
 {
     [JsonPropertyName("from")]
     public string From { get; set; }
@@ -1231,6 +1394,60 @@ public static class ContractJson
     };
 }
 
+internal class PurpleMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
+        if (value.Length >= 1 && value.Length <= 100)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length >= 1 && value.Length <= 100)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly PurpleMinMaxLengthCheckConverter Singleton = new PurpleMinMaxLengthCheckConverter();
+}
+
+internal class FluffyMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
+        if (value.Length >= 1)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length >= 1)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly FluffyMinMaxLengthCheckConverter Singleton = new FluffyMinMaxLengthCheckConverter();
+}
+
 internal class CredentialKindConverter : JsonConverter<CredentialKind>
 {
     public override bool CanConvert(Type t) => t == typeof(CredentialKind);
@@ -1265,7 +1482,7 @@ internal class CredentialKindConverter : JsonConverter<CredentialKind>
     public static readonly CredentialKindConverter Singleton = new CredentialKindConverter();
 }
 
-internal class PurpleMinMaxLengthCheckConverter : JsonConverter<string>
+internal class TentacledMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
 
@@ -1289,7 +1506,7 @@ internal class PurpleMinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly PurpleMinMaxLengthCheckConverter Singleton = new PurpleMinMaxLengthCheckConverter();
+    public static readonly TentacledMinMaxLengthCheckConverter Singleton = new TentacledMinMaxLengthCheckConverter();
 }
 
 internal class CredentialPrivacyCeilingConverter : JsonConverter<CredentialPrivacyCeiling>
@@ -1385,34 +1602,7 @@ internal class CredentialScopeConverter : JsonConverter<CredentialScope>
     public static readonly CredentialScopeConverter Singleton = new CredentialScopeConverter();
 }
 
-internal class FluffyMinMaxLengthCheckConverter : JsonConverter<string>
-{
-    public override bool CanConvert(Type t) => t == typeof(string);
-
-    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
-        if (value.Length >= 1)
-        {
-            return value;
-        }
-        throw new Exception("Cannot unmarshal type string");
-    }
-
-    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
-    {
-        if (value.Length >= 1)
-        {
-            JsonSerializer.Serialize(writer, value, options);
-            return;
-        }
-        throw new Exception("Cannot marshal type string");
-    }
-
-    public static readonly FluffyMinMaxLengthCheckConverter Singleton = new FluffyMinMaxLengthCheckConverter();
-}
-
-internal class TentacledMinMaxLengthCheckConverter : JsonConverter<string>
+internal class StickyMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
 
@@ -1436,7 +1626,7 @@ internal class TentacledMinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly TentacledMinMaxLengthCheckConverter Singleton = new TentacledMinMaxLengthCheckConverter();
+    public static readonly StickyMinMaxLengthCheckConverter Singleton = new StickyMinMaxLengthCheckConverter();
 }
 
 internal class PlatformConverter : JsonConverter<Platform>
@@ -1740,7 +1930,7 @@ internal class DurationUnitConverter : JsonConverter<DurationUnit>
     public static readonly DurationUnitConverter Singleton = new DurationUnitConverter();
 }
 
-internal class StickyMinMaxLengthCheckConverter : JsonConverter<string>
+internal class IndigoMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
 
@@ -1764,7 +1954,7 @@ internal class StickyMinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly StickyMinMaxLengthCheckConverter Singleton = new StickyMinMaxLengthCheckConverter();
+    public static readonly IndigoMinMaxLengthCheckConverter Singleton = new IndigoMinMaxLengthCheckConverter();
 }
 
 internal class PrivacyLevelConverter : JsonConverter<PrivacyLevel>
@@ -1894,6 +2084,33 @@ internal class StatusConverter : JsonConverter<Status>
     public static readonly StatusConverter Singleton = new StatusConverter();
 }
 
+internal class IndecentMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
+        if (value.Length <= 500)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length <= 500)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly IndecentMinMaxLengthCheckConverter Singleton = new IndecentMinMaxLengthCheckConverter();
+}
+
 internal class CompletenessConverter : JsonConverter<Completeness>
 {
     public override bool CanConvert(Type t) => t == typeof(Completeness);
@@ -1972,7 +2189,7 @@ internal class DataStateConverter : JsonConverter<DataState>
     public static readonly DataStateConverter Singleton = new DataStateConverter();
 }
 
-internal class IndigoMinMaxLengthCheckConverter : JsonConverter<string>
+internal class HilariousMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
 
@@ -1996,10 +2213,10 @@ internal class IndigoMinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly IndigoMinMaxLengthCheckConverter Singleton = new IndigoMinMaxLengthCheckConverter();
+    public static readonly HilariousMinMaxLengthCheckConverter Singleton = new HilariousMinMaxLengthCheckConverter();
 }
 
-internal class IndecentMinMaxLengthCheckConverter : JsonConverter<string>
+internal class AmbitiousMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
 
@@ -2023,7 +2240,7 @@ internal class IndecentMinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly IndecentMinMaxLengthCheckConverter Singleton = new IndecentMinMaxLengthCheckConverter();
+    public static readonly AmbitiousMinMaxLengthCheckConverter Singleton = new AmbitiousMinMaxLengthCheckConverter();
 }
 
 public class DateOnlyConverter : JsonConverter<DateOnly>

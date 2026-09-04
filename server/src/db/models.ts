@@ -29,6 +29,10 @@ const eventSchema = new Schema({
   capture_timezone: { type: String, default: null },
   capture_offset_minutes: { type: Number, default: null },
   invalidated: { type: Boolean, default: null },
+  // Manual-correction provenance of the latest revision; null means the latest
+  // revision is the device's automatic interpretation. Only the correction
+  // service writes this column.
+  correction: { type: Schema.Types.Mixed, default: null },
   source_kind: { type: String, default: null },
   source_record_id: { type: String, default: null },
   device_platform: { type: String, default: null },

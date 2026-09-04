@@ -26,6 +26,7 @@ import {
 import type { SourcePolicyState } from "../source-policy/policy.js";
 import {
   ACTIVITY_EVENT_TYPES,
+  CORRECTION_REVISION_BASE,
   HEALTH_EVENT_TYPES,
   PAYMENT_EVENT_TYPES,
   REGISTERED_EVENT_TYPES,
@@ -95,9 +96,11 @@ export function readableEventTypes(allowedEventTypes?: string[], domainTypes: re
  * versioned protocol lack envelope columns and receive neutral defaults; rows
  * marked `private` are a legacy-only state the contract cannot represent and
  * are never returned. The payload was validated at ingest against the schema
- * registry and is passed through opaquely here.
+ * registry and is passed through opaquely here. A stored correction provenance
+ * marks the latest revision as a manual Owner interpretation; its absence
+ * marks the device's automatic interpretation.
  */
-function toEnvelopeEvent(row: EventRow): VersionedEvent {
+export function toEnvelopeEvent(row: EventRow): VersionedEvent {
   const envelope: VersionedEvent = {
     event_id: row.id,
     event_type: (row.type ?? "activity.interval") as VersionedEvent["event_type"],
@@ -119,6 +122,12 @@ function toEnvelopeEvent(row: EventRow): VersionedEvent {
     payload: row.data as unknown as VersionedEvent["payload"],
   };
   if (row.end_at) envelope.end_at = row.end_at.toISOString();
+  if (row.correction && typeof row.correction.corrected_at === "string") {
+    envelope.correction = {
+      corrected_at: row.correction.corrected_at,
+      reason: typeof row.correction.reason === "string" ? row.correction.reason : null,
+    };
+  }
   return envelope;
 }
 
@@ -155,10 +164,17 @@ export async function listEvents(query: EventRangeQuery): Promise<EventPage> {
   const restrictedTypes = readableEventTypes(query.allowedEventTypes, domainTypes);
 
   const baselineTypes = query.completenessBaseline ?? REGISTERED_EVENT_TYPES;
+  // Default reads return the latest valid interpretation: invalidated facts
+  // (Owner-marked false positives) leave timeline views and statistics while
+  // staying retained for audit. Both filters exclude them, so the
+  // completeness comparison never counts an invalidation as credential
+  // withholding.
+  const invalidatedFilter = { invalidated: { $ne: true } };
   const unrestrictedFilter: Record<string, unknown> = {
     user_id: query.userId,
     start_at: { $gte: query.from, $lt: query.to },
     privacy_level: { $in: privacyLevelsForRead() },
+    ...invalidatedFilter,
     type: query.eventType
       ? { $eq: query.eventType, $in: baselineTypes }
       : { $in: baselineTypes },
@@ -167,6 +183,7 @@ export async function listEvents(query: EventRangeQuery): Promise<EventPage> {
     user_id: query.userId,
     start_at: { $gte: query.from, $lt: query.to },
     privacy_level: { $in: privacyLevels },
+    ...invalidatedFilter,
     type: query.eventType ? { $eq: query.eventType, $in: restrictedTypes } : { $in: restrictedTypes },
   };
 
@@ -227,6 +244,7 @@ function restrictedRangeFilter(query: EventRangeQuery): Record<string, unknown> 
     user_id: query.userId,
     start_at: { $gte: query.from, $lt: query.to },
     privacy_level: { $in: privacyLevelsForRead(query.privacyCeiling) },
+    invalidated: { $ne: true },
     type: { $in: readableEventTypes(query.allowedEventTypes, domainTypes) },
   };
 }
@@ -316,6 +334,13 @@ function parseBatchItem(raw: unknown): ParsedBatchResult {
   const revisionResult = rawRevision(raw);
   if (typeof event.revision !== "number" || !Number.isInteger(event.revision) || event.revision < 1) {
     return { error: { code: "invalid_event", message: "revision must be a positive integer." }, eventId, revision: revisionResult };
+  }
+  if (event.revision >= CORRECTION_REVISION_BASE) {
+    return {
+      error: { code: "revision_reserved", message: "Device revisions must stay below the reserved manual-correction revision space." },
+      eventId,
+      revision: revisionResult,
+    };
   }
   if (typeof event.event_type !== "string" || !(REGISTERED_EVENT_TYPES as readonly string[]).includes(event.event_type)) {
     return { error: { code: "unknown_event_type", message: "The event type is not registered." }, eventId, revision: revisionResult };

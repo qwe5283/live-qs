@@ -478,6 +478,49 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /api/v1/events/{event_id}/corrections:
+    post:
+      operationId: correctEvent
+      summary: Submit an auditable Owner correction for one event
+      description: >-
+        Owner-session-only correction of contract-approved structured fields
+        (governed per registered event type), with an optional reason and an
+        optional invalidation flag for false observations. The correction keeps
+        the event identity and allocates a revision in a reserved high space
+        above every device revision, so any later device re-upload of the same
+        event answers stale_revision and can never overwrite a human
+        interpretation or resurrect an invalidated fact. The superseded
+        revision is archived before replacement (facts are never destroyed),
+        the response reports the affected report-day ranges, and an audit
+        record captures actor, time, changed fields, and reason without any
+        credential material. Default queries then return the latest valid
+        revision marked with its correction provenance.
+      tags: [Events]
+      security:
+        - OwnerSession: []
+      parameters:
+        - $ref: "#/components/parameters/EventId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventCorrectionRequest"
+      responses:
+        "200":
+          description: The correction was applied; the corrected event and its impact are returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventCorrectionResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/metrics/usage/day:
     get:
       operationId: getUsageDayMetrics
@@ -633,6 +676,14 @@ components:
       schema:
         type: string
         minLength: 1
+    EventId:
+      name: event_id
+      in: path
+      required: true
+      description: Stable identifier of the logical event to correct.
+      schema:
+        type: string
+        format: uuid
     From:
       name: from
       in: query
@@ -1343,6 +1394,118 @@ components:
             never modifies raw observations.
           items:
             $ref: "#/components/schemas/SourcePolicyEntry"
+    CorrectionField:
+      title: Correction Field
+      type: object
+      additionalProperties: false
+      required: [path, value]
+      properties:
+        path:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: "^[a-zA-Z][a-zA-Z0-9_.]*$"
+          description: >-
+            Dotted path of one contract-approved structured field, such as
+            payload.amount.value, payload.category, payload.pending_confirmation,
+            or start_at. The correctable set is governed per registered event
+            type by the payload registry; identity, source, device, provenance,
+            and free text are never correctable.
+        value:
+          description: >-
+            Replacement value for the field. Types are validated against the
+            event's registered schema; an invalid merged payload is rejected.
+    EventCorrectionRequest:
+      title: Event Correction Request
+      type: object
+      additionalProperties: false
+      properties:
+        fields:
+          type: array
+          description: >-
+            Structured field corrections to apply. Omitted or empty is allowed
+            only when the request changes the invalidation state.
+          items:
+            $ref: "#/components/schemas/CorrectionField"
+        reason:
+          type: [string, "null"]
+          maxLength: 500
+          description: >-
+            Optional Owner-provided reason recorded in the audit trail; never
+            device raw text.
+        invalidate:
+          type: boolean
+          default: false
+          description: >-
+            Marks the observation invalid (a false positive) so it leaves
+            default timeline views and statistics while staying retained and
+            auditable. Omitted keeps the current validity; a request that
+            neither changes fields nor the invalidation state is rejected.
+    CorrectionImpact:
+      title: Correction Impact
+      type: object
+      additionalProperties: false
+      required: [metric, timezone, affected_ranges, result_count]
+      properties:
+        metric:
+          type: string
+          minLength: 1
+          description: >-
+            Metric key whose derived results the correction touches, such as
+            usage.app_minutes or payment.transaction_totals.
+        timezone:
+          type: string
+          description: IANA report timezone the affected ranges resolve in.
+        affected_ranges:
+          type: array
+          description: Report-day ranges whose derived summaries rebuild on the next read.
+          items:
+            type: object
+            additionalProperties: false
+            required: [from, to]
+            properties:
+              from:
+                type: string
+                format: date
+              to:
+                type: string
+                format: date
+        result_count:
+          type: integer
+          minimum: 0
+          description: Number of normalized day results the correction affects.
+    EventCorrectionResult:
+      title: Event Correction Result
+      type: object
+      additionalProperties: false
+      required: [event, changed_fields, reason, invalidated, corrected_at, revision, impact]
+      properties:
+        event:
+          $ref: "#/components/schemas/Event"
+        changed_fields:
+          type: array
+          description: Dotted paths of the fields this correction changed.
+          items:
+            type: string
+        reason:
+          type: [string, "null"]
+          description: The recorded reason, or null when the correction carried none.
+        invalidated:
+          type: boolean
+          description: Validity of the latest revision after this correction.
+        corrected_at:
+          type: string
+          format: date-time
+          description: UTC instant at which the correction was applied.
+        revision:
+          type: integer
+          minimum: 1
+          description: Revision allocated by this correction in the reserved manual-correction space.
+        impact:
+          type: array
+          description: Per affected metric, the report-day ranges and result count that rebuild.
+          items:
+            $ref: "#/components/schemas/CorrectionImpact"
     UsageMetrics:
       title: Usage Metrics
       type: object

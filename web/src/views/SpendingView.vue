@@ -26,7 +26,7 @@
       show-icon
     >
       <template #message>
-        {{ pendingTransactions.length }} 笔交易缺少稳定来源标识且疑似重复（金额、商户、方向与发生时间相近），已标记待确认并作为独立观测保留——系统从不仅凭金额与时间合并交易。Owner 确认与修正操作由可审计修正流程（票据 11）交付，当前版本仅标记展示。
+        {{ pendingTransactions.length }} 笔交易缺少稳定来源标识且疑似重复（金额、商户、方向与发生时间相近），已标记待确认并作为独立观测保留——系统从不仅凭金额与时间合并交易。可在交易记录中「确认」或通过「修正」改写商户/分类后确认，驳回误报请用「修正」中的作废开关（均记入审计）。
       </template>
     </a-alert>
 
@@ -106,6 +106,22 @@
             <a-tag v-if="record.pending" color="orange">待确认</a-tag>
             <a-tag v-else color="green">已确认来源</a-tag>
           </template>
+          <template v-else-if="column.key === 'provenanceKind'">
+            <a-tag v-if="record.manual" color="purple">人工修正</a-tag>
+            <a-tag v-else color="default">自动提取</a-tag>
+          </template>
+          <template v-else-if="column.key === 'actions'">
+            <a-space size="small">
+              <a-button size="small" @click="openCorrection(record.raw)">修正</a-button>
+              <a-popconfirm
+                v-if="record.pending"
+                title="确认这笔交易不是重复观测？"
+                @confirm="confirmPending(record.raw)"
+              >
+                <a-button size="small" type="link">确认</a-button>
+              </a-popconfirm>
+            </a-space>
+          </template>
           <template v-else-if="column.key === 'eventId'">
             <a-tooltip :title="record.fullEventId">
               <span>{{ record.eventId }}</span>
@@ -126,6 +142,8 @@
         来源种类：{{ provenanceText }}
       </a-typography-text>
     </section>
+
+    <EventCorrectionModal :event="correctingEvent" @corrected="onCorrected" @closed="correctingEvent = null" />
   </div>
 </template>
 
@@ -135,10 +153,13 @@ import { computed, ref } from "vue";
 import { DownCircleOutlined, FileDoneOutlined, PayCircleOutlined, ShopOutlined } from "@ant-design/icons-vue";
 import dayjs, { type Dayjs } from "dayjs";
 import { fetchPaymentEvents } from "../api/payment";
+import { submitCorrection } from "../api/corrections";
 import { fetchOwnerSettings } from "../api/settings";
 import type { QueryContext, VersionedEvent } from "../generated/contract-models";
+import { message } from "ant-design-vue";
 import BaseChart from "../components/charts/BaseChart.vue";
 import EmptyState from "../components/common/EmptyState.vue";
+import EventCorrectionModal from "../components/common/EventCorrectionModal.vue";
 import MetricCard from "../components/common/MetricCard.vue";
 import SourcePolicyPanel from "../components/common/SourcePolicyPanel.vue";
 import {
@@ -338,11 +359,13 @@ const timelineColumns = [
   { title: "商户", dataIndex: "merchant" },
   { title: "分类", dataIndex: "category" },
   { title: "状态", key: "status" },
+  { title: "解释", key: "provenanceKind" },
   { title: "设备", dataIndex: "device" },
   { title: "事件", dataIndex: "eventId", key: "eventId" },
   { title: "采集时区", dataIndex: "captureZone" },
   { title: "修订", dataIndex: "revision" },
   { title: "同步时间（UTC）", dataIndex: "synced" },
+  { title: "操作", key: "actions" },
 ];
 
 const timelineRows = computed(() => transactions.value.map((event, index) => ({
@@ -353,6 +376,8 @@ const timelineRows = computed(() => transactions.value.map((event, index) => ({
   merchant: event.payload.merchant,
   category: categoryLabels[event.payload.category ?? "uncategorized"] ?? event.payload.category,
   pending: event.payload.pending_confirmation === true,
+  manual: event.correction !== undefined,
+  raw: event,
   device: `${event.device.platform} · ${event.device.id}`,
   eventId: event.event_id.slice(0, 8),
   fullEventId: event.event_id,
@@ -360,6 +385,31 @@ const timelineRows = computed(() => transactions.value.map((event, index) => ({
   revision: `修订 ${event.revision}`,
   synced: formatUtcText(event.provenance.observed_at),
 })));
+
+const correctingEvent = ref<VersionedEvent | null>(null);
+
+function openCorrection(event: VersionedEvent) {
+  correctingEvent.value = event;
+}
+
+/** One-click confirmation of a suspected-duplicate transaction via a higher revision. */
+async function confirmPending(event: VersionedEvent) {
+  try {
+    await submitCorrection(event.event_id, {
+      fields: [{ path: "payload.pending_confirmation", value: false }],
+      reason: "确认非重复观测",
+    });
+    message.success("已确认来源，待确认标记解除。");
+    await load();
+  } catch (err) {
+    message.error(err instanceof Error ? err.message : String(err));
+  }
+}
+
+async function onCorrected() {
+  correctingEvent.value = null;
+  await load();
+}
 
 const provenanceText = computed(() => provenance.value.join("、"));
 

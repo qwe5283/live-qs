@@ -7,6 +7,7 @@ import { errorHandler, notFound } from "./middleware/errors.js";
 import { assignRequestId } from "./middleware/request-id.js";
 import { adminRouter } from "./modules/admin/routes.js";
 import { contextRouter, publicRouter } from "./modules/context/routes.js";
+import { correctionsRouter } from "./modules/corrections/routes.js";
 import { credentialsRouter } from "./modules/credentials/routes.js";
 import { eventsRouter, healthEventsRouter, paymentEventsRouter } from "./modules/events/routes.js";
 import { healthRouter } from "./modules/health/routes.js";
@@ -36,6 +37,7 @@ export function createApp(env: Env, clock: Clock = systemClock) {
   app.use("/api/v1/owner", ownerRouter(env));
   app.use("/api/v1/credentials", credentialsRouter(env));
   app.use("/api/v1/events", eventsRouter(env));
+  app.use("/api/v1/events", correctionsRouter(env));
   app.use("/api/v1/metrics", metricsRouter(env));
   app.use("/api/v1/source-policy", sourcePolicyRouter(env));
   app.use("/api/v1", heartbeatsRouter(env, clock));

@@ -133,6 +133,46 @@ const paymentTransactionPayloadSchema = z.strictObject({
   pending_confirmation: z.boolean(),
 });
 
+/**
+ * Manual Owner corrections allocate revisions in a reserved high space above
+ * every device revision. Device checkpoint streams increment small counters,
+ * so once a correction exists any device re-upload compares lower under the
+ * existing three-way revision compare and answers `stale_revision`: a device
+ * revision can never overwrite a human interpretation or resurrect an
+ * invalidated fact, and batch idempotency semantics stay untouched.
+ */
+export const CORRECTION_REVISION_BASE = 1_000_000_000;
+
+/**
+ * Dotted paths the Owner may correct per registered event type: the
+ * contract-approved structured interpretation fields only (SPEC implementation
+ * decision 20). Identity, source, device, provenance, privacy, and
+ * finalization state are never correctable; free text does not exist in any
+ * registered payload. Time corrections address the envelope bounds
+ * (`start_at`/`end_at`); a declared duration is re-derived from the corrected
+ * bounds, never hand-edited.
+ */
+export const CORRECTABLE_PATHS: Record<RegisteredEventType, readonly string[]> = {
+  "activity.interval": ["payload.application_label", "payload.subject_id", "payload.is_afk", "start_at", "end_at"],
+  "health.heartrate.sample": ["payload.beats_per_minute", "start_at"],
+  "health.sleep.session": ["start_at", "end_at"],
+  "health.step.sample": ["payload.count.value", "start_at", "end_at"],
+  "payment.transaction": [
+    "payload.amount.value",
+    "payload.amount.currency",
+    "payload.direction",
+    "payload.merchant",
+    "payload.category",
+    "payload.pending_confirmation",
+    "start_at",
+  ],
+};
+
+/** The contract-approved correctable paths of one registered event type. */
+export function correctablePathsFor(eventType: RegisteredEventType): readonly string[] {
+  return CORRECTABLE_PATHS[eventType];
+}
+
 export interface RegisteredEventEnvelope {
   eventType: RegisteredEventType;
   schemaVersion: number;

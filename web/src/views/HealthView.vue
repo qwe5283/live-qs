@@ -119,6 +119,13 @@
               <span>{{ record.eventId }}</span>
             </a-tooltip>
           </template>
+          <template v-else-if="column.key === 'provenanceKind'">
+            <a-tag v-if="record.manual" color="purple">人工修正</a-tag>
+            <a-tag v-else color="default">自动采集</a-tag>
+          </template>
+          <template v-else-if="column.key === 'actions'">
+            <a-button size="small" @click="openCorrection(record.raw)">修正</a-button>
+          </template>
           <template v-else>{{ record[column.key] }}</template>
         </template>
       </a-table>
@@ -134,6 +141,8 @@
         来源种类：{{ provenanceText }}
       </a-typography-text>
     </section>
+
+    <EventCorrectionModal :event="correctingEvent" @corrected="onCorrected" @closed="correctingEvent = null" />
   </div>
 </template>
 
@@ -147,6 +156,7 @@ import { fetchOwnerSettings } from "../api/settings";
 import type { QueryContext, VersionedEvent } from "../generated/contract-models";
 import BaseChart from "../components/charts/BaseChart.vue";
 import EmptyState from "../components/common/EmptyState.vue";
+import EventCorrectionModal from "../components/common/EventCorrectionModal.vue";
 import MetricCard from "../components/common/MetricCard.vue";
 import SourcePolicyPanel from "../components/common/SourcePolicyPanel.vue";
 import {
@@ -385,9 +395,11 @@ const timelineColumns = [
   { title: "来源应用（origin）", dataIndex: "origin" },
   { title: "设备", dataIndex: "device" },
   { title: "事件", dataIndex: "eventId", key: "eventId" },
+  { title: "解释", key: "provenanceKind" },
   { title: "采集时区", dataIndex: "captureZone" },
   { title: "修订", dataIndex: "revision" },
   { title: "同步时间（UTC）", dataIndex: "synced" },
+  { title: "操作", key: "actions" },
 ];
 
 const timelineRows = computed(() => events.value.map((event, index) => ({
@@ -400,10 +412,25 @@ const timelineRows = computed(() => events.value.map((event, index) => ({
   device: `${event.device.platform} · ${event.device.id}`,
   eventId: event.event_id.slice(0, 8),
   fullEventId: event.event_id,
+  manual: event.correction !== undefined,
+  raw: event,
   captureZone: formatCaptureZone(event.capture_timezone, event.capture_offset_minutes),
   revision: `修订 ${event.revision}`,
   synced: formatUtcText(event.provenance.observed_at),
 })));
+
+const correctingEvent = ref<VersionedEvent | null>(null);
+
+function openCorrection(event: VersionedEvent) {
+  correctingEvent.value = event;
+}
+
+async function onCorrected() {
+  correctingEvent.value = null;
+  // Derived summaries rebuild on read; refetch so every view agrees on the
+  // latest valid revision.
+  await load();
+}
 
 const provenanceText = computed(() => provenance.value.join("、"));
 
