@@ -191,6 +191,7 @@ const KIND_SCOPES: Record<"device_token" | "query_token", Array<{ label: string;
     { label: "events:read（读取活动事件）", value: "events:read" },
     { label: "health:read（读取健康观测）", value: "health:read" },
     { label: "payment:read（读取支付交易）", value: "payment:read" },
+    { label: "context:read（读取当前上下文）", value: "context:read" },
   ],
 };
 
@@ -199,7 +200,7 @@ const scopeOptions = computed(() => KIND_SCOPES[form.kind]);
 const scopeHint = computed(() =>
   form.kind === "device_token"
     ? "设备令牌只能持有设备 scopes。采集 Health Connect 数据需要 health:write 且隐私上限需为 sensitive；采集支付需要 payment:write；本地语义分类需要 rules:read 以下载规则集。"
-    : "查询令牌只能持有读 scopes。读取健康数据需要 health:read，读取支付需要 payment:read，且隐私上限需为 sensitive。",
+    : "查询令牌只能持有读 scopes。读取健康数据需要 health:read，读取支付需要 payment:read（隐私上限需为 sensitive），读取设备当前状态与同步诊断需要 context:read。",
 );
 
 function defaultScopesFor(kind: "device_token" | "query_token"): string[] {

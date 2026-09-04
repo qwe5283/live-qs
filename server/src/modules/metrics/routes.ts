@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Request } from "express";
 import type { Env } from "../../config/env.js";
 import { sessionOrCredentialAuth } from "../../middleware/auth.js";
+import { recordQueryAudit } from "../../shared/audit.js";
 import { isValidTimezone } from "../../shared/date-utils.js";
 import { AppError } from "../../shared/errors.js";
 import type { CredentialAuthContext } from "../credentials/service.js";
@@ -46,16 +47,40 @@ export function metricsRouter(env: Env): Router {
   router.get("/usage/day", auth, async (req, res) => {
     const date = requiredDate(req.query.date);
     const timezone = await resolveReportTimezone(req, env);
-    const report = await usageDayReport(env.DEFAULT_USER_ID, date, timezone, metricsReadOptions(res.locals.credential as CredentialAuthContext | undefined));
+    const credential = res.locals.credential as CredentialAuthContext | undefined;
+    const report = await usageDayReport(env.DEFAULT_USER_ID, date, timezone, metricsReadOptions(credential));
     if (!report) throw new AppError(400, "The query parameter date must be a real calendar date.", "invalid_request");
+    await recordQueryAudit({
+      userId: env.DEFAULT_USER_ID,
+      credential,
+      path: req.path,
+      from: report.context.from,
+      to: report.context.to,
+      timezone,
+      dataTypes: ["usage.metrics"],
+      resultCount: 1,
+      completeness: report.context.completeness,
+    });
     res.json(report);
   });
 
   router.get("/usage/week", auth, async (req, res) => {
     const date = requiredDate(req.query.date);
     const timezone = await resolveReportTimezone(req, env);
-    const report = await usageWeekReport(env.DEFAULT_USER_ID, date, timezone, metricsReadOptions(res.locals.credential as CredentialAuthContext | undefined));
+    const credential = res.locals.credential as CredentialAuthContext | undefined;
+    const report = await usageWeekReport(env.DEFAULT_USER_ID, date, timezone, metricsReadOptions(credential));
     if (!report) throw new AppError(400, "The query parameter date must be a real calendar date.", "invalid_request");
+    await recordQueryAudit({
+      userId: env.DEFAULT_USER_ID,
+      credential,
+      path: req.path,
+      from: report.context.from,
+      to: report.context.to,
+      timezone,
+      dataTypes: ["usage.metrics"],
+      resultCount: 1,
+      completeness: report.context.completeness,
+    });
     res.json(report);
   });
 

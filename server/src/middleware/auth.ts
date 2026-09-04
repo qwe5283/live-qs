@@ -9,6 +9,7 @@ import {
 import { readSessionToken, resolveOwnerSession } from "../modules/owner/service.js";
 import { recordAuditLog } from "../shared/audit.js";
 import { sendError } from "../shared/errors.js";
+import { rateLimitDecision, sendRateLimited } from "./rate-limit.js";
 
 function bearer(req: Request): string | null {
   return req.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null;
@@ -64,6 +65,26 @@ export function credentialBearerAuth(env: Env, options: { scope?: CredentialScop
         token_expired: "The bearer credential has expired.",
       };
       sendError(res, 401, resolved.denial, messages[resolved.denial] ?? "The bearer credential was rejected.");
+      return;
+    }
+    // Rate limiting is per credential and applies to every use, so a
+    // hammering credential is throttled even when its requests would be
+    // denied for another reason.
+    const decision = rateLimitDecision(resolved.id, env.RATE_LIMIT_PER_MINUTE);
+    if (!decision.allowed) {
+      await recordAuditLog({
+        userId: resolved.userId,
+        actorType: resolved.kind === "device_token" ? "device" : "query",
+        actorId: resolved.id,
+        action: "credential.deny",
+        status: "error",
+        details: {
+          reason: "rate_limited",
+          credential_id: resolved.id,
+          path: req.path,
+        },
+      });
+      sendRateLimited(res, decision.retryAfterSeconds);
       return;
     }
     const requiredScopes: string[] = options.anyScope ?? (options.scope ? [options.scope] : []);

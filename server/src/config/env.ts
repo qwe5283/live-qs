@@ -11,6 +11,8 @@ const schema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(8760).default(168),
   COOKIE_SECURE: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   CORS_ORIGINS: z.string().default("http://localhost:5173"),
+  RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(100_000).default(120),
+  QUERY_TOKEN_MAX_RANGE_DAYS: z.coerce.number().int().min(1).max(36_500).default(366),
 });
 
 export type Env = z.infer<typeof schema>;

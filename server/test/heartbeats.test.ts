@@ -39,6 +39,8 @@ function buildEnv(overrides: Partial<Env> = {}): Env {
     SESSION_TTL_HOURS: 168,
     COOKIE_SECURE: false,
     CORS_ORIGINS: "http://localhost:5173",
+    RATE_LIMIT_PER_MINUTE: 120,
+    QUERY_TOKEN_MAX_RANGE_DAYS: 366,
     ...overrides,
   };
 }
@@ -141,7 +143,7 @@ describe("heartbeat recording", () => {
     expect(device.activity).toEqual({ application_id: "winword.exe", application_label: "Word", is_afk: false });
   });
 
-  it("rejects heartbeats from Owner sessions and query tokens, and rejects status reads without an Owner session", async (ctx) => {
+  it("rejects heartbeats from Owner sessions and query tokens, and rejects status reads without the context:read scope", async (ctx) => {
     if (!dbReady) return ctx.skip();
     const deviceToken = await createToken("device_token", "Desk collector");
     const queryToken = await createToken("query_token", "Analyst agent");
@@ -150,8 +152,10 @@ describe("heartbeat recording", () => {
       .send(heartbeatBody()).expect(401);
     await request(app).post("/api/v1/heartbeats").set("Authorization", `Bearer ${queryToken}`)
       .send(heartbeatBody()).expect(403);
-    await request(app).get("/api/v1/status").set("Authorization", `Bearer ${deviceToken}`).expect(401);
-    await request(app).get("/api/v1/status").set("Authorization", `Bearer ${queryToken}`).expect(401);
+    // Device tokens can never hold context:read; a query token without it is
+    // scope-denied. A query token with context:read is allowed (ticket 16).
+    await request(app).get("/api/v1/status").set("Authorization", `Bearer ${deviceToken}`).expect(403);
+    await request(app).get("/api/v1/status").set("Authorization", `Bearer ${queryToken}`).expect(403);
     await request(app).get("/api/v1/status").expect(401);
   });
 

@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { Env } from "../../config/env.js";
-import { credentialBearerAuth, ownerAuth } from "../../middleware/auth.js";
+import { credentialBearerAuth, sessionOrCredentialAuth } from "../../middleware/auth.js";
+import { recordQueryAudit } from "../../shared/audit.js";
 import type { CredentialAuthContext } from "../credentials/service.js";
 import type { Clock } from "../../shared/clock.js";
 import { AppError } from "../../shared/errors.js";
@@ -35,9 +36,10 @@ const heartbeatRequestSchema = z.strictObject({
 
 /**
  * Heartbeat routes sit in front of the global Owner guard: posting is a
- * Device-Token-only capability, while reading statuses is Owner-session-only.
- * Heartbeats are ephemeral projections; they never touch the events
- * collection, rollups, or metrics.
+ * Device-Token-only capability, while reading statuses is an Owner-session or
+ * context:read query-token capability (the current-context read of the
+ * read-only AI Skill). Heartbeats are ephemeral projections; they never touch
+ * the events collection, rollups, or metrics.
  */
 export function heartbeatsRouter(env: Env, clock: Clock): Router {
   const router = Router();
@@ -71,8 +73,16 @@ export function heartbeatsRouter(env: Env, clock: Clock): Router {
     res.status(204).end();
   });
 
-  router.get("/status", ownerAuth(), async (req, res) => {
-    res.json(await listDeviceStatuses(env.DEFAULT_USER_ID, clock));
+  router.get("/status", sessionOrCredentialAuth(env, { scope: "context:read" }), async (req, res) => {
+    const statuses = await listDeviceStatuses(env.DEFAULT_USER_ID, clock);
+    await recordQueryAudit({
+      userId: env.DEFAULT_USER_ID,
+      credential: res.locals.credential as CredentialAuthContext | undefined,
+      path: req.path,
+      dataTypes: ["device_status"],
+      resultCount: statuses.devices.length,
+    });
+    res.json(statuses);
   });
 
   return router;

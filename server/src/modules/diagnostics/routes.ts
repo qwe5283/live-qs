@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { Env } from "../../config/env.js";
-import { credentialBearerAuth, ownerAuth } from "../../middleware/auth.js";
+import { credentialBearerAuth, sessionOrCredentialAuth } from "../../middleware/auth.js";
+import { recordQueryAudit } from "../../shared/audit.js";
 import type { CredentialAuthContext } from "../credentials/service.js";
 import type { Clock } from "../../shared/clock.js";
 import { AppError } from "../../shared/errors.js";
@@ -36,9 +37,11 @@ const syncDiagnosticsReportSchema = z.strictObject({
 
 /**
  * Sync-diagnostics routes sit in front of the global Owner guard: pushing is
- * a Device-Token-only capability, while reading snapshots is
- * Owner-session-only. Diagnostics are operational visibility; they never
- * touch the events collection, rollups, or metrics.
+ * a Device-Token-only capability, while reading snapshots is an Owner-session
+ * or context:read query-token capability — together with the device status
+ * this read tells a read-only agent whether missing data is absent activity,
+ * an uncollected backlog, or a broken sync. Diagnostics are operational
+ * visibility; they never touch the events collection, rollups, or metrics.
  */
 export function diagnosticsRouter(env: Env, clock: Clock): Router {
   const router = Router();
@@ -72,8 +75,16 @@ export function diagnosticsRouter(env: Env, clock: Clock): Router {
     res.status(204).end();
   });
 
-  router.get("/diagnostics/sync", ownerAuth(), async (req, res) => {
-    res.json(await listSyncDiagnostics(env.DEFAULT_USER_ID, clock));
+  router.get("/diagnostics/sync", sessionOrCredentialAuth(env, { scope: "context:read" }), async (req, res) => {
+    const snapshots = await listSyncDiagnostics(env.DEFAULT_USER_ID, clock);
+    await recordQueryAudit({
+      userId: env.DEFAULT_USER_ID,
+      credential: res.locals.credential as CredentialAuthContext | undefined,
+      path: req.path,
+      dataTypes: ["sync_diagnostics"],
+      resultCount: snapshots.devices.length,
+    });
+    res.json(snapshots);
   });
 
   return router;

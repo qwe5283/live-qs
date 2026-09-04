@@ -4,6 +4,7 @@ import type { Request } from "express";
 import type { Env } from "../../config/env.js";
 import type { CredentialScope } from "../../generated/contract-models.js";
 import { credentialBearerAuth, sessionOrCredentialAuth } from "../../middleware/auth.js";
+import { recordQueryAudit } from "../../shared/audit.js";
 import type { CredentialAuthContext } from "../credentials/service.js";
 import { AppError } from "../../shared/errors.js";
 import { batchUpsertEvents, enrichDomainPage, eventTypesForReadScopes, listEvents } from "./service.js";
@@ -61,6 +62,25 @@ function parseEventQuery(req: Request, userId: string): EventRangeQuery {
   return query;
 }
 
+/**
+ * Bounded time range for credential reads (SPEC implementation decision 25):
+ * a query token may only request a span up to the configured maximum, so one
+ * Agent query can never sweep the whole history in a single request. Owner
+ * sessions are unrestricted; the metrics endpoints are inherently day- or
+ * week-bounded and need no check here.
+ */
+function assertBoundedCredentialRange(query: EventRangeQuery, env: Env, credential: CredentialAuthContext | undefined): void {
+  if (!credential) return;
+  const maxMs = env.QUERY_TOKEN_MAX_RANGE_DAYS * 86_400_000;
+  if (query.to.getTime() - query.from.getTime() > maxMs) {
+    throw new AppError(
+      400,
+      `The query range must not exceed ${env.QUERY_TOKEN_MAX_RANGE_DAYS} days for this credential.`,
+      "range_too_large",
+    );
+  }
+}
+
 const batchRequestSchema = z.strictObject({
   events: z.array(z.unknown()).min(1).max(100),
 });
@@ -71,6 +91,7 @@ export function eventsRouter(env: Env): Router {
   router.get("/", sessionOrCredentialAuth(env, { scope: "events:read" }), async (req, res) => {
     const query = parseEventQuery(req, env.DEFAULT_USER_ID);
     const credential = res.locals.credential as CredentialAuthContext | undefined;
+    assertBoundedCredentialRange(query, env, credential);
     if (credential) {
       query.privacyCeiling = credential.privacy_ceiling;
       // Domain scopes bound what a credential read may return: a query token
@@ -79,7 +100,19 @@ export function eventsRouter(env: Env): Router {
       query.scopeGrantedEventTypes = eventTypesForReadScopes(credential.scopes);
       if (credential.allowed_event_types.length > 0) query.allowedEventTypes = credential.allowed_event_types;
     }
-    res.json(await listEvents(query));
+    const page = await listEvents(query);
+    await recordQueryAudit({
+      userId: env.DEFAULT_USER_ID,
+      credential,
+      path: req.path,
+      from: query.from.toISOString(),
+      to: query.to.toISOString(),
+      timezone: query.timezone,
+      dataTypes: query.eventType ? [query.eventType] : (query.scopeGrantedEventTypes ?? []),
+      resultCount: page.data.length,
+      completeness: page.context.completeness,
+    });
+    res.json(page);
   });
 
   router.post("/batch", credentialBearerAuth(env, { anyScope: ["events:write", "health:write", "payment:write"] }), async (req, res) => {
@@ -111,9 +144,10 @@ function domainEventsRouter(env: Env, domainTypes: RegisteredEventType[], readSc
 
   router.get("/events", sessionOrCredentialAuth(env, { scope: readScope }), async (req, res) => {
     const query = parseEventQuery(req, env.DEFAULT_USER_ID);
+    const credential = res.locals.credential as CredentialAuthContext | undefined;
+    assertBoundedCredentialRange(query, env, credential);
     query.scopeGrantedEventTypes = domainTypeStrings;
     query.completenessBaseline = domainTypeStrings;
-    const credential = res.locals.credential as CredentialAuthContext | undefined;
     if (credential) {
       query.privacyCeiling = credential.privacy_ceiling;
       query.scopeGrantedEventTypes = eventTypesForReadScopes(credential.scopes).filter(
@@ -121,7 +155,19 @@ function domainEventsRouter(env: Env, domainTypes: RegisteredEventType[], readSc
       );
       if (credential.allowed_event_types.length > 0) query.allowedEventTypes = credential.allowed_event_types;
     }
-    res.json(await enrichDomainPage(query, await listEvents(query), domain));
+    const page = await enrichDomainPage(query, await listEvents(query), domain);
+    await recordQueryAudit({
+      userId: env.DEFAULT_USER_ID,
+      credential,
+      path: req.path,
+      from: query.from.toISOString(),
+      to: query.to.toISOString(),
+      timezone: query.timezone,
+      dataTypes: query.eventType ? [query.eventType] : (query.scopeGrantedEventTypes ?? []),
+      resultCount: page.data.length,
+      completeness: page.context.completeness,
+    });
+    res.json(page);
   });
 
   return router;

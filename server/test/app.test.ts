@@ -13,6 +13,8 @@ const env: Env = {
   SESSION_TTL_HOURS: 168,
   COOKIE_SECURE: false,
   CORS_ORIGINS: "http://localhost:5173",
+  RATE_LIMIT_PER_MINUTE: 120,
+  QUERY_TOKEN_MAX_RANGE_DAYS: 366,
 };
 
 describe("application", () => {

@@ -46,6 +46,11 @@ const targets = [
     format: formatTypeScript,
   },
   {
+    path: "skill/src/generated/contract-models.ts",
+    arguments: ["--lang", "typescript", "--just-types", "--prefer-unions"],
+    format: formatTypeScript,
+  },
+  {
     path: "windows/LiveQs.Windows.Core/Generated/ContractModels.g.cs",
     arguments: [
       "--lang", "csharp",

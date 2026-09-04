@@ -15,11 +15,13 @@ const TOKEN_PREFIX: Record<CredentialKind, string> = {
  * (events:write for activity, health:write for Health Connect observations,
  * payment:write for payment transactions) plus rules:read, the read-only
  * distribution scope that lets a collector download the classification rule
- * set; query tokens hold the matching read scopes.
+ * set; query tokens hold the matching read scopes plus context:read, the
+ * current-context read (device status and sync diagnostics) that tells a
+ * read-only agent what the system presently observes.
  */
 export const KIND_SCOPES: Record<CredentialKind, CredentialScope[]> = {
   device_token: ["events:write", "health:write", "payment:write", "rules:read"],
-  query_token: ["events:read", "health:read", "payment:read"],
+  query_token: ["events:read", "health:read", "payment:read", "context:read"],
 };
 
 export interface CredentialInput {
@@ -76,13 +78,13 @@ export function assertScopesMatchKind(kind: CredentialKind, scopes: string[]): v
   const unique = new Set(scopes);
   if (scopes.length === 0 || unique.size !== scopes.length
     || !scopes.every((scope) => (allowed as string[]).includes(scope))) {
-    throw new AppError(
-      400,
-      kind === "device_token"
-        ? "A device token may only carry device scopes: events:write, health:write, payment:write, rules:read."
-        : "A query token may only carry read scopes: events:read, health:read, payment:read.",
-      "invalid_scope",
-    );
+      throw new AppError(
+        400,
+        kind === "device_token"
+          ? "A device token may only carry device scopes: events:write, health:write, payment:write, rules:read."
+          : "A query token may only carry read scopes: events:read, health:read, payment:read, context:read.",
+        "invalid_scope",
+      );
   }
 }
 

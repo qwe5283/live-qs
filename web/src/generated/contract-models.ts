@@ -262,7 +262,7 @@ export interface CredentialCreateRequest {
   /**
    * Non-empty subset of the actor type's scopes: device tokens may hold events:write,
    * health:write, payment:write, and rules:read; query tokens may hold events:read,
-   * health:read, and payment:read.
+   * health:read, payment:read, and context:read.
    */
   scopes: CredentialScope[];
 }
@@ -284,6 +284,9 @@ export type CredentialPrivacyCeiling = "normal" | "sensitive" | "private";
  * health:write, and payment:write restrict which event domains a device token may upload
  * (activity intervals, Health Connect observations, payment transactions), while
  * events:read, health:read, and payment:read restrict which domains a query token may read.
+ * context:read grants a query token the current-context reads (device status and sync
+ * diagnostics) that tell what the system presently observes and whether missing data is
+ * uncollected or a broken sync; it carries no historical or management capability.
  * rules:read lets a device token download the classification rule set so it can classify
  * locally; it is device-only, because rule distribution is a collector concern and the
  * management plane stays with the Owner session. A credential never holds a scope outside
@@ -296,7 +299,8 @@ export type CredentialScope =
   | "health:read"
   | "payment:write"
   | "payment:read"
-  | "rules:read";
+  | "rules:read"
+  | "context:read";
 
 export interface CredentialCreated {
   credential: CredentialView;

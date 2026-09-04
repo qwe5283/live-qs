@@ -475,7 +475,7 @@ public partial class CredentialCreateRequest
     /// <summary>
     /// Non-empty subset of the actor type's scopes: device tokens may hold events:write,
     /// health:write, payment:write, and rules:read; query tokens may hold events:read,
-    /// health:read, and payment:read.
+    /// health:read, payment:read, and context:read.
     /// </summary>
     [JsonPropertyName("scopes")]
     public CredentialScope[] Scopes { get; set; }
@@ -1954,12 +1954,15 @@ public enum CredentialPrivacyCeiling { Normal, Private, Sensitive };
 /// health:write, and payment:write restrict which event domains a device token may upload
 /// (activity intervals, Health Connect observations, payment transactions), while
 /// events:read, health:read, and payment:read restrict which domains a query token may read.
+/// context:read grants a query token the current-context reads (device status and sync
+/// diagnostics) that tell what the system presently observes and whether missing data is
+/// uncollected or a broken sync; it carries no historical or management capability.
 /// rules:read lets a device token download the classification rule set so it can classify
 /// locally; it is device-only, because rule distribution is a collector concern and the
 /// management plane stays with the Owner session. A credential never holds a scope outside
 /// its actor type.
 /// </summary>
-public enum CredentialScope { EventsRead, EventsWrite, HealthRead, HealthWrite, PaymentRead, PaymentWrite, RulesRead };
+public enum CredentialScope { ContextRead, EventsRead, EventsWrite, HealthRead, HealthWrite, PaymentRead, PaymentWrite, RulesRead };
 
 /// <summary>
 /// Collector platform the heartbeat originates from.
@@ -2425,6 +2428,8 @@ internal class CredentialScopeConverter : JsonConverter<CredentialScope>
         var value = reader.GetString();
         switch (value)
         {
+            case "context:read":
+                return CredentialScope.ContextRead;
             case "events:read":
                 return CredentialScope.EventsRead;
             case "events:write":
@@ -2447,6 +2452,9 @@ internal class CredentialScopeConverter : JsonConverter<CredentialScope>
     {
         switch (value)
         {
+            case CredentialScope.ContextRead:
+                JsonSerializer.Serialize(writer, "context:read", options);
+                return;
             case CredentialScope.EventsRead:
                 JsonSerializer.Serialize(writer, "events:read", options);
                 return;

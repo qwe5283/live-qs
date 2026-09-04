@@ -13,6 +13,7 @@ This is one Monorepo whose components version independently:
 - `web/`: Vue 3/Vite.
 - `windows/`: .NET 9/WPF and SQLite.
 - `android/`: Kotlin/Compose.
+- `skill/`: read-only AI Skill over the public query API (TypeScript; see `skill/SKILL.md`).
 - `server_deprecated/`, `windows_deprecated/`: read-only references; do not extend them or preserve their contracts.
 - `.scratch/`: local specifications and tickets.
 
@@ -32,9 +33,11 @@ Run all checks with `.\scripts\check.ps1`, or pass a component name, such as
 - `cd web; npm run build`
 - `cd windows; dotnet test LiveQs.Windows.sln`
 - `cd android; .\gradlew.bat lint test assembleDebug`
+- `cd skill; npm run typecheck; npm test; npm run build`
 
 Install Node dependencies per component with `npm --prefix contracts ci`,
-`npm --prefix server ci`, and `npm --prefix web ci`. Do not add a root npm
+`npm --prefix server ci`, `npm --prefix web ci`, and `npm --prefix skill ci`.
+Do not add a root npm
 workspace; components own their dependency locks and versions.
 
 ## Architecture, Security, and Testing

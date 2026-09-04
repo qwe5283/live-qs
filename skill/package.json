@@ -1,0 +1,24 @@
+{
+  "name": "@live-qs/skill",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "description": "Read-only AI Skill over the LiveQs public query API: a thin, deterministic wrapper that never computes statistics and never mutates data.",
+  "bin": {
+    "liveqs-skill": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
