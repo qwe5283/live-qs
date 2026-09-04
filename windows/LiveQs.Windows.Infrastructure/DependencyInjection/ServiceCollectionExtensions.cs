@@ -39,7 +39,18 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IUpdateStatusService, UpdateStatusService>();
         services.AddSingleton<IUpdateCheckClient, UpdateCheckClient>();
         services.AddSingleton<IUpdateStateStore, UpdateStateStore>();
-        services.AddHttpClient("cloud-sync", client => client.Timeout = TimeSpan.FromSeconds(15));
+        // LiveQs is a local-first LAN app: all traffic to the Owner-configured
+        // server URL must bypass the system proxy. Day 0 incident (2026-09-04):
+        // a local accelerator (Watt Toolkit, 127.0.0.1:26561) sat in the system
+        // proxy, intercepted calls to http://localhost:8787, and answered with
+        // its own 404 — sync, heartbeats, and diagnostics never reached the
+        // server while sampling kept running.
+        // The update channel below deliberately KEEPS the system proxy: fetching
+        // the release manifest from GitHub is exactly the traffic such
+        // accelerators exist to help with, so it must not bypass them. This
+        // asymmetry is a product constraint, not an oversight.
+        services.AddHttpClient("cloud-sync", client => client.Timeout = TimeSpan.FromSeconds(15))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { UseProxy = false });
         services.AddHttpClient("update-check", client => client.Timeout = TimeSpan.FromSeconds(100));
         // Update artifacts are large self-contained packages; the manifest
         // stays on the short-timeout client and the download gets its own.
