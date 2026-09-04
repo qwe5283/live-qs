@@ -1,5 +1,6 @@
 using LiveQs.Windows.Core.Activity;
 using LiveQs.Windows.Core.Analytics;
+using LiveQs.Windows.Core.Classification;
 using LiveQs.Windows.Core.Common;
 using LiveQs.Windows.Core.Contracts;
 using LiveQs.Windows.Core.Settings;
@@ -66,6 +67,26 @@ public interface ISyncQueueStore
     Task<int> GetPendingSyncCountAsync(CancellationToken cancellationToken = default);
     /// <summary>Stable identity of the local database, used to derive event identifiers that never collide with a wiped store.</summary>
     Task<string> GetInstallIdAsync(CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Records the classification outcome the server now holds for a segment
+    /// after an acknowledged upload, so explicit reclassification passes can
+    /// detect unchanged events instead of burning no-op revisions.
+    /// </summary>
+    Task RecordUploadOutcomeAsync(long segmentId, ClassificationOutcome? outcome, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Persists an acknowledged reclassification: the segment's local revision
+    /// advances to the uploaded one and its recorded upload outcome is replaced.
+    /// </summary>
+    Task RecordReclassifiedAsync(long segmentId, int revision, ClassificationOutcome? outcome, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Finalized, non-AFK segments already acknowledged by the server (out of
+    /// the outbox), ordered by segment identity after <paramref name="afterSegmentId"/>,
+    /// within the optional task range. These are the segments explicit
+    /// reclassification may re-evaluate; still-open checkpoints stay owned by
+    /// the live checkpoint stream.
+    /// </summary>
+    Task<IReadOnlyList<SyncQueueItem>> GetReclassificationCandidatesAsync(
+        DateTimeOffset? from, DateTimeOffset? to, int limit, long afterSegmentId, CancellationToken cancellationToken = default);
 }
 
 public interface IActivityMaintenance
@@ -99,17 +120,39 @@ public interface IClassificationRuleStore
 /// <summary>
 /// Refreshes the cached rule set from the service at a bounded cadence. A
 /// failed refresh is never fatal: the last successful version stays cached
-/// and executable.
+/// and executable. A reclassification pass forces a refresh when its cached
+/// version is older than the task's target version.
 /// </summary>
 public interface IClassificationRuleSync
 {
-    Task<ClassificationRuleSet?> RefreshAsync(AppSettings settings, CancellationToken cancellationToken = default);
+    Task<ClassificationRuleSet?> RefreshAsync(AppSettings settings, CancellationToken cancellationToken = default, bool forceRefresh = false);
 }
 
 public interface ISyncClient
 {
     /// <summary>Uploads one batch and returns exactly one outcome per item; transport-level failure throws.</summary>
     Task<IReadOnlyList<SyncOutcome>> UploadAsync(IReadOnlyList<SyncQueueItem> items, AppSettings settings, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Uploads pre-computed reclassification decisions (same event identity,
+    /// bumped revision, re-interpreted classification) and records the local
+    /// consequence of each acknowledgement on its segment; returns exactly one
+    /// outcome per decision. Transport-level failure throws.
+    /// </summary>
+    Task<IReadOnlyList<SyncOutcome>> UploadReclassificationAsync(IReadOnlyList<Reclassification.ReclassificationDecision> decisions, AppSettings settings, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Device-side surface of explicit historical reclassification: polling for
+/// an open task and reporting outcome counts after a pass. The raw context
+/// never leaves the device; only counts and already-derived revisions travel.
+/// </summary>
+public interface IReclassificationClient
+{
+    /// <summary>The open task this device should process, or null when there is none or it was already reported.</summary>
+    Task<Reclassification.ReclassificationAssignment?> GetAssignmentAsync(AppSettings settings, CancellationToken cancellationToken = default);
+    /// <summary>Reports the outcome counts of a completed pass; a transport-level failure throws and the next pass re-reports.</summary>
+    Task ReportAsync(Guid taskId, Reclassification.ReclassificationReport report, AppSettings settings, CancellationToken cancellationToken = default);
 }
 
 public interface ISyncStatusService

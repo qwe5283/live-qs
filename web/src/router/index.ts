@@ -4,6 +4,7 @@ import UsageView from "../views/UsageView.vue";
 import HealthView from "../views/HealthView.vue";
 import SpendingView from "../views/SpendingView.vue";
 import ClassificationView from "../views/ClassificationView.vue";
+import ReclassificationView from "../views/ReclassificationView.vue";
 import CredentialsView from "../views/CredentialsView.vue";
 import SettingsView from "../views/SettingsView.vue";
 import LoginView from "../views/LoginView.vue";
@@ -19,6 +20,7 @@ export const router = createRouter({
     { path: "/health", name: "health", component: HealthView, meta: { requiresAuth: true } },
     { path: "/spending", name: "spending", component: SpendingView, meta: { requiresAuth: true } },
     { path: "/classification", name: "classification", component: ClassificationView, meta: { requiresAuth: true } },
+    { path: "/reclassification", name: "reclassification", component: ReclassificationView, meta: { requiresAuth: true } },
     { path: "/credentials", name: "credentials", component: CredentialsView, meta: { requiresAuth: true } },
     { path: "/settings", name: "settings", component: SettingsView, meta: { requiresAuth: true } },
     { path: "/login", name: "login", component: LoginView },

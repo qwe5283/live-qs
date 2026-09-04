@@ -55,6 +55,18 @@ tags:
       Every entity in this dictionary is Owner-approved; newly discovered
       project names stay on the device and are represented by opaque
       device-secret HMAC identifiers until the Owner approves an alias.
+  - name: Reclassification
+    description: >-
+      Explicit historical reclassification (SPEC implementation decision 19).
+      Saving rules affects only future observations; the Owner may start a
+      reclassification task so devices re-evaluate the locally retained raw
+      context of already uploaded activity and submit higher revisions through
+      the batch endpoint. The server never reclassifies by itself: raw titles
+      exist only on devices. Events whose raw context has aged out of device
+      retention are reported as unrecoverable instead of being silently
+      skipped, manual Owner corrections always win, and every task is audited
+      with the Owner, the target rule version, the time range, and the actual
+      impact counts.
 paths:
   /api/v1/owner/status:
     get:
@@ -719,6 +731,221 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /api/v1/classification/reclassification/estimate:
+    get:
+      operationId: estimateReclassification
+      summary: Estimate the scope an explicit reclassification could cover
+      description: >-
+        Owner-session-only dry run for an explicit historical reclassification
+        task. Reports the devices that uploaded in-scope activity, their event
+        counts, and the time ranges those events span, so the Owner sees the
+        expected impact before starting anything. The scope is finalized,
+        non-AFK activity intervals that still sit below the reserved
+        manual-correction revision space; invalidated observations and events
+        an Owner has manually corrected are never part of it. This is an upper
+        bound only: a device can actually re-evaluate an event only while its
+        raw local context is still within device retention, and anything
+        beyond that is reported as unrecoverable by the task, never silently
+        skipped. Nothing is modified by an estimate.
+      tags: [Reclassification]
+      security:
+        - OwnerSession: []
+      parameters:
+        - name: from
+          in: query
+          required: false
+          description: Inclusive UTC instant bounding the estimated scope.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Exclusive UTC instant bounding the estimated scope.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: The estimated devices, event counts, and time ranges.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReclassificationEstimate"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/classification/reclassification/tasks:
+    post:
+      operationId: createReclassificationTask
+      summary: Start an explicit historical reclassification task
+      description: >-
+        Owner-session-only and always an explicit action: creating the task
+        freezes the estimated scope at this moment and tells devices to
+        re-evaluate their locally retained raw context against the target rule
+        set version. Rule edits alone never change already uploaded events;
+        only revisions devices submit while working on a task do. The target
+        rule set version defaults to the currently published one and must not
+        exceed it. At most one task may be open at a time. The creation is
+        audited with the Owner, the target rule version, and the time range.
+      tags: [Reclassification]
+      security:
+        - OwnerSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReclassificationTaskCreateRequest"
+      responses:
+        "200":
+          description: The created open task with its frozen scope estimate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReclassificationTaskStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/classification/reclassification/tasks/current:
+    get:
+      operationId: getCurrentReclassificationTask
+      summary: Read the latest reclassification task with its progress
+      description: >-
+        Owner-session-only progress view of the latest reclassification task
+        (open or closed). Reports the aggregated scanned, reclassified,
+        unchanged, failed, and unrecoverable counts plus one entry per
+        reporting device; unrecoverable is computed by the server as the
+        frozen task scope minus what the device still found locally, so events
+        beyond device retention become explicitly visible. Returns no content
+        while no task was ever created.
+      tags: [Reclassification]
+      security:
+        - OwnerSession: []
+      responses:
+        "200":
+          description: The latest task with its progress and per-device reports.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReclassificationTaskStatus"
+        "204":
+          description: No reclassification task exists yet.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/classification/reclassification/tasks/assignment:
+    get:
+      operationId: getReclassificationTaskAssignment
+      summary: Read the reclassification task a device should work on
+      description: >-
+        Device-token endpoint requiring the rules:read scope (the same
+        distribution scope as the rule set, because executing a task means
+        re-executing rules locally). Returns the currently open task unless
+        this device has already reported it; devices poll it, refresh their
+        cached rule set to the target version, re-run their local engine over
+        locally retained finalized activity, submit higher revisions through
+        the batch endpoint, and report the outcome counts. Returns no content
+        when there is no open task or it was already reported.
+      tags: [Reclassification]
+      security:
+        - DeviceToken: []
+      x-required-scopes: [rules:read]
+      responses:
+        "200":
+          description: The open task this device should process.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReclassificationTaskAssignment"
+        "204":
+          description: No open task, or the open task was already reported by this device.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/classification/reclassification/tasks/{task_id}/device-reports:
+    post:
+      operationId: reportReclassificationTaskProgress
+      summary: Report one device's reclassification outcome counts
+      description: >-
+        Device-token endpoint requiring the rules:read scope. A device submits
+        its outcome counts after processing an assigned task: how many
+        in-scope events it still found locally (scanned), how many received a
+        higher revision (reclassified), how many needed no change (unchanged),
+        and how many uploads the server rejected (failed). Reporting the same
+        task twice replaces the previous report, so a retried pass converges.
+        Events whose raw context aged out of local retention are never claimed
+        by a device; the server reports them as unrecoverable. The report is
+        audited per device.
+      tags: [Reclassification]
+      security:
+        - DeviceToken: []
+      x-required-scopes: [rules:read]
+      parameters:
+        - $ref: "#/components/parameters/ReclassificationTaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReclassificationDeviceReportRequest"
+      responses:
+        "204":
+          description: The report was recorded and audited.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/classification/reclassification/tasks/{task_id}/close:
+    post:
+      operationId: closeReclassificationTask
+      summary: Close a reclassification task and audit its actual impact
+      description: >-
+        Owner-session-only completion of a reclassification task. Closing
+        writes the audit record with the Owner, the target rule version, the
+        time range, the Owner report timezone, and the actual impact counts
+        (scanned, reclassified, unchanged, failed, unrecoverable, and the
+        number of reporting devices). Affected derived summaries are rebuilt
+        on read, so every view already agrees with the submitted revisions.
+        Closing is idempotent.
+      tags: [Reclassification]
+      security:
+        - OwnerSession: []
+      parameters:
+        - $ref: "#/components/parameters/ReclassificationTaskId"
+      responses:
+        "200":
+          description: The closed task with its final progress statement.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReclassificationTaskStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 components:
   securitySchemes:
     OwnerSession:
@@ -756,6 +983,14 @@ components:
       in: path
       required: true
       description: Stable identifier of the logical event to correct.
+      schema:
+        type: string
+        format: uuid
+    ReclassificationTaskId:
+      name: task_id
+      in: path
+      required: true
+      description: Identifier of the reclassification task, as returned at creation.
       schema:
         type: string
         format: uuid
@@ -1779,6 +2014,223 @@ components:
           description: Per affected metric, the report-day ranges and result count that rebuild.
           items:
             $ref: "#/components/schemas/CorrectionImpact"
+    ReclassificationEstimateDevice:
+      title: Reclassification Estimate Device
+      type: object
+      additionalProperties: false
+      required: [device_id, platform, event_count, earliest_start_at, latest_start_at]
+      properties:
+        device_id:
+          type: string
+          minLength: 1
+          description: Server-bound device identity the in-scope events were uploaded with.
+        platform:
+          type: string
+          enum: [windows, android]
+          description: Collector platform the device reported its events with.
+        event_count:
+          type: integer
+          minimum: 1
+          description: >-
+            In-scope events uploaded by this device: finalized, non-AFK
+            activity intervals below the reserved manual-correction revision
+            space. This is the frozen upper bound a task holds this device
+            accountable for; events beyond the device's local retention show
+            up as unrecoverable instead of being reclassified.
+        earliest_start_at:
+          type: [string, "null"]
+          format: date-time
+          description: Earliest observed start of this device's in-scope events.
+        latest_start_at:
+          type: [string, "null"]
+          format: date-time
+          description: Latest observed start of this device's in-scope events.
+    ReclassificationEstimate:
+      title: Reclassification Estimate
+      type: object
+      additionalProperties: false
+      required: [generated_at, total_events, devices]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+          description: Instant the estimate was computed; a task freezes its own estimate at creation.
+        total_events:
+          type: integer
+          minimum: 0
+          description: In-scope events across all devices.
+        devices:
+          type: array
+          description: One entry per device holding in-scope events, ordered by device identity.
+          items:
+            $ref: "#/components/schemas/ReclassificationEstimateDevice"
+    ReclassificationTaskCreateRequest:
+      title: Reclassification Task Create Request
+      type: object
+      additionalProperties: false
+      properties:
+        target_rule_set_version:
+          type: integer
+          minimum: 1
+          description: >-
+            Rule set version devices must hold before re-evaluating. Defaults
+            to the currently published rule set version; a version above the
+            published one is rejected because no device could ever fetch it.
+        from:
+          type: string
+          format: date-time
+          description: Optional inclusive UTC instant bounding the task scope.
+        to:
+          type: string
+          format: date-time
+          description: Optional exclusive UTC instant bounding the task scope; must be later than from.
+    ReclassificationDeviceReportRequest:
+      title: Reclassification Device Report Request
+      type: object
+      additionalProperties: false
+      required: [platform, scanned, reclassified, unchanged, failed]
+      properties:
+        platform:
+          type: string
+          enum: [windows, android]
+        scanned:
+          type: integer
+          minimum: 0
+          description: In-scope events the device still found locally and re-evaluated.
+        reclassified:
+          type: integer
+          minimum: 0
+          description: Events for which a higher revision was accepted (or already stored).
+        unchanged:
+          type: integer
+          minimum: 0
+          description: >-
+            Events whose locally re-computed interpretation already matched, including events a
+            manual Owner correction or a newer revision protects (stale_revision is a yield, not
+            a failure).
+        failed:
+          type: integer
+          minimum: 0
+          description: Events whose uploads were permanently rejected.
+    ReclassificationTaskAssignment:
+      title: Reclassification Task Assignment
+      type: object
+      additionalProperties: false
+      required: [task_id, target_rule_set_version, from, to]
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        target_rule_set_version:
+          type: integer
+          minimum: 1
+          description: >-
+            Rule set version the device must cache before re-evaluating; a
+            device that cannot fetch this version defers the task instead of
+            working with stale rules.
+        from:
+          type: [string, "null"]
+          format: date-time
+          description: Inclusive UTC instant bounding the task scope; null means unbounded.
+        to:
+          type: [string, "null"]
+          format: date-time
+          description: Exclusive UTC instant bounding the task scope; null means unbounded.
+    ReclassificationDeviceReport:
+      title: Reclassification Device Report
+      type: object
+      additionalProperties: false
+      required: [device_id, platform, scanned, reclassified, unchanged, failed, unrecoverable, reported_at]
+      properties:
+        device_id:
+          type: string
+          minLength: 1
+          description: Server-bound device identity that reported.
+        platform:
+          type: string
+          enum: [windows, android]
+        scanned:
+          type: integer
+          minimum: 0
+        reclassified:
+          type: integer
+          minimum: 0
+        unchanged:
+          type: integer
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+        unrecoverable:
+          type: integer
+          minimum: 0
+          description: >-
+            Server-computed events of the frozen task scope this device did not find locally:
+            the raw context aged out of device retention. Never silently skipped.
+        reported_at:
+          type: string
+          format: date-time
+    ReclassificationTaskProgress:
+      title: Reclassification Task Progress
+      type: object
+      additionalProperties: false
+      required: [devices_reported, scanned, reclassified, unchanged, failed, unrecoverable]
+      properties:
+        devices_reported:
+          type: integer
+          minimum: 0
+        scanned:
+          type: integer
+          minimum: 0
+        reclassified:
+          type: integer
+          minimum: 0
+        unchanged:
+          type: integer
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+        unrecoverable:
+          type: integer
+          minimum: 0
+          description: Sum of the per-device unrecoverable counts.
+    ReclassificationTaskStatus:
+      title: Reclassification Task Status
+      type: object
+      additionalProperties: false
+      required: [task_id, status, target_rule_set_version, from, to, created_at, closed_at, estimate, progress, device_reports]
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [open, closed]
+        target_rule_set_version:
+          type: integer
+          minimum: 1
+        from:
+          type: [string, "null"]
+          format: date-time
+        to:
+          type: [string, "null"]
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        closed_at:
+          type: [string, "null"]
+          format: date-time
+        estimate:
+          $ref: "#/components/schemas/ReclassificationEstimate"
+        progress:
+          $ref: "#/components/schemas/ReclassificationTaskProgress"
+        device_reports:
+          type: array
+          description: One entry per reporting device, ordered by device identity.
+          items:
+            $ref: "#/components/schemas/ReclassificationDeviceReport"
     UsageMetrics:
       title: Usage Metrics
       type: object

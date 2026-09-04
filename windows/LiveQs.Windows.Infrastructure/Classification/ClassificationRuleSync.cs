@@ -25,10 +25,10 @@ public sealed class ClassificationRuleSync(
 
     private DateTimeOffset _lastFetchUtc = DateTimeOffset.MinValue;
 
-    public async Task<Core.Contracts.ClassificationRuleSet?> RefreshAsync(AppSettings settings, CancellationToken cancellationToken = default)
+    public async Task<Core.Contracts.ClassificationRuleSet?> RefreshAsync(AppSettings settings, CancellationToken cancellationToken = default, bool forceRefresh = false)
     {
         var now = timeProvider.GetUtcNow();
-        if (now - _lastFetchUtc < RefreshInterval)
+        if (!forceRefresh && now - _lastFetchUtc < RefreshInterval)
         {
             return await ruleStore.GetCachedRuleSetAsync(cancellationToken);
         }

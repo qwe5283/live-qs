@@ -5,7 +5,7 @@ import com.ailife.android.data.queue.ContractSyncFailures
 import com.ailife.android.generated.Error
 import com.ailife.android.generated.EventAcknowledgement
 import com.ailife.android.generated.EventBatchResponse
-import com.ailife.android.generated.Status
+import com.ailife.android.generated.EventAcknowledgementStatus
 import com.ailife.android.health.HealthEventIds
 import com.ailife.android.health.HealthConnectEventPlanner
 import com.ailife.android.health.HealthSleepSample
@@ -37,7 +37,7 @@ class ContractEventQueueDrainerTest {
             zone = ZoneId.of("Asia/Shanghai"),
         ).events.single()
 
-    private fun acknowledgement(status: Status, eventId: String, code: String? = null) = EventAcknowledgement(
+    private fun acknowledgement(status: EventAcknowledgementStatus, eventId: String, code: String? = null) = EventAcknowledgement(
         error = code?.let { Error(code = it, message = "explained") },
         eventId = eventId,
         revision = 1,
@@ -46,7 +46,7 @@ class ContractEventQueueDrainerTest {
 
     @Test
     fun acceptedDuplicateAndStaleRevisionsAcknowledgeTheOutboxEntry() {
-        for (status in listOf(Status.ACCEPTED, Status.DUPLICATE, Status.STALE_REVISION)) {
+        for (status in listOf(EventAcknowledgementStatus.ACCEPTED, EventAcknowledgementStatus.DUPLICATE, EventAcknowledgementStatus.STALE_REVISION)) {
             val spool = spool()
             val failures = failures()
             val event = plannedEvent("hc-record-$status")
@@ -62,10 +62,10 @@ class ContractEventQueueDrainerTest {
             assertEquals("$status is not a failure", 0, failures.size())
             assertEquals("reconciliation: sent", 1, counts.sent)
             assertEquals("reconciliation: $status counted", 1, when (status) {
-                Status.ACCEPTED -> counts.accepted
-                Status.DUPLICATE -> counts.duplicates
-                Status.STALE_REVISION -> counts.staleRevisions
-                Status.REJECTED -> counts.rejected
+                EventAcknowledgementStatus.ACCEPTED -> counts.accepted
+                EventAcknowledgementStatus.DUPLICATE -> counts.duplicates
+                EventAcknowledgementStatus.STALE_REVISION -> counts.staleRevisions
+                EventAcknowledgementStatus.REJECTED -> counts.rejected
             })
         }
     }
@@ -79,7 +79,7 @@ class ContractEventQueueDrainerTest {
         var uploadAttempts = 0
 
         val outcome = Result.success(
-            EventBatchResponse(listOf(acknowledgement(Status.REJECTED, event.eventId, code = "privacy_ceiling_exceeded"))),
+            EventBatchResponse(listOf(acknowledgement(EventAcknowledgementStatus.REJECTED, event.eventId, code = "privacy_ceiling_exceeded"))),
         )
         val result = ContractEventQueueDrainer(spool, failures) {
             uploadAttempts += 1
@@ -145,8 +145,8 @@ class ContractEventQueueDrainerTest {
             Result.success(
                 EventBatchResponse(
                     listOf(
-                        acknowledgement(Status.ACCEPTED, accepted.eventId),
-                        acknowledgement(Status.REJECTED, rejected.eventId, code = "invalid_event"),
+                        acknowledgement(EventAcknowledgementStatus.ACCEPTED, accepted.eventId),
+                        acknowledgement(EventAcknowledgementStatus.REJECTED, rejected.eventId, code = "invalid_event"),
                     ),
                 ),
             )

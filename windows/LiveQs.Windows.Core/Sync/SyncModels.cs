@@ -1,9 +1,15 @@
+using LiveQs.Windows.Core.Classification;
+
 namespace LiveQs.Windows.Core.Sync;
 
 /// <summary>
 /// One pending outbox entry: the current state of a local activity segment.
 /// <see cref="SyncVersion"/> is the event revision to upload; it increases on
 /// every extension and once more when the segment is finalized.
+/// <see cref="UploadOutcome"/> is the classification the server accepted for
+/// the segment's latest uploaded revision (null when unknown, e.g. for
+/// segments uploaded by earlier collector versions); explicit historical
+/// reclassification compares a re-computed outcome against it.
 /// </summary>
 public sealed record SyncQueueItem(
     long SegmentId,
@@ -18,7 +24,8 @@ public sealed record SyncQueueItem(
     bool IsAudioPlaying,
     bool IsFullscreen,
     int SyncVersion,
-    bool Finalized);
+    bool Finalized,
+    ClassificationOutcome? UploadOutcome = null);
 
 public enum SyncOutcomeKind
 {
@@ -29,7 +36,18 @@ public enum SyncOutcomeKind
     Rejected,
 }
 
-public sealed record SyncOutcome(SyncQueueItem Item, SyncOutcomeKind Kind, string? Error);
+/// <summary>
+/// The batch acknowledgement for one uploaded item. <see cref="Status"/> keeps
+/// the contract-level answer (accepted, duplicate, stale_revision, rejected)
+/// even within the coarse <see cref="SyncOutcomeKind.Acknowledged"/> bucket,
+/// so reclassification can tell a settled revision from a yield to a manual
+/// Owner correction.
+/// </summary>
+public sealed record SyncOutcome(
+    SyncQueueItem Item,
+    SyncOutcomeKind Kind,
+    string? Error,
+    Contracts.EventAcknowledgementStatus Status = Contracts.EventAcknowledgementStatus.Accepted);
 
 public sealed record SyncStatus(
     bool Enabled,

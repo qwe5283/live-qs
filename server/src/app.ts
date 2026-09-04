@@ -15,6 +15,7 @@ import { healthRouter } from "./modules/health/routes.js";
 import { heartbeatsRouter } from "./modules/heartbeats/routes.js";
 import { metricsRouter } from "./modules/metrics/routes.js";
 import { ownerRouter } from "./modules/owner/routes.js";
+import { reclassificationRouter } from "./modules/reclassification/routes.js";
 import { reportsRouter } from "./modules/reports/routes.js";
 import { sourcePolicyRouter } from "./modules/source-policy/routes.js";
 import { usageRouter } from "./modules/usage/routes.js";
@@ -42,6 +43,7 @@ export function createApp(env: Env, clock: Clock = systemClock) {
   app.use("/api/v1/metrics", metricsRouter(env));
   app.use("/api/v1/source-policy", sourcePolicyRouter(env));
   app.use("/api/v1/classification", classificationRouter(env));
+  app.use("/api/v1/classification", reclassificationRouter(env));
   app.use("/api/v1", heartbeatsRouter(env, clock));
   app.use("/api/v1/health", healthEventsRouter(env));
   app.use("/api/v1/payment", paymentEventsRouter(env));

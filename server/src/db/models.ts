@@ -185,6 +185,29 @@ const classificationRuleSetSchema = new Schema({
   updated_at: { type: Date, required: true },
 }, commonOptions);
 
+/**
+ * One explicit historical reclassification task: the frozen scope estimate the
+ * Owner started from, the target rule set version, and one progress entry per
+ * reporting device. The partial unique index enforces the single-open-task
+ * invariant at the storage layer, not just in the handler.
+ */
+const reclassificationTaskSchema = new Schema({
+  id: { type: String, required: true, unique: true },
+  user_id: { type: String, required: true },
+  status: { type: String, enum: ["open", "closed"], required: true },
+  target_rule_set_version: { type: Number, required: true },
+  from: { type: Date, default: null },
+  to: { type: Date, default: null },
+  created_at: { type: Date, required: true },
+  closed_at: { type: Date, default: null },
+  estimate: { type: Schema.Types.Mixed, required: true },
+  device_reports: { type: [Schema.Types.Mixed], default: [] },
+}, commonOptions);
+reclassificationTaskSchema.index(
+  { user_id: 1, status: 1 },
+  { unique: true, partialFilterExpression: { status: "open" } },
+);
+
 export const BucketModel = model("Bucket", bucketSchema);
 export const EventModel = model("Event", eventSchema);
 export const EventRevisionModel = model("EventRevision", eventRevisionSchema);
@@ -198,4 +221,5 @@ export const OwnerSessionModel = model("OwnerSession", ownerSessionSchema);
 export const OwnerSettingsModel = model("OwnerSettings", ownerSettingsSchema);
 export const SourcePolicyModel = model("SourcePolicy", sourcePolicySchema);
 export const ClassificationRuleSetModel = model("ClassificationRuleSet", classificationRuleSetSchema);
+export const ReclassificationTaskModel = model("ReclassificationTask", reclassificationTaskSchema);
 export const CredentialModel = model("Credential", credentialSchema);

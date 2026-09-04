@@ -35,6 +35,10 @@
             <TagsOutlined />
             <span>语义分类</span>
           </a-menu-item>
+          <a-menu-item key="/reclassification">
+            <HistoryOutlined />
+            <span>历史重分类</span>
+          </a-menu-item>
           <a-menu-item key="/credentials">
             <KeyOutlined />
             <span>凭据管理</span>
@@ -63,6 +67,7 @@ import {
   BarChartOutlined,
   DashboardOutlined,
   HeartOutlined,
+  HistoryOutlined,
   KeyOutlined,
   PayCircleOutlined,
   SettingOutlined,

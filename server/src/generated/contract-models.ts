@@ -38,6 +38,14 @@ export interface ProtocolModels {
   OwnerStatus: OwnerStatus;
   PageMetadata: PageMetadata;
   QueryContext: QueryContext;
+  ReclassificationDeviceReport: ReclassificationDeviceReport;
+  ReclassificationDeviceReportRequest: ReclassificationDeviceReportRequest;
+  ReclassificationEstimate: ReclassificationEstimate;
+  ReclassificationEstimateDevice: ReclassificationEstimateDevice;
+  ReclassificationTaskAssignment: ReclassificationTaskAssignment;
+  ReclassificationTaskCreateRequest: ReclassificationTaskCreateRequest;
+  ReclassificationTaskProgress: ReclassificationTaskProgress;
+  ReclassificationTaskStatus: ReclassificationTaskStatus;
   SemanticEntity: SemanticEntity;
   SemanticEntityKind: SemanticEntityKind;
   SourceConflict: SourceConflict;
@@ -373,6 +381,8 @@ export interface HeartbeatActivity {
 
 /**
  * Collector platform the heartbeat originates from.
+ *
+ * Collector platform the device reported its events with.
  */
 export type Platform = "windows" | "android";
 
@@ -661,10 +671,14 @@ export interface EventAcknowledgement {
   error?: Error | null;
   event_id: string;
   revision: number;
-  status: Status;
+  status: EventAcknowledgementStatus;
 }
 
-export type Status = "accepted" | "duplicate" | "stale_revision" | "rejected";
+export type EventAcknowledgementStatus =
+  | "accepted"
+  | "duplicate"
+  | "stale_revision"
+  | "rejected";
 
 export interface EventBatchRequest {
   events: VersionedEvent[];
@@ -875,6 +889,151 @@ export interface OwnerStatus {
    */
   initialized: boolean;
 }
+
+export interface ReclassificationDeviceReport {
+  /**
+   * Server-bound device identity that reported.
+   */
+  device_id: string;
+  failed: number;
+  platform: Platform;
+  reclassified: number;
+  reported_at: string;
+  scanned: number;
+  unchanged: number;
+  /**
+   * Server-computed events of the frozen task scope this device did not find locally: the raw
+   * context aged out of device retention. Never silently skipped.
+   */
+  unrecoverable: number;
+}
+
+export interface ReclassificationDeviceReportRequest {
+  /**
+   * Events whose uploads were permanently rejected.
+   */
+  failed: number;
+  platform: Platform;
+  /**
+   * Events for which a higher revision was accepted (or already stored).
+   */
+  reclassified: number;
+  /**
+   * In-scope events the device still found locally and re-evaluated.
+   */
+  scanned: number;
+  /**
+   * Events whose locally re-computed interpretation already matched, including events a
+   * manual Owner correction or a newer revision protects (stale_revision is a yield, not a
+   * failure).
+   */
+  unchanged: number;
+}
+
+export interface ReclassificationEstimate {
+  /**
+   * One entry per device holding in-scope events, ordered by device identity.
+   */
+  devices: ReclassificationEstimateDevice[];
+  /**
+   * Instant the estimate was computed; a task freezes its own estimate at creation.
+   */
+  generated_at: string;
+  /**
+   * In-scope events across all devices.
+   */
+  total_events: number;
+}
+
+export interface ReclassificationEstimateDevice {
+  /**
+   * Server-bound device identity the in-scope events were uploaded with.
+   */
+  device_id: string;
+  /**
+   * Earliest observed start of this device's in-scope events.
+   */
+  earliest_start_at: null | string;
+  /**
+   * In-scope events uploaded by this device: finalized, non-AFK activity intervals below the
+   * reserved manual-correction revision space. This is the frozen upper bound a task holds
+   * this device accountable for; events beyond the device's local retention show up as
+   * unrecoverable instead of being reclassified.
+   */
+  event_count: number;
+  /**
+   * Latest observed start of this device's in-scope events.
+   */
+  latest_start_at: null | string;
+  /**
+   * Collector platform the device reported its events with.
+   */
+  platform: Platform;
+}
+
+export interface ReclassificationTaskAssignment {
+  /**
+   * Inclusive UTC instant bounding the task scope; null means unbounded.
+   */
+  from: null | string;
+  /**
+   * Rule set version the device must cache before re-evaluating; a device that cannot fetch
+   * this version defers the task instead of working with stale rules.
+   */
+  target_rule_set_version: number;
+  task_id: string;
+  /**
+   * Exclusive UTC instant bounding the task scope; null means unbounded.
+   */
+  to: null | string;
+}
+
+export interface ReclassificationTaskCreateRequest {
+  /**
+   * Optional inclusive UTC instant bounding the task scope.
+   */
+  from?: string;
+  /**
+   * Rule set version devices must hold before re-evaluating. Defaults to the currently
+   * published rule set version; a version above the published one is rejected because no
+   * device could ever fetch it.
+   */
+  target_rule_set_version?: number;
+  /**
+   * Optional exclusive UTC instant bounding the task scope; must be later than from.
+   */
+  to?: string;
+}
+
+export interface ReclassificationTaskProgress {
+  devices_reported: number;
+  failed: number;
+  reclassified: number;
+  scanned: number;
+  unchanged: number;
+  /**
+   * Sum of the per-device unrecoverable counts.
+   */
+  unrecoverable: number;
+}
+
+export interface ReclassificationTaskStatus {
+  closed_at: null | string;
+  created_at: string;
+  /**
+   * One entry per reporting device, ordered by device identity.
+   */
+  device_reports: ReclassificationDeviceReport[];
+  estimate: ReclassificationEstimate;
+  from: null | string;
+  progress: ReclassificationTaskProgress;
+  status: ReclassificationTaskStatusStatus;
+  target_rule_set_version: number;
+  task_id: string;
+  to: null | string;
+}
+
+export type ReclassificationTaskStatusStatus = "open" | "closed";
 
 export interface SourcePolicyDocument {
   entries: SourcePolicyEntry[];

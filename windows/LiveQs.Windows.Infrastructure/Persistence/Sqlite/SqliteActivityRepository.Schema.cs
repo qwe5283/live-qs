@@ -85,6 +85,7 @@ public sealed partial class SqliteActivityRepository
 
         // Columns added after the first release; existing databases migrate in place.
         await AddColumnIfMissingAsync(connection, "activity_segments", "finalized", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "activity_segments", "upload_outcome", "TEXT NULL", cancellationToken);
         await AddColumnIfMissingAsync(connection, "sync_queue", "permanent", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
         await AddColumnIfMissingAsync(connection, "sync_state", "install_guid", "TEXT NULL", cancellationToken);
         await AddColumnIfMissingAsync(connection, "sync_state", "classification_secret", "TEXT NULL", cancellationToken);

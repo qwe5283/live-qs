@@ -32,9 +32,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISyncClient, CloudSyncClient>();
         services.AddSingleton<IHeartbeatClient, HeartbeatClient>();
         services.AddSingleton<IClassificationRuleSync, ClassificationRuleSync>();
+        services.AddSingleton<IReclassificationClient, ReclassificationClient>();
         services.AddHttpClient("cloud-sync", client => client.Timeout = TimeSpan.FromSeconds(15));
         services.AddHostedService<SamplingWorker>();
         services.AddHostedService<SyncWorker>();
+        services.AddHostedService<ReclassificationWorker>();
         services.AddHostedService<HeartbeatWorker>();
         services.AddHostedService<MaintenanceWorker>();
         return services;

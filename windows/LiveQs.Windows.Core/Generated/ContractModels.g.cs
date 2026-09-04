@@ -128,6 +128,30 @@ public partial class ProtocolModels
     [JsonPropertyName("QueryContext")]
     public QueryContext QueryContext { get; set; }
 
+    [JsonPropertyName("ReclassificationDeviceReport")]
+    public ReclassificationDeviceReport ReclassificationDeviceReport { get; set; }
+
+    [JsonPropertyName("ReclassificationDeviceReportRequest")]
+    public ReclassificationDeviceReportRequest ReclassificationDeviceReportRequest { get; set; }
+
+    [JsonPropertyName("ReclassificationEstimate")]
+    public ReclassificationEstimate ReclassificationEstimate { get; set; }
+
+    [JsonPropertyName("ReclassificationEstimateDevice")]
+    public ReclassificationEstimateDevice ReclassificationEstimateDevice { get; set; }
+
+    [JsonPropertyName("ReclassificationTaskAssignment")]
+    public ReclassificationTaskAssignment ReclassificationTaskAssignment { get; set; }
+
+    [JsonPropertyName("ReclassificationTaskCreateRequest")]
+    public ReclassificationTaskCreateRequest ReclassificationTaskCreateRequest { get; set; }
+
+    [JsonPropertyName("ReclassificationTaskProgress")]
+    public ReclassificationTaskProgress ReclassificationTaskProgress { get; set; }
+
+    [JsonPropertyName("ReclassificationTaskStatus")]
+    public ReclassificationTaskStatus ReclassificationTaskStatus { get; set; }
+
     [JsonPropertyName("SemanticEntity")]
     public SemanticEntity SemanticEntity { get; set; }
 
@@ -958,7 +982,7 @@ public partial class EventAcknowledgement
     public long Revision { get; set; }
 
     [JsonPropertyName("status")]
-    public Status Status { get; set; }
+    public EventAcknowledgementStatus Status { get; set; }
 }
 
 public partial class EventBatchRequest
@@ -1260,6 +1284,242 @@ public partial class OwnerStatus
     public bool Initialized { get; set; }
 }
 
+public partial class ReclassificationDeviceReport
+{
+    /// <summary>
+    /// Server-bound device identity that reported.
+    /// </summary>
+    [JsonPropertyName("device_id")]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    public string DeviceId { get; set; }
+
+    [JsonPropertyName("failed")]
+    public long Failed { get; set; }
+
+    [JsonPropertyName("platform")]
+    public Platform Platform { get; set; }
+
+    [JsonPropertyName("reclassified")]
+    public long Reclassified { get; set; }
+
+    [JsonPropertyName("reported_at")]
+    public string ReportedAt { get; set; }
+
+    [JsonPropertyName("scanned")]
+    public long Scanned { get; set; }
+
+    [JsonPropertyName("unchanged")]
+    public long Unchanged { get; set; }
+
+    /// <summary>
+    /// Server-computed events of the frozen task scope this device did not find locally: the raw
+    /// context aged out of device retention. Never silently skipped.
+    /// </summary>
+    [JsonPropertyName("unrecoverable")]
+    public long Unrecoverable { get; set; }
+}
+
+public partial class ReclassificationDeviceReportRequest
+{
+    /// <summary>
+    /// Events whose uploads were permanently rejected.
+    /// </summary>
+    [JsonPropertyName("failed")]
+    public long Failed { get; set; }
+
+    [JsonPropertyName("platform")]
+    public Platform Platform { get; set; }
+
+    /// <summary>
+    /// Events for which a higher revision was accepted (or already stored).
+    /// </summary>
+    [JsonPropertyName("reclassified")]
+    public long Reclassified { get; set; }
+
+    /// <summary>
+    /// In-scope events the device still found locally and re-evaluated.
+    /// </summary>
+    [JsonPropertyName("scanned")]
+    public long Scanned { get; set; }
+
+    /// <summary>
+    /// Events whose locally re-computed interpretation already matched, including events a
+    /// manual Owner correction or a newer revision protects (stale_revision is a yield, not a
+    /// failure).
+    /// </summary>
+    [JsonPropertyName("unchanged")]
+    public long Unchanged { get; set; }
+}
+
+public partial class ReclassificationEstimate
+{
+    /// <summary>
+    /// One entry per device holding in-scope events, ordered by device identity.
+    /// </summary>
+    [JsonPropertyName("devices")]
+    public ReclassificationEstimateDevice[] Devices { get; set; }
+
+    /// <summary>
+    /// Instant the estimate was computed; a task freezes its own estimate at creation.
+    /// </summary>
+    [JsonPropertyName("generated_at")]
+    public string GeneratedAt { get; set; }
+
+    /// <summary>
+    /// In-scope events across all devices.
+    /// </summary>
+    [JsonPropertyName("total_events")]
+    public long TotalEvents { get; set; }
+}
+
+public partial class ReclassificationEstimateDevice
+{
+    /// <summary>
+    /// Server-bound device identity the in-scope events were uploaded with.
+    /// </summary>
+    [JsonPropertyName("device_id")]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    public string DeviceId { get; set; }
+
+    /// <summary>
+    /// Earliest observed start of this device's in-scope events.
+    /// </summary>
+    [JsonPropertyName("earliest_start_at")]
+    public string EarliestStartAt { get; set; }
+
+    /// <summary>
+    /// In-scope events uploaded by this device: finalized, non-AFK activity intervals below the
+    /// reserved manual-correction revision space. This is the frozen upper bound a task holds
+    /// this device accountable for; events beyond the device's local retention show up as
+    /// unrecoverable instead of being reclassified.
+    /// </summary>
+    [JsonPropertyName("event_count")]
+    public long EventCount { get; set; }
+
+    /// <summary>
+    /// Latest observed start of this device's in-scope events.
+    /// </summary>
+    [JsonPropertyName("latest_start_at")]
+    public string LatestStartAt { get; set; }
+
+    /// <summary>
+    /// Collector platform the device reported its events with.
+    /// </summary>
+    [JsonPropertyName("platform")]
+    public Platform Platform { get; set; }
+}
+
+public partial class ReclassificationTaskAssignment
+{
+    /// <summary>
+    /// Inclusive UTC instant bounding the task scope; null means unbounded.
+    /// </summary>
+    [JsonPropertyName("from")]
+    public string From { get; set; }
+
+    /// <summary>
+    /// Rule set version the device must cache before re-evaluating; a device that cannot fetch
+    /// this version defers the task instead of working with stale rules.
+    /// </summary>
+    [JsonPropertyName("target_rule_set_version")]
+    public long TargetRuleSetVersion { get; set; }
+
+    [JsonPropertyName("task_id")]
+    public Guid TaskId { get; set; }
+
+    /// <summary>
+    /// Exclusive UTC instant bounding the task scope; null means unbounded.
+    /// </summary>
+    [JsonPropertyName("to")]
+    public string To { get; set; }
+}
+
+public partial class ReclassificationTaskCreateRequest
+{
+    /// <summary>
+    /// Optional inclusive UTC instant bounding the task scope.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("from")]
+    public string? From { get; set; }
+
+    /// <summary>
+    /// Rule set version devices must hold before re-evaluating. Defaults to the currently
+    /// published rule set version; a version above the published one is rejected because no
+    /// device could ever fetch it.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("target_rule_set_version")]
+    public long? TargetRuleSetVersion { get; set; }
+
+    /// <summary>
+    /// Optional exclusive UTC instant bounding the task scope; must be later than from.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("to")]
+    public string? To { get; set; }
+}
+
+public partial class ReclassificationTaskProgress
+{
+    [JsonPropertyName("devices_reported")]
+    public long DevicesReported { get; set; }
+
+    [JsonPropertyName("failed")]
+    public long Failed { get; set; }
+
+    [JsonPropertyName("reclassified")]
+    public long Reclassified { get; set; }
+
+    [JsonPropertyName("scanned")]
+    public long Scanned { get; set; }
+
+    [JsonPropertyName("unchanged")]
+    public long Unchanged { get; set; }
+
+    /// <summary>
+    /// Sum of the per-device unrecoverable counts.
+    /// </summary>
+    [JsonPropertyName("unrecoverable")]
+    public long Unrecoverable { get; set; }
+}
+
+public partial class ReclassificationTaskStatus
+{
+    [JsonPropertyName("closed_at")]
+    public string ClosedAt { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public string CreatedAt { get; set; }
+
+    /// <summary>
+    /// One entry per reporting device, ordered by device identity.
+    /// </summary>
+    [JsonPropertyName("device_reports")]
+    public ReclassificationDeviceReport[] DeviceReports { get; set; }
+
+    [JsonPropertyName("estimate")]
+    public ReclassificationEstimate Estimate { get; set; }
+
+    [JsonPropertyName("from")]
+    public string From { get; set; }
+
+    [JsonPropertyName("progress")]
+    public ReclassificationTaskProgress Progress { get; set; }
+
+    [JsonPropertyName("status")]
+    public ReclassificationTaskStatusStatus Status { get; set; }
+
+    [JsonPropertyName("target_rule_set_version")]
+    public long TargetRuleSetVersion { get; set; }
+
+    [JsonPropertyName("task_id")]
+    public Guid TaskId { get; set; }
+
+    [JsonPropertyName("to")]
+    public string To { get; set; }
+}
+
 public partial class SourcePolicyDocument
 {
     [JsonPropertyName("entries")]
@@ -1529,6 +1789,8 @@ public enum CredentialScope { EventsRead, EventsWrite, HealthRead, HealthWrite, 
 
 /// <summary>
 /// Collector platform the heartbeat originates from.
+///
+/// Collector platform the device reported its events with.
 /// </summary>
 public enum Platform { Android, Windows };
 
@@ -1574,7 +1836,7 @@ public enum PrivacyLevel { Normal, Sensitive };
 /// </summary>
 public enum SourceKind { AndroidAccessibility, AndroidHealthconnect, AndroidUsagestats, AndroidWechatpay, WindowsForeground };
 
-public enum Status { Accepted, Duplicate, Rejected, StaleRevision };
+public enum EventAcknowledgementStatus { Accepted, Duplicate, Rejected, StaleRevision };
 
 public enum Completeness { Complete, Partial, Unknown };
 
@@ -1586,6 +1848,8 @@ public enum Completeness { Complete, Partial, Unknown };
 /// sources by source_conflicts.
 /// </summary>
 public enum DataState { NoData, Observed, Zero };
+
+public enum ReclassificationTaskStatusStatus { Closed, Open };
 
 public partial class ProtocolModels
 {
@@ -1618,9 +1882,10 @@ public static class ContractJson
             DurationUnitConverter.Singleton,
             PrivacyLevelConverter.Singleton,
             SourceKindConverter.Singleton,
-            StatusConverter.Singleton,
+            EventAcknowledgementStatusConverter.Singleton,
             CompletenessConverter.Singleton,
             DataStateConverter.Singleton,
+            ReclassificationTaskStatusStatusConverter.Singleton,
             new DateOnlyConverter(),
             new TimeOnlyConverter(),
             IsoDateTimeOffsetConverter.Singleton
@@ -2445,48 +2710,48 @@ internal class SourceKindConverter : JsonConverter<SourceKind>
     public static readonly SourceKindConverter Singleton = new SourceKindConverter();
 }
 
-internal class StatusConverter : JsonConverter<Status>
+internal class EventAcknowledgementStatusConverter : JsonConverter<EventAcknowledgementStatus>
 {
-    public override bool CanConvert(Type t) => t == typeof(Status);
+    public override bool CanConvert(Type t) => t == typeof(EventAcknowledgementStatus);
 
-    public override Status Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override EventAcknowledgementStatus Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         var value = reader.GetString();
         switch (value)
         {
             case "accepted":
-                return Status.Accepted;
+                return EventAcknowledgementStatus.Accepted;
             case "duplicate":
-                return Status.Duplicate;
+                return EventAcknowledgementStatus.Duplicate;
             case "rejected":
-                return Status.Rejected;
+                return EventAcknowledgementStatus.Rejected;
             case "stale_revision":
-                return Status.StaleRevision;
+                return EventAcknowledgementStatus.StaleRevision;
         }
-        throw new Exception("Cannot unmarshal type Status");
+        throw new Exception("Cannot unmarshal type EventAcknowledgementStatus");
     }
 
-    public override void Write(Utf8JsonWriter writer, Status value, JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, EventAcknowledgementStatus value, JsonSerializerOptions options)
     {
         switch (value)
         {
-            case Status.Accepted:
+            case EventAcknowledgementStatus.Accepted:
                 JsonSerializer.Serialize(writer, "accepted", options);
                 return;
-            case Status.Duplicate:
+            case EventAcknowledgementStatus.Duplicate:
                 JsonSerializer.Serialize(writer, "duplicate", options);
                 return;
-            case Status.Rejected:
+            case EventAcknowledgementStatus.Rejected:
                 JsonSerializer.Serialize(writer, "rejected", options);
                 return;
-            case Status.StaleRevision:
+            case EventAcknowledgementStatus.StaleRevision:
                 JsonSerializer.Serialize(writer, "stale_revision", options);
                 return;
         }
-        throw new Exception("Cannot marshal type Status");
+        throw new Exception("Cannot marshal type EventAcknowledgementStatus");
     }
 
-    public static readonly StatusConverter Singleton = new StatusConverter();
+    public static readonly EventAcknowledgementStatusConverter Singleton = new EventAcknowledgementStatusConverter();
 }
 
 internal class AmbitiousMinMaxLengthCheckConverter : JsonConverter<string>
@@ -2646,6 +2911,40 @@ internal class MagentaMinMaxLengthCheckConverter : JsonConverter<string>
     }
 
     public static readonly MagentaMinMaxLengthCheckConverter Singleton = new MagentaMinMaxLengthCheckConverter();
+}
+
+internal class ReclassificationTaskStatusStatusConverter : JsonConverter<ReclassificationTaskStatusStatus>
+{
+    public override bool CanConvert(Type t) => t == typeof(ReclassificationTaskStatusStatus);
+
+    public override ReclassificationTaskStatusStatus Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        switch (value)
+        {
+            case "closed":
+                return ReclassificationTaskStatusStatus.Closed;
+            case "open":
+                return ReclassificationTaskStatusStatus.Open;
+        }
+        throw new Exception("Cannot unmarshal type ReclassificationTaskStatusStatus");
+    }
+
+    public override void Write(Utf8JsonWriter writer, ReclassificationTaskStatusStatus value, JsonSerializerOptions options)
+    {
+        switch (value)
+        {
+            case ReclassificationTaskStatusStatus.Closed:
+                JsonSerializer.Serialize(writer, "closed", options);
+                return;
+            case ReclassificationTaskStatusStatus.Open:
+                JsonSerializer.Serialize(writer, "open", options);
+                return;
+        }
+        throw new Exception("Cannot marshal type ReclassificationTaskStatusStatus");
+    }
+
+    public static readonly ReclassificationTaskStatusStatusConverter Singleton = new ReclassificationTaskStatusStatusConverter();
 }
 
 public class DateOnlyConverter : JsonConverter<DateOnly>

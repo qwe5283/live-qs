@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Net.Http;
 using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Classification;
+using LiveQs.Windows.Core.Reclassification;
 using LiveQs.Windows.Core.Settings;
 using LiveQs.Windows.Core.Sync;
 
@@ -16,7 +17,9 @@ namespace LiveQs.Windows.Infrastructure.Sync;
 /// acknowledgements decide whether the outbox entry may be removed.
 /// Classification runs locally against the cached Owner rule set: the upload
 /// carries only the subject, rule id, rule version, and confidence — never
-/// the raw window title it was derived from.
+/// the raw window title it was derived from. Acknowledged uploads record the
+/// accepted outcome so explicit reclassification passes can detect unchanged
+/// events instead of burning no-op revisions.
 /// </summary>
 public sealed class CloudSyncClient(
     IHttpClientFactory httpClientFactory,
@@ -36,17 +39,61 @@ public sealed class CloudSyncClient(
         var outcomes = new List<SyncOutcome>(items.Count);
         foreach (var chunk in items.Chunk(MaxBatchSize))
         {
-            outcomes.AddRange(await UploadChunkAsync(chunk, settings, installId, cachedRuleSet, classificationSecret, cancellationToken));
+            var entries = chunk
+                .Select(item => (Item: item, Outcome: ClassifyItem(item, cachedRuleSet, classificationSecret)))
+                .ToArray();
+            outcomes.AddRange(await UploadChunkAsync(entries, settings, installId, cancellationToken));
+        }
+        return outcomes;
+    }
+
+    /// <summary>
+    /// Uploads pre-computed reclassification decisions (same event identity,
+    /// bumped revision, re-interpreted classification) and records the local
+    /// consequence of each acknowledgement on the segment.
+    /// </summary>
+    public async Task<IReadOnlyList<SyncOutcome>> UploadReclassificationAsync(
+        IReadOnlyList<ReclassificationDecision> decisions,
+        AppSettings settings,
+        CancellationToken cancellationToken)
+    {
+        if (decisions.Count == 0) return [];
+        var installId = await syncQueue.GetInstallIdAsync(cancellationToken);
+        var outcomes = new List<SyncOutcome>(decisions.Count);
+        foreach (var chunk in decisions.Chunk(MaxBatchSize))
+        {
+            var uploaded = await UploadChunkAsync(
+                chunk.Select(decision => (decision.Segment, decision.Outcome)).ToArray(),
+                settings, installId, cancellationToken);
+            for (var index = 0; index < uploaded.Count; index++)
+            {
+                var outcome = uploaded[index];
+                var decision = chunk[index];
+                outcomes.Add(outcome);
+                if (outcome.Kind != SyncOutcomeKind.Acknowledged) continue;
+                if (outcome.Status == Core.Contracts.EventAcknowledgementStatus.StaleRevision)
+                {
+                    // A manual Owner correction (or any newer revision) wins:
+                    // the device yields, keeping its local revision so no
+                    // later upload can ever fight the human interpretation,
+                    // and records the attempted interpretation so the next
+                    // pass treats this segment as settled.
+                    await syncQueue.RecordUploadOutcomeAsync(decision.Segment.SegmentId, decision.Outcome, cancellationToken);
+                }
+                else
+                {
+                    await syncQueue.RecordReclassifiedAsync(
+                        decision.Segment.SegmentId, decision.Segment.SyncVersion, decision.Outcome, cancellationToken);
+                }
+            }
         }
         return outcomes;
     }
 
     private async Task<IReadOnlyList<SyncOutcome>> UploadChunkAsync(
-        IReadOnlyList<SyncQueueItem> chunk,
+        IReadOnlyList<(SyncQueueItem Item, ClassificationOutcome? Outcome)> entries,
         AppSettings settings,
         string installId,
-        Core.Contracts.ClassificationRuleSet? cachedRuleSet,
-        string classificationSecret,
         CancellationToken cancellationToken)
     {
         var client = httpClientFactory.CreateClient("cloud-sync");
@@ -54,9 +101,8 @@ public sealed class CloudSyncClient(
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.DeviceToken);
 
         var observedAt = timeProvider.GetUtcNow();
-        var events = chunk.Select(item => ToEnvelope(
-            item, settings, installId, observedAt,
-            ClassifyItem(item, cachedRuleSet, classificationSecret))).ToArray();
+        var events = entries.Select(entry => ToEnvelope(
+            entry.Item, settings, installId, observedAt, entry.Outcome)).ToArray();
         using var response = await client.PostAsJsonAsync(
             "api/v1/events/batch", new Core.Contracts.EventBatchRequest { Events = events }, Core.Contracts.ContractJson.Options, cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -71,7 +117,16 @@ public sealed class CloudSyncClient(
         {
             throw new InvalidOperationException("云端批量响应数量与请求不一致。");
         }
-        return chunk.Zip(batch.Results, MapOutcome).ToArray();
+        var outcomes = entries
+            .Zip(batch.Results, (entry, acknowledgement) => MapOutcome(entry.Item, acknowledgement))
+            .ToArray();
+        for (var index = 0; index < outcomes.Length; index++)
+        {
+            if (outcomes[index].Kind != SyncOutcomeKind.Acknowledged) continue;
+            var (item, computed) = entries[index];
+            await syncQueue.RecordUploadOutcomeAsync(item.SegmentId, computed, cancellationToken);
+        }
+        return outcomes;
     }
 
     /// <summary>
@@ -94,9 +149,9 @@ public sealed class CloudSyncClient(
         // already stored; stale_revision: a newer revision already won. In all
         // three cases the uploaded revision is acknowledged and the outbox
         // entry may be removed.
-        Core.Contracts.Status.Accepted or Core.Contracts.Status.Duplicate or Core.Contracts.Status.StaleRevision
-            => new SyncOutcome(item, SyncOutcomeKind.Acknowledged, null),
-        _ => new SyncOutcome(item, SyncOutcomeKind.Rejected, DescribeError(acknowledgement)),
+        Core.Contracts.EventAcknowledgementStatus.Accepted or Core.Contracts.EventAcknowledgementStatus.Duplicate or Core.Contracts.EventAcknowledgementStatus.StaleRevision
+            => new SyncOutcome(item, SyncOutcomeKind.Acknowledged, null, acknowledgement.Status),
+        _ => new SyncOutcome(item, SyncOutcomeKind.Rejected, DescribeError(acknowledgement), acknowledgement.Status),
     };
 
     private static string DescribeError(Core.Contracts.EventAcknowledgement acknowledgement) => acknowledgement.Error is { } error

@@ -5,7 +5,7 @@ import com.ailife.android.data.SettingsStore
 import com.ailife.android.data.queue.ContractEventSpoolQueue
 import com.ailife.android.data.queue.ContractSyncFailures
 import com.ailife.android.generated.EventBatchResponse
-import com.ailife.android.generated.Status
+import com.ailife.android.generated.EventAcknowledgementStatus
 import com.ailife.android.generated.VersionedEvent
 import com.ailife.android.network.ReportClient
 import java.io.File
@@ -74,7 +74,7 @@ class ContractEventQueueDrainer constructor(
         var rejected = 0
         for ((item, acknowledgement) in batch.zip(response.results)) {
             when (acknowledgement.status) {
-                Status.REJECTED -> {
+                EventAcknowledgementStatus.REJECTED -> {
                     failures.record(
                         eventId = acknowledgement.eventId,
                         revision = acknowledgement.revision,
@@ -83,9 +83,9 @@ class ContractEventQueueDrainer constructor(
                     )
                     rejected += 1
                 }
-                Status.DUPLICATE -> duplicates += 1
-                Status.STALE_REVISION -> stale += 1
-                Status.ACCEPTED -> accepted += 1
+                EventAcknowledgementStatus.DUPLICATE -> duplicates += 1
+                EventAcknowledgementStatus.STALE_REVISION -> stale += 1
+                EventAcknowledgementStatus.ACCEPTED -> accepted += 1
             }
         }
         // Every acknowledgement is terminal: accepted/duplicate/stale_revision

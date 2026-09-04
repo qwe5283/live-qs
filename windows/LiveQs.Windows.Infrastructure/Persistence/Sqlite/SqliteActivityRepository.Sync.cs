@@ -13,7 +13,7 @@ public sealed partial class SqliteActivityRepository
             SELECT s.id, q.attempt_count, s.started_utc, s.ended_utc,
                    s.app_id, s.app_name, s.window_title, s.window_title_hash,
                    s.is_afk, s.is_audio_playing, s.is_fullscreen,
-                   s.sync_version, s.finalized
+                   s.sync_version, s.finalized, s.upload_outcome
             FROM sync_queue q
             JOIN activity_segments s ON s.id = q.segment_id
             WHERE q.next_attempt_utc <= $now AND q.permanent = 0
@@ -30,7 +30,7 @@ public sealed partial class SqliteActivityRepository
                 reader.GetInt64(0), reader.GetInt32(1), ParseTime(reader.GetString(2)), ParseTime(reader.GetString(3)),
                 reader.GetString(4), reader.GetString(5), reader.GetString(6), reader.GetString(7),
                 reader.GetBoolean(8), reader.GetBoolean(9), reader.GetBoolean(10),
-                (int)reader.GetInt64(11), reader.GetBoolean(12)));
+                (int)reader.GetInt64(11), reader.GetBoolean(12), ParseUploadOutcome(reader.IsDBNull(13) ? null : reader.GetString(13))));
         }
         return result;
     }

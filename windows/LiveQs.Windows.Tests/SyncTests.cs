@@ -3,6 +3,7 @@ using System.Text;
 using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Activity;
 using LiveQs.Windows.Core.Contracts;
+using LiveQs.Windows.Core.Reclassification;
 using LiveQs.Windows.Core.Settings;
 using LiveQs.Windows.Core.Sync;
 using LiveQs.Windows.Infrastructure.Persistence.Sqlite;
@@ -211,7 +212,7 @@ public sealed class SyncTests : IDisposable
     /// <summary>Refresh stub: the worker's rule refresh never interferes with outbox assertions.</summary>
     private sealed class NoopRuleSync(SqliteActivityRepository repository) : IClassificationRuleSync
     {
-        public Task<ClassificationRuleSet?> RefreshAsync(AppSettings settings, CancellationToken cancellationToken = default) =>
+        public Task<ClassificationRuleSet?> RefreshAsync(AppSettings settings, CancellationToken cancellationToken = default, bool forceRefresh = false) =>
             repository.GetCachedRuleSetAsync(cancellationToken);
     }
 
@@ -285,5 +286,8 @@ public sealed class SyncTests : IDisposable
             if (Failure is not null) throw Failure;
             return Task.FromResult(Outcomes ?? (IReadOnlyList<SyncOutcome>)Array.Empty<SyncOutcome>());
         }
+
+        public Task<IReadOnlyList<SyncOutcome>> UploadReclassificationAsync(IReadOnlyList<ReclassificationDecision> decisions, AppSettings settings, CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Reclassification is not exercised by the outbox tests.");
     }
 }

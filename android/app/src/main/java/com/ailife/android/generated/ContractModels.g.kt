@@ -121,6 +121,30 @@ data class ProtocolModels(
     @SerialName("QueryContext")
     val queryContext: QueryContext,
 
+    @SerialName("ReclassificationDeviceReport")
+    val reclassificationDeviceReport: ReclassificationDeviceReport,
+
+    @SerialName("ReclassificationDeviceReportRequest")
+    val reclassificationDeviceReportRequest: ReclassificationDeviceReportRequest,
+
+    @SerialName("ReclassificationEstimate")
+    val reclassificationEstimate: ReclassificationEstimate,
+
+    @SerialName("ReclassificationEstimateDevice")
+    val reclassificationEstimateDevice: ReclassificationEstimateDevice,
+
+    @SerialName("ReclassificationTaskAssignment")
+    val reclassificationTaskAssignment: ReclassificationTaskAssignment,
+
+    @SerialName("ReclassificationTaskCreateRequest")
+    val reclassificationTaskCreateRequest: ReclassificationTaskCreateRequest,
+
+    @SerialName("ReclassificationTaskProgress")
+    val reclassificationTaskProgress: ReclassificationTaskProgress,
+
+    @SerialName("ReclassificationTaskStatus")
+    val reclassificationTaskStatus: ReclassificationTaskStatus,
+
     @SerialName("SemanticEntity")
     val semanticEntity: SemanticEntity,
 
@@ -590,6 +614,8 @@ data class HeartbeatActivity(
 
 /**
  * Collector platform the heartbeat originates from.
+ *
+ * Collector platform the device reported its events with.
  */
 @Serializable
 enum class Platform(val value: String) {
@@ -983,11 +1009,11 @@ data class EventAcknowledgement(
     val eventId: String,
 
     val revision: Long,
-    val status: Status
+    val status: EventAcknowledgementStatus
 )
 
 @Serializable
-enum class Status(val value: String) {
+enum class EventAcknowledgementStatus(val value: String) {
     @SerialName("accepted") ACCEPTED("accepted"),
     @SerialName("duplicate") DUPLICATE("duplicate"),
     @SerialName("rejected") REJECTED("rejected"),
@@ -1270,6 +1296,207 @@ data class OwnerStatus(
      */
     val initialized: Boolean
 )
+
+@Serializable
+data class ReclassificationDeviceReport(
+    /**
+     * Server-bound device identity that reported.
+     */
+    @SerialName("device_id")
+    val deviceId: String,
+
+    val failed: Long,
+    val platform: Platform,
+    val reclassified: Long,
+
+    @SerialName("reported_at")
+    val reportedAt: String,
+
+    val scanned: Long,
+    val unchanged: Long,
+
+    /**
+     * Server-computed events of the frozen task scope this device did not find locally: the raw
+     * context aged out of device retention. Never silently skipped.
+     */
+    val unrecoverable: Long
+)
+
+@Serializable
+data class ReclassificationDeviceReportRequest(
+    /**
+     * Events whose uploads were permanently rejected.
+     */
+    val failed: Long,
+
+    val platform: Platform,
+
+    /**
+     * Events for which a higher revision was accepted (or already stored).
+     */
+    val reclassified: Long,
+
+    /**
+     * In-scope events the device still found locally and re-evaluated.
+     */
+    val scanned: Long,
+
+    /**
+     * Events whose locally re-computed interpretation already matched, including events a
+     * manual Owner correction or a newer revision protects (stale_revision is a yield, not a
+     * failure).
+     */
+    val unchanged: Long
+)
+
+@Serializable
+data class ReclassificationEstimate(
+    /**
+     * One entry per device holding in-scope events, ordered by device identity.
+     */
+    val devices: List<ReclassificationEstimateDevice>,
+
+    /**
+     * Instant the estimate was computed; a task freezes its own estimate at creation.
+     */
+    @SerialName("generated_at")
+    val generatedAt: String,
+
+    /**
+     * In-scope events across all devices.
+     */
+    @SerialName("total_events")
+    val totalEvents: Long
+)
+
+@Serializable
+data class ReclassificationEstimateDevice(
+    /**
+     * Server-bound device identity the in-scope events were uploaded with.
+     */
+    @SerialName("device_id")
+    val deviceId: String,
+
+    /**
+     * Earliest observed start of this device's in-scope events.
+     */
+    @SerialName("earliest_start_at")
+    val earliestStartAt: String? = null,
+
+    /**
+     * In-scope events uploaded by this device: finalized, non-AFK activity intervals below the
+     * reserved manual-correction revision space. This is the frozen upper bound a task holds
+     * this device accountable for; events beyond the device's local retention show up as
+     * unrecoverable instead of being reclassified.
+     */
+    @SerialName("event_count")
+    val eventCount: Long,
+
+    /**
+     * Latest observed start of this device's in-scope events.
+     */
+    @SerialName("latest_start_at")
+    val latestStartAt: String? = null,
+
+    /**
+     * Collector platform the device reported its events with.
+     */
+    val platform: Platform
+)
+
+@Serializable
+data class ReclassificationTaskAssignment(
+    /**
+     * Inclusive UTC instant bounding the task scope; null means unbounded.
+     */
+    val from: String? = null,
+
+    /**
+     * Rule set version the device must cache before re-evaluating; a device that cannot fetch
+     * this version defers the task instead of working with stale rules.
+     */
+    @SerialName("target_rule_set_version")
+    val targetRuleSetVersion: Long,
+
+    @SerialName("task_id")
+    val taskId: String,
+
+    /**
+     * Exclusive UTC instant bounding the task scope; null means unbounded.
+     */
+    val to: String? = null
+)
+
+@Serializable
+data class ReclassificationTaskCreateRequest(
+    /**
+     * Optional inclusive UTC instant bounding the task scope.
+     */
+    val from: String? = null,
+
+    /**
+     * Rule set version devices must hold before re-evaluating. Defaults to the currently
+     * published rule set version; a version above the published one is rejected because no
+     * device could ever fetch it.
+     */
+    @SerialName("target_rule_set_version")
+    val targetRuleSetVersion: Long? = null,
+
+    /**
+     * Optional exclusive UTC instant bounding the task scope; must be later than from.
+     */
+    val to: String? = null
+)
+
+@Serializable
+data class ReclassificationTaskProgress(
+    @SerialName("devices_reported")
+    val devicesReported: Long,
+
+    val failed: Long,
+    val reclassified: Long,
+    val scanned: Long,
+    val unchanged: Long,
+
+    /**
+     * Sum of the per-device unrecoverable counts.
+     */
+    val unrecoverable: Long
+)
+
+@Serializable
+data class ReclassificationTaskStatus(
+    @SerialName("closed_at")
+    val closedAt: String? = null,
+
+    @SerialName("created_at")
+    val createdAt: String,
+
+    /**
+     * One entry per reporting device, ordered by device identity.
+     */
+    @SerialName("device_reports")
+    val deviceReports: List<ReclassificationDeviceReport>,
+
+    val estimate: ReclassificationEstimate,
+    val from: String? = null,
+    val progress: ReclassificationTaskProgress,
+    val status: ReclassificationTaskStatusStatus,
+
+    @SerialName("target_rule_set_version")
+    val targetRuleSetVersion: Long,
+
+    @SerialName("task_id")
+    val taskId: String,
+
+    val to: String? = null
+)
+
+@Serializable
+enum class ReclassificationTaskStatusStatus(val value: String) {
+    @SerialName("closed") CLOSED("closed"),
+    @SerialName("open") OPEN("open");
+}
 
 @Serializable
 data class SourcePolicyDocument(
