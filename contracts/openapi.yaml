@@ -30,6 +30,12 @@ tags:
       report timezone. Device minutes sum qualifying device intervals and may
       exceed elapsed time; active minutes union qualifying non-AFK intervals
       so overlapping time counts once.
+  - name: Health
+    description: >-
+      Versioned health observations (steps, heart rate, sleep) ingested from
+      Health Connect with their data origin. Sleep appears only as
+      source-provided intervals; the system never infers sleep from device
+      idle time and never renders missing coverage as zero.
 paths:
   /api/v1/owner/status:
     get:
@@ -325,7 +331,13 @@ paths:
       tags: [Events]
       security:
         - DeviceToken: []
-      x-required-scopes: [events:write]
+      x-required-scopes: [events:write, health:write]
+      description: >-
+        Requires one of the listed write scopes. Enforcement is per item:
+        activity.interval items require events:write and health.* items
+        require health:write, so a credential holding only one domain's scope
+        still receives per-item `insufficient_scope` rejections for the other
+        domain instead of a whole-batch failure.
       requestBody:
         required: true
         content:
@@ -356,6 +368,11 @@ paths:
         - OwnerSession: []
         - QueryToken: []
       x-required-scopes: [events:read]
+      description: >-
+        Credential reads are domain-scoped: events:read grants the activity
+        domain and health:read grants the health domain, so a query token
+        without health:read never sees health observations here. Owner
+        sessions read every registered domain.
       parameters:
         - $ref: "#/components/parameters/From"
         - $ref: "#/components/parameters/To"
@@ -366,6 +383,42 @@ paths:
       responses:
         "200":
           description: A page of latest, non-invalidated event revisions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/health/events:
+    get:
+      operationId: listHealthEvents
+      summary: List latest valid health event revisions
+      description: >-
+        Health-domain read of steps, heart rate, and sleep observations.
+        Requires health:read for credentials; Owner sessions read without a
+        scope. Every observation carries its Health Connect data origin, and
+        the query context reports completeness so missing coverage is never
+        rendered as zero. Sleep appears only as source-provided intervals.
+      tags: [Health]
+      security:
+        - OwnerSession: []
+        - QueryToken: []
+      x-required-scopes: [health:read]
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Timezone"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: A page of latest, non-invalidated health event revisions.
           content:
             application/json:
               schema:
@@ -651,11 +704,14 @@ components:
     CredentialScope:
       title: Credential Scope
       type: string
-      enum: [events:write, events:read]
+      enum: [events:write, events:read, health:write, health:read]
       description: >-
-        Capability granted to the credential. Device tokens carry events:write
-        and query tokens carry events:read; a credential never holds a scope
-        outside its actor type.
+        Capability granted to the credential. Scopes are domain-scoped:
+        events:write and health:write restrict which event domains a device
+        token may upload (activity intervals versus Health Connect
+        observations), events:read and health:read restrict which domains a
+        query token may read. A credential never holds a scope outside its
+        actor type.
     CredentialPrivacyCeiling:
       title: Credential Privacy Ceiling
       type: string
@@ -684,6 +740,10 @@ components:
           uniqueItems: true
           items:
             $ref: "#/components/schemas/CredentialScope"
+          description: >-
+            Non-empty subset of the actor type's scopes: device tokens may
+            hold events:write and health:write; query tokens may hold
+            events:read and health:read.
         allowed_event_types:
           type: array
           default: []

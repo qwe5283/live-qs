@@ -1,6 +1,6 @@
 package com.ailife.android.data.queue
 
-import com.ailife.android.generated.ActivityIntervalEventV1
+import com.ailife.android.generated.VersionedEvent
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -9,24 +9,25 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * Durable outbox for versioned contract events. Entries survive process
- * restarts and are removed only after their revision is acknowledged by the
- * server. Enqueueing is an upsert per logical event: a newer revision of an
- * event that is still pending replaces the stale pending copy, so an outage
- * followed by a rebuild never uploads superseded checkpoints.
+ * Durable outbox shared by every contract event domain (usage, health, ...).
+ * Entries survive process restarts and are removed only after their revision
+ * is acknowledged by the server. Enqueueing is an upsert per logical event: a
+ * newer revision of an event that is still pending replaces the stale pending
+ * copy, so an outage followed by a rebuild never uploads superseded
+ * checkpoints.
  */
-class UsageEventSpoolQueue(private val file: File) {
+class ContractEventSpoolQueue(private val file: File) {
     private val json = Json { ignoreUnknownKeys = true }
 
     @Serializable
     private data class Entry(
         val id: String,
         val createdAt: String,
-        val event: ActivityIntervalEventV1,
+        val event: VersionedEvent,
     )
 
     @Synchronized
-    fun enqueueAll(events: List<ActivityIntervalEventV1>) {
+    fun enqueueAll(events: List<VersionedEvent>) {
         if (events.isEmpty()) return
         val existing = readEntries().associateByTo(mutableMapOf()) { it.event.eventId }
         for (event in events) {
@@ -42,8 +43,8 @@ class UsageEventSpoolQueue(private val file: File) {
     }
 
     @Synchronized
-    fun readAll(): List<SpooledUsageEvent> {
-        return readEntries().map { SpooledUsageEvent(id = it.id, createdAt = it.createdAt, event = it.event) }
+    fun readAll(): List<SpooledContractEvent> {
+        return readEntries().map { SpooledContractEvent(id = it.id, createdAt = it.createdAt, event = it.event) }
     }
 
     @Synchronized
@@ -78,8 +79,8 @@ class UsageEventSpoolQueue(private val file: File) {
     }
 }
 
-data class SpooledUsageEvent(
+data class SpooledContractEvent(
     val id: String,
     val createdAt: String,
-    val event: ActivityIntervalEventV1,
+    val event: VersionedEvent,
 )

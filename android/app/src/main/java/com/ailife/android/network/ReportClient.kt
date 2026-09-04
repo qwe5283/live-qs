@@ -2,7 +2,7 @@ package com.ailife.android.network
 
 import com.ailife.android.data.model.LifeEvent
 import com.ailife.android.data.model.toJsonObject
-import com.ailife.android.generated.ActivityIntervalEventV1
+import com.ailife.android.generated.VersionedEvent
 import com.ailife.android.generated.EventBatchRequest
 import com.ailife.android.generated.EventBatchResponse
 import com.ailife.android.generated.HeartbeatRequest
@@ -58,7 +58,7 @@ class ReportClient(
      * the confirmation the outbox reasons about; transport and shape failures
      * surface as errors so pending entries are kept for the next pass.
      */
-    fun postEventBatch(events: List<ActivityIntervalEventV1>): Result<EventBatchResponse> {
+    fun postEventBatch(events: List<VersionedEvent>): Result<EventBatchResponse> {
         if (events.isEmpty()) return Result.success(EventBatchResponse(results = emptyList()))
 
         val request = Request.Builder()

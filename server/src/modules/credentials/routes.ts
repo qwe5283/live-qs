@@ -11,7 +11,7 @@ const EVENT_TYPE_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/;
 const createRequestSchema = z.strictObject({
   kind: z.enum(["device_token", "query_token"]),
   name: z.string().min(1).max(100),
-  scopes: z.array(z.enum(["events:write", "events:read"])).min(1).max(8),
+  scopes: z.array(z.enum(["events:write", "events:read", "health:write", "health:read"])).min(1).max(8),
   allowed_event_types: z.array(z.string().regex(EVENT_TYPE_PATTERN)).max(64).default([]),
   privacy_ceiling: z.enum(["normal", "sensitive", "private"]).default("normal"),
   expires_at: z.union([z.string(), z.null()]).default(null),

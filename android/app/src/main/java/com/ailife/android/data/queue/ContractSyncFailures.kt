@@ -1,4 +1,4 @@
-package com.ailife.android.usage
+package com.ailife.android.data.queue
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -8,7 +8,7 @@ import java.time.Instant
 
 /** One permanently rejected upload, kept locally so failures stay visible. */
 @Serializable
-data class UsageSyncFailure(
+data class ContractSyncFailure(
     val eventId: String,
     val revision: Long,
     val errorCode: String,
@@ -17,12 +17,14 @@ data class UsageSyncFailure(
 )
 
 /**
- * Local failure queue for permanently rejected events (stable error codes such
- * as `invalid_event`, `event_type_not_allowed`, or `privacy_ceiling_exceeded`).
- * Rejections are never retried; the queue surfaces them to the Owner instead
- * of silently discarding collection results.
+ * Local failure queue shared by every contract event domain for permanently
+ * rejected events (stable error codes such as `invalid_event`,
+ * `insufficient_scope`, `event_type_not_allowed`, or
+ * `privacy_ceiling_exceeded`). Rejections are never retried; the queue
+ * surfaces them to the Owner instead of silently discarding collection
+ * results.
  */
-class UsageSyncFailures(private val file: File) {
+class ContractSyncFailures(private val file: File) {
     private val json = Json { ignoreUnknownKeys = true }
 
     @Synchronized
@@ -30,7 +32,7 @@ class UsageSyncFailures(private val file: File) {
         file.parentFile?.mkdirs()
         file.appendText(
             json.encodeToString(
-                UsageSyncFailure(
+                ContractSyncFailure(
                     eventId = eventId,
                     revision = revision,
                     errorCode = errorCode,
@@ -42,12 +44,12 @@ class UsageSyncFailures(private val file: File) {
     }
 
     @Synchronized
-    fun readAll(): List<UsageSyncFailure> {
+    fun readAll(): List<ContractSyncFailure> {
         if (!file.exists()) return emptyList()
         return file.readLines()
             .asSequence()
             .filter { it.isNotBlank() }
-            .mapNotNull { line -> runCatching { json.decodeFromString<UsageSyncFailure>(line) }.getOrNull() }
+            .mapNotNull { line -> runCatching { json.decodeFromString<ContractSyncFailure>(line) }.getOrNull() }
             .toList()
     }
 

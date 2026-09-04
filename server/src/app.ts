@@ -8,7 +8,7 @@ import { assignRequestId } from "./middleware/request-id.js";
 import { adminRouter } from "./modules/admin/routes.js";
 import { contextRouter, publicRouter } from "./modules/context/routes.js";
 import { credentialsRouter } from "./modules/credentials/routes.js";
-import { eventsRouter } from "./modules/events/routes.js";
+import { eventsRouter, healthEventsRouter } from "./modules/events/routes.js";
 import { healthRouter } from "./modules/health/routes.js";
 import { heartbeatsRouter } from "./modules/heartbeats/routes.js";
 import { metricsRouter } from "./modules/metrics/routes.js";
@@ -37,6 +37,7 @@ export function createApp(env: Env, clock: Clock = systemClock) {
   app.use("/api/v1/events", eventsRouter(env));
   app.use("/api/v1/metrics", metricsRouter(env));
   app.use("/api/v1", heartbeatsRouter(env, clock));
+  app.use("/api/v1/health", healthEventsRouter(env));
   app.use("/api/v1", ownerAuth());
   app.use("/api/v1", contextRouter(env));
   app.use("/api/v1", usageRouter(env));

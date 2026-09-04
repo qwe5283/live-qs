@@ -24,10 +24,15 @@ function readExamples(directory) {
     .map((name) => ({ name, value: JSON.parse(fs.readFileSync(path.join(directory, name), "utf8")) }));
 }
 
-test("event registry exposes the first V1 activity interval", () => {
+test("event registry exposes the registered V1 event types", () => {
   assert.deepEqual(
     loadEventRegistry().map(({ eventType, schemaVersion }) => ({ eventType, schemaVersion })),
-    [{ eventType: "activity.interval", schemaVersion: 1 }],
+    [
+      { eventType: "activity.interval", schemaVersion: 1 },
+      { eventType: "health.heartrate.sample", schemaVersion: 1 },
+      { eventType: "health.sleep.session", schemaVersion: 1 },
+      { eventType: "health.step.sample", schemaVersion: 1 },
+    ],
   );
 });
 
@@ -71,12 +76,11 @@ test("invalid examples are rejected with their declared stable error code", () =
 test("batch response acknowledges every item and explains rejections", () => {
   const ajv = new Ajv2020({ strict: true });
   addFormats(ajv);
-  for (const schemaPath of [
-    "schemas/event-envelope.v1.schema.json",
-    "schemas/events/activity.interval.v1.schema.json",
-    "schemas/event.schema.json",
-  ]) {
-    ajv.addSchema(JSON.parse(fs.readFileSync(path.join(contractsRoot, schemaPath), "utf8")));
+  for (const name of ["schemas/event-envelope.v1.schema.json", "schemas/event.schema.json"]) {
+    ajv.addSchema(JSON.parse(fs.readFileSync(path.join(contractsRoot, name), "utf8")));
+  }
+  for (const { schema } of loadEventRegistry()) {
+    ajv.addSchema(schema);
   }
 
   const openApi = parseYaml(fs.readFileSync(path.join(contractsRoot, "openapi.yaml"), "utf8"));

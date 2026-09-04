@@ -1,6 +1,6 @@
 package com.ailife.android.usage
 
-import com.ailife.android.generated.ActivityIntervalEventV1
+import com.ailife.android.generated.VersionedEvent
 import com.ailife.android.generated.Device
 import com.ailife.android.generated.Duration
 import com.ailife.android.generated.DurationUnit
@@ -28,7 +28,7 @@ const val USAGE_PRIVACY_PRIVATE = "private"
 
 /** Outcome of one planning pass over the rebuilt session set. */
 data class UsageEventPlan(
-    val events: List<ActivityIntervalEventV1>,
+    val events: List<VersionedEvent>,
     val states: Map<String, UsageIntervalState>,
     val droppedPrivateCount: Int,
 )
@@ -59,7 +59,7 @@ object UsageStatsEventPlanner {
         appNameOf: (String) -> String? = { null },
         privacyLevelOf: (String) -> String = { USAGE_PRIVACY_NORMAL },
     ): UsageEventPlan {
-        val events = mutableListOf<ActivityIntervalEventV1>()
+        val events = mutableListOf<VersionedEvent>()
         val states = mutableMapOf<String, UsageIntervalState>()
         var droppedPrivate = 0
 
@@ -87,7 +87,7 @@ object UsageStatsEventPlanner {
             val startInstant = Instant.ofEpochMilli(interval.startMillis)
             val endInstant = Instant.ofEpochMilli(endMillis)
             events.add(
-                ActivityIntervalEventV1(
+                VersionedEvent(
                     eventType = EventType.ACTIVITY_INTERVAL,
                     payload = Payload(
                         applicationId = interval.packageName,

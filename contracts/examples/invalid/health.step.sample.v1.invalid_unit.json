@@ -1,0 +1,33 @@
+{
+  "event_id": "3d704b1b-8f4e-4051-ad62-9e0f1a2b3c44",
+  "event_type": "health.step.sample",
+  "schema_version": 1,
+  "owner_id": "local",
+  "source": {
+    "kind": "android.healthconnect",
+    "record_id": "5e1a2b3c-4d5e-6f70-8a9b-0c1d2e3f4a5b"
+  },
+  "device": {
+    "id": "phone",
+    "platform": "android"
+  },
+  "start_at": "2026-08-20T01:30:00.000Z",
+  "end_at": "2026-08-20T02:00:00.000Z",
+  "capture_timezone": "Asia/Shanghai",
+  "capture_offset_minutes": 480,
+  "privacy_level": "sensitive",
+  "revision": 1,
+  "finalization_state": "final",
+  "provenance": {
+    "collector_version": "0.2.0",
+    "observed_at": "2026-08-20T02:05:00.000Z"
+  },
+  "invalidated": false,
+  "payload": {
+    "count": {
+      "value": 2415,
+      "unit": "count"
+    },
+    "data_origin": "com.google.android.apps.fitness"
+  }
+}

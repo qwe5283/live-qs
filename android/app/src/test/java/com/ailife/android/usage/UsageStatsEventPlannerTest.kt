@@ -51,8 +51,8 @@ class UsageStatsEventPlannerTest {
         assertEquals(FinalizationState.CHECKPOINT, event.finalizationState)
         assertEquals(Instant.ofEpochMilli(sessionStart).toString(), event.startAt)
         assertEquals(Instant.ofEpochMilli(sessionStart + 60_000).toString(), event.endAt)
-        assertEquals(60_000L, event.payload.duration.value)
-        assertEquals("ms", event.payload.duration.unit.value)
+        assertEquals(60_000L, event.payload.duration?.value)
+        assertEquals("ms", event.payload.duration?.unit?.value)
         assertEquals("tv.danmaku.bili", event.payload.applicationId)
         assertEquals(false, event.payload.isAfk)
         assertEquals("android.usagestats", event.source.kind.value)
@@ -99,8 +99,8 @@ class UsageStatsEventPlannerTest {
         assertEquals(FinalizationState.CHECKPOINT, pass2.events.single().finalizationState)
         assertEquals(3L, pass3.events.single().revision)
         assertEquals(FinalizationState.FINAL, pass3.events.single().finalizationState)
-        assertEquals(150_000L, pass3.events.single().payload.duration.value)
-        assertTrue(pass1.events.single().payload.duration.value < pass2.events.single().payload.duration.value)
+        assertEquals(150_000L, pass3.events.single().payload.duration?.value)
+        assertTrue((pass1.events.single().payload.duration?.value ?: 0L) < (pass2.events.single().payload.duration?.value ?: 0L))
 
         val finalState = pass3.states.getValue(eventId)
         assertTrue(finalState.isFinal)
@@ -152,7 +152,7 @@ class UsageStatsEventPlannerTest {
         val event = result.events.single()
         assertEquals(4L, event.revision)
         assertEquals(FinalizationState.FINAL, event.finalizationState)
-        assertEquals(160_000L, event.payload.duration.value)
+        assertEquals(160_000L, event.payload.duration?.value)
     }
 
     @Test

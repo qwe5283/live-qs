@@ -95,7 +95,10 @@
           <a-input v-model:value="form.name" :maxlength="100" placeholder="例如：Windows 桌面机" />
         </a-form-item>
         <a-form-item label="Scopes">
-          <a-tag>{{ form.kind === "device_token" ? "events:write" : "events:read" }}</a-tag>
+          <a-checkbox-group v-model:value="form.scopes" :options="scopeOptions" />
+          <a-typography-text type="secondary" class="scope-hint">
+            {{ scopeHint }}
+          </a-typography-text>
         </a-form-item>
         <a-form-item label="允许事件类型（留空表示全部已注册类型）">
           <a-select
@@ -147,7 +150,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import dayjs from "dayjs";
 import { createCredential, listCredentials, revokeCredential } from "../api/credentials";
 import type { CredentialView } from "../generated/contract-models";
@@ -164,16 +167,41 @@ const messageType = ref<"success" | "error" | "info">("info");
 const form = reactive<{
   kind: "device_token" | "query_token";
   name: string;
+  scopes: string[];
   allowed_event_types: string[];
   privacy_ceiling: "normal" | "sensitive" | "private";
   expiresAt: string | null;
 }>({
   kind: "device_token",
   name: "",
+  scopes: ["events:write"],
   allowed_event_types: [],
   privacy_ceiling: "normal",
   expiresAt: null,
 });
+
+const KIND_SCOPES: Record<"device_token" | "query_token", Array<{ label: string; value: string }>> = {
+  device_token: [
+    { label: "events:write（上传活动事件）", value: "events:write" },
+    { label: "health:write（上传健康观测）", value: "health:write" },
+  ],
+  query_token: [
+    { label: "events:read（读取活动事件）", value: "events:read" },
+    { label: "health:read（读取健康观测）", value: "health:read" },
+  ],
+};
+
+const scopeOptions = computed(() => KIND_SCOPES[form.kind]);
+
+const scopeHint = computed(() =>
+  form.kind === "device_token"
+    ? "设备令牌只能持有写 scopes。采集 Health Connect 数据需要 health:write，且隐私上限需为 sensitive。"
+    : "查询令牌只能持有读 scopes。读取健康数据需要 health:read，且隐私上限需为 sensitive。",
+);
+
+function defaultScopesFor(kind: "device_token" | "query_token"): string[] {
+  return [KIND_SCOPES[kind][0].value];
+}
 
 const columns = [
   { title: "名称", key: "name" },
@@ -205,15 +233,25 @@ async function refresh(): Promise<void> {
 function openCreate(): void {
   form.kind = "device_token";
   form.name = "";
+  form.scopes = defaultScopesFor("device_token");
   form.allowed_event_types = [];
   form.privacy_ceiling = "normal";
   form.expiresAt = null;
   createOpen.value = true;
 }
 
+// Switching the actor type resets the scopes to that kind's default subset.
+watch(() => form.kind, (kind) => {
+  form.scopes = defaultScopesFor(kind);
+});
+
 async function submitCreate(): Promise<void> {
   if (!form.name.trim()) {
     showMessage("请填写凭据名称", "error");
+    return;
+  }
+  if (form.scopes.length === 0) {
+    showMessage("请至少选择一个 scope", "error");
     return;
   }
   creating.value = true;
@@ -221,7 +259,7 @@ async function submitCreate(): Promise<void> {
     const created = await createCredential({
       kind: form.kind,
       name: form.name.trim(),
-      scopes: [form.kind === "device_token" ? "events:write" : "events:read"],
+      scopes: [...form.scopes],
       allowed_event_types: form.allowed_event_types,
       privacy_ceiling: form.privacy_ceiling,
       expires_at: form.expiresAt ? dayjs(form.expiresAt).toISOString() : null,
@@ -289,6 +327,11 @@ function showMessage(text: string, type: "success" | "error" | "info"): void {
 }
 
 .credential-prefix {
+  font-size: 12px;
+}
+
+.scope-hint {
+  display: block;
   font-size: 12px;
 }
 

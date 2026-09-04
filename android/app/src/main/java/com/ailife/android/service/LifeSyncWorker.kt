@@ -12,10 +12,8 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.ailife.android.data.SettingsStore
-import com.ailife.android.health.HealthConnectCollector
+import com.ailife.android.health.HealthConnectEventSource
 import com.ailife.android.usage.UsageStatsEventSource
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
 class LifeSyncWorker(
@@ -26,27 +24,26 @@ class LifeSyncWorker(
         val settings = SettingsStore(applicationContext)
         if (!settings.isReady()) return Result.success()
 
-        val now = Instant.now()
-        val lastHealthSync = settings.lastHealthSyncMillis
-        val healthSince = if (lastHealthSync <= 0) {
-            now.minus(7, ChronoUnit.DAYS)
-        } else {
-            Instant.ofEpochMilli(lastHealthSync).minus(5, ChronoUnit.MINUTES)
-        }
-
-        // Health Connect stays on the legacy event channel until ticket 13.
-        val healthDrainer = EventQueueDrainer(applicationContext, settings)
-        val healthEvents = HealthConnectCollector(applicationContext).collect(settings, healthSince, now)
-        if (healthEvents.isNotEmpty()) {
-            healthDrainer.enqueue(healthEvents)
-        }
-        settings.lastHealthSyncMillis = now.toEpochMilli()
-
-        // UsageStats is the authoritative daily usage source and rides the
-        // versioned contract protocol: stable identities, revision
-        // checkpoints, and a durable outbox with per-item acknowledgements.
-        val usageDrainer = UsageEventQueueDrainer(applicationContext, settings)
+        // UsageStats is the authoritative daily usage source; Health Connect
+        // observations are sensitive, origin-attributed health facts. Both ride
+        // the versioned contract protocol through the shared durable outbox:
+        // stable identities, monotonic revisions, per-item acknowledgements,
+        // and a visible local failure queue for permanent rejections.
+        val usageDrainer = ContractEventQueueDrainer(
+            applicationContext,
+            settings,
+            USAGE_QUEUE,
+            USAGE_FAILURES,
+        )
         usageDrainer.enqueue(UsageStatsEventSource(applicationContext, settings).collectPendingEvents())
+
+        val healthDrainer = ContractEventQueueDrainer(
+            applicationContext,
+            settings,
+            HEALTH_QUEUE,
+            HEALTH_FAILURES,
+        )
+        healthDrainer.enqueue(HealthConnectEventSource(applicationContext, settings).collectPendingEvents())
 
         val heartbeatResult = HeartbeatQueueDrainer(applicationContext, settings).drainOnce(MAX_HEARTBEATS_PER_SYNC)
         val usageResult = usageDrainer.drainOnce(MAX_EVENTS_PER_SYNC)
@@ -63,6 +60,11 @@ class LifeSyncWorker(
         private const val UNIQUE_ONE_TIME_WORK = "ai_life_sync_now"
         private const val MAX_EVENTS_PER_SYNC = 500
         private const val MAX_HEARTBEATS_PER_SYNC = 100
+        /** Outbox and failure-queue file names, shared with the sync/status screens for queue visibility. */
+        const val USAGE_QUEUE = "usage-events.ndjson"
+        const val USAGE_FAILURES = "usage-sync-failures.ndjson"
+        const val HEALTH_QUEUE = "health-events.ndjson"
+        const val HEALTH_FAILURES = "health-sync-failures.ndjson"
 
         fun schedule(context: Context) {
             val constraints = Constraints.Builder()

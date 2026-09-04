@@ -1,0 +1,32 @@
+{
+  "event_id": "5f926d3d-a160-4273-cf84-b02b3c4d5e68",
+  "event_type": "health.sleep.session",
+  "schema_version": 1,
+  "owner_id": "local",
+  "source": {
+    "kind": "android.healthconnect",
+    "record_id": "703c4d5e-6f70-8192-abbd-2e3f4a5b6c7d"
+  },
+  "device": {
+    "id": "phone",
+    "platform": "android"
+  },
+  "start_at": "2026-08-19T22:10:00.000Z",
+  "end_at": "2026-08-20T05:46:30.000Z",
+  "capture_timezone": "Asia/Shanghai",
+  "capture_offset_minutes": 480,
+  "privacy_level": "sensitive",
+  "revision": 1,
+  "finalization_state": "final",
+  "provenance": {
+    "collector_version": "0.2.0",
+    "observed_at": "2026-08-20T08:00:00.000Z"
+  },
+  "invalidated": false,
+  "payload": {
+    "duration": {
+      "value": 27390000,
+      "unit": "ms"
+    }
+  }
+}

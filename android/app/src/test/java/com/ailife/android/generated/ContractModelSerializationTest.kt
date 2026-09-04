@@ -8,7 +8,7 @@ import org.junit.Test
 class ContractModelSerializationTest {
     @Test
     fun activityIntervalUsesContractWireNamesAndValues() {
-        val model = ActivityIntervalEventV1(
+        val model = VersionedEvent(
             eventType = EventType.ACTIVITY_INTERVAL,
             payload = Payload(
                 applicationId = "tv.danmaku.bili",

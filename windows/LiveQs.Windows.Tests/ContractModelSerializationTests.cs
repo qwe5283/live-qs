@@ -8,7 +8,7 @@ public sealed class ContractModelSerializationTests
     [Fact]
     public void ActivityInterval_UsesContractWireNamesAndValues()
     {
-        var model = new ActivityIntervalEventV1
+        var model = new VersionedEvent
         {
             EventId = Guid.Parse("018f62d6-4f34-7c82-9085-57c8af1d7a44"),
             EventType = EventType.ActivityInterval,

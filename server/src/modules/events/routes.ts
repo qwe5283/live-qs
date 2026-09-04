@@ -5,8 +5,9 @@ import type { Env } from "../../config/env.js";
 import { credentialBearerAuth, sessionOrCredentialAuth } from "../../middleware/auth.js";
 import type { CredentialAuthContext } from "../credentials/service.js";
 import { AppError } from "../../shared/errors.js";
-import { batchUpsertEvents, listEvents } from "./service.js";
+import { batchUpsertEvents, eventTypesForReadScopes, listEvents } from "./service.js";
 import type { EventRangeQuery } from "./service.js";
+import { HEALTH_EVENT_TYPES } from "./payload-registry.js";
 
 function requiredInstant(value: unknown, name: string): Date {
   if (typeof value !== "string" || value.length === 0) {
@@ -70,12 +71,16 @@ export function eventsRouter(env: Env): Router {
     const credential = res.locals.credential as CredentialAuthContext | undefined;
     if (credential) {
       query.privacyCeiling = credential.privacy_ceiling;
+      // Domain scopes bound what a credential read may return: a query token
+      // without health:read never sees health observations, even when the
+      // event_type filter would otherwise select them.
+      query.scopeGrantedEventTypes = eventTypesForReadScopes(credential.scopes);
       if (credential.allowed_event_types.length > 0) query.allowedEventTypes = credential.allowed_event_types;
     }
     res.json(await listEvents(query));
   });
 
-  router.post("/batch", credentialBearerAuth(env, { scope: "events:write" }), async (req, res) => {
+  router.post("/batch", credentialBearerAuth(env, { anyScope: ["events:write", "health:write"] }), async (req, res) => {
     const credential = res.locals.credential as CredentialAuthContext;
     if (credential.kind !== "device_token") {
       throw new AppError(403, "Only device tokens may upload events.", "insufficient_scope");
@@ -85,6 +90,34 @@ export function eventsRouter(env: Env): Router {
       throw new AppError(400, "The batch body must contain an events array of 1 to 100 items.", "invalid_request");
     }
     res.json(await batchUpsertEvents(env, credential, parsed.data.events));
+  });
+
+  return router;
+}
+
+/**
+ * Health-domain read: every registered health event type, guarded by the
+ * health:read scope for credentials. Sleep appears only as source-provided
+ * intervals; the query context reports completeness so missing coverage is
+ * never rendered as zero.
+ */
+export function healthEventsRouter(env: Env): Router {
+  const router = Router();
+
+  router.get("/events", sessionOrCredentialAuth(env, { scope: "health:read" }), async (req, res) => {
+    const query = parseEventQuery(req, env.DEFAULT_USER_ID);
+    query.scopeGrantedEventTypes = [...HEALTH_EVENT_TYPES];
+    // Completeness is relative to the health domain this endpoint promises.
+    query.completenessBaseline = [...HEALTH_EVENT_TYPES];
+    const credential = res.locals.credential as CredentialAuthContext | undefined;
+    if (credential) {
+      query.privacyCeiling = credential.privacy_ceiling;
+      query.scopeGrantedEventTypes = eventTypesForReadScopes(credential.scopes).filter(
+        (type) => (HEALTH_EVENT_TYPES as string[]).includes(type),
+      );
+      if (credential.allowed_event_types.length > 0) query.allowedEventTypes = credential.allowed_event_types;
+    }
+    res.json(await listEvents(query));
   });
 
   return router;

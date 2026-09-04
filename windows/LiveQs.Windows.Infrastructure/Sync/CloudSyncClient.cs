@@ -72,7 +72,7 @@ public sealed class CloudSyncClient(IHttpClientFactory httpClientFactory, ISyncQ
         ? $"{error.Code}: {error.Message}"
         : "rejected";
 
-    internal static Core.Contracts.ActivityIntervalEventV1 ToEnvelope(
+    internal static Core.Contracts.VersionedEvent ToEnvelope(
         SyncQueueItem item, AppSettings settings, string installId, DateTimeOffset observedAt)
     {
         var payload = new Core.Contracts.Payload
@@ -89,7 +89,7 @@ public sealed class CloudSyncClient(IHttpClientFactory httpClientFactory, ISyncQ
         };
         if (!string.IsNullOrWhiteSpace(item.AppName)) payload.ApplicationLabel = item.AppName;
 
-        return new Core.Contracts.ActivityIntervalEventV1
+        return new Core.Contracts.VersionedEvent
         {
             EventId = EventIds.ForSegment(settings.DeviceId, installId, item.SegmentId),
             EventType = Core.Contracts.EventType.ActivityInterval,

@@ -9,10 +9,15 @@ const TOKEN_PREFIX: Record<CredentialKind, string> = {
   query_token: "lqqry_",
 };
 
-/** The only scope a credential of each kind may carry; capabilities never cross actor types. */
-export const KIND_SCOPE: Record<CredentialKind, CredentialScope> = {
-  device_token: "events:write",
-  query_token: "events:read",
+/**
+ * Scopes a credential of each kind may carry, as a non-empty subset.
+ * Capabilities never cross actor types: device tokens hold write scopes
+ * (events:write for activity, health:write for Health Connect observations),
+ * query tokens hold the matching read scopes.
+ */
+export const KIND_SCOPES: Record<CredentialKind, CredentialScope[]> = {
+  device_token: ["events:write", "health:write"],
+  query_token: ["events:read", "health:read"],
 };
 
 export interface CredentialInput {
@@ -65,13 +70,15 @@ interface CredentialRecord {
 }
 
 export function assertScopesMatchKind(kind: CredentialKind, scopes: string[]): void {
-  const expected = [KIND_SCOPE[kind]];
-  if (scopes.length !== 1 || scopes[0] !== expected[0]) {
+  const allowed = KIND_SCOPES[kind];
+  const unique = new Set(scopes);
+  if (scopes.length === 0 || unique.size !== scopes.length
+    || !scopes.every((scope) => (allowed as string[]).includes(scope))) {
     throw new AppError(
       400,
       kind === "device_token"
-        ? "A device token carries exactly the events:write scope."
-        : "A query token carries exactly the events:read scope.",
+        ? "A device token may only carry write scopes: events:write, health:write."
+        : "A query token may only carry read scopes: events:read, health:read.",
       "invalid_scope",
     );
   }

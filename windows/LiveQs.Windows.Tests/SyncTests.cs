@@ -41,7 +41,7 @@ public sealed class SyncTests : IDisposable
         Assert.Equal("winword.exe", first.Payload.ApplicationId);
         Assert.Equal(2, first.Revision); // the finalized interval carries its final revision
         Assert.Equal(LiveQs.Windows.Core.Contracts.FinalizationState.Final, first.FinalizationState);
-        Assert.Equal(10_000, first.Payload.Duration.Value);
+        Assert.Equal(10_000, first.Payload.Duration!.Value);
         Assert.Matches(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", first.StartAt);
         Assert.All(outcomes, outcome => Assert.Equal(SyncOutcomeKind.Acknowledged, outcome.Kind));
     }

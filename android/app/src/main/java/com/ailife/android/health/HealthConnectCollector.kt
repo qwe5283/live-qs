@@ -9,12 +9,19 @@ import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
-import com.ailife.android.data.SettingsStore
-import com.ailife.android.data.model.LifeEvent
-import java.time.Duration
 import java.time.Instant
-import java.time.format.DateTimeFormatter
 
+/**
+ * Reads Health Connect records. The platform permission flow (read
+ * permissions, rationale, request contract) is unchanged; only the output
+ * moved from the deleted legacy event channel to typed samples that the
+ * contract event path (ticket 13) turns into versioned events.
+ *
+ * Every sample keeps the record's [HealthSample.dataOrigin] — the application
+ * that wrote the record into Health Connect — and its stable
+ * [HealthSample.recordId] so source record counts reconcile against server
+ * acknowledgements.
+ */
 class HealthConnectCollector(private val context: Context) {
     private val client: HealthConnectClient by lazy { HealthConnectClient.getOrCreate(context) }
 
@@ -28,26 +35,27 @@ class HealthConnectCollector(private val context: Context) {
 
     suspend fun grantedPermissions(): Set<String> = client.permissionController.getGrantedPermissions()
 
-    suspend fun collect(settings: SettingsStore, since: Instant, until: Instant): List<LifeEvent> {
+    /**
+     * Reads the granted record types in [since, until). A type whose read
+     * permission is missing contributes nothing: the permission gate stays
+     * visible in the UI instead of producing a silent failure here.
+     */
+    suspend fun readSamples(since: Instant, until: Instant): List<HealthSample> {
         if (!isAvailable(context) || !since.isBefore(until)) return emptyList()
 
         val granted = grantedPermissions()
         val timeRange = TimeRangeFilter.between(since, until)
-        val events = mutableListOf<LifeEvent>()
-        val bucket = "android:${settings.deviceId}:health"
+        val samples = mutableListOf<HealthSample>()
 
         if (HealthPermission.getReadPermission(StepsRecord::class) in granted) {
             val response = client.readRecords(ReadRecordsRequest(StepsRecord::class, timeRange))
             for (record in response.records) {
-                events += LifeEvent(
-                    idempotencyKey = "health-steps-${record.startTime}-${record.endTime}",
-                    bucket = bucket,
-                    type = "health.steps",
-                    startAt = iso(record.startTime),
-                    endAt = iso(record.endTime),
-                    value = record.count.toDouble(),
-                    unit = "count",
-                    privacyLevel = "sensitive",
+                samples += HealthStepsSample(
+                    recordId = record.metadata.id,
+                    dataOrigin = record.metadata.dataOrigin.packageName,
+                    startMillis = record.startTime.toEpochMilli(),
+                    endMillis = record.endTime.toEpochMilli(),
+                    count = record.count,
                 )
             }
         }
@@ -56,14 +64,11 @@ class HealthConnectCollector(private val context: Context) {
             val response = client.readRecords(ReadRecordsRequest(HeartRateRecord::class, timeRange))
             for (record in response.records) {
                 for (sample in record.samples) {
-                    events += LifeEvent(
-                        idempotencyKey = "health-heart-rate-${sample.time}-${sample.beatsPerMinute}",
-                        bucket = bucket,
-                        type = "health.heart_rate",
-                        startAt = iso(sample.time),
-                        value = sample.beatsPerMinute.toDouble(),
-                        unit = "bpm",
-                        privacyLevel = "sensitive",
+                    samples += HealthHeartRateSample(
+                        recordId = record.metadata.id,
+                        dataOrigin = record.metadata.dataOrigin.packageName,
+                        startMillis = sample.time.toEpochMilli(),
+                        beatsPerMinute = sample.beatsPerMinute,
                     )
                 }
             }
@@ -72,20 +77,16 @@ class HealthConnectCollector(private val context: Context) {
         if (HealthPermission.getReadPermission(SleepSessionRecord::class) in granted) {
             val response = client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, timeRange))
             for (record in response.records) {
-                events += LifeEvent(
-                    idempotencyKey = "health-sleep-${record.startTime}-${record.endTime}",
-                    bucket = bucket,
-                    type = "health.sleep",
-                    startAt = iso(record.startTime),
-                    endAt = iso(record.endTime),
-                    value = Duration.between(record.startTime, record.endTime).toMinutes().toDouble(),
-                    unit = "min",
-                    privacyLevel = "sensitive",
+                samples += HealthSleepSample(
+                    recordId = record.metadata.id,
+                    dataOrigin = record.metadata.dataOrigin.packageName,
+                    startMillis = record.startTime.toEpochMilli(),
+                    endMillis = record.endTime.toEpochMilli(),
                 )
             }
         }
 
-        return events
+        return samples
     }
 
     companion object {
@@ -97,7 +98,5 @@ class HealthConnectCollector(private val context: Context) {
         fun heartRateReadPermission(): String = HealthPermission.getReadPermission(HeartRateRecord::class)
 
         fun sleepReadPermission(): String = HealthPermission.getReadPermission(SleepSessionRecord::class)
-
-        private fun iso(instant: Instant): String = DateTimeFormatter.ISO_INSTANT.format(instant)
     }
 }

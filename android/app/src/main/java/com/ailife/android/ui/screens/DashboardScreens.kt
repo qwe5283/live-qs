@@ -68,12 +68,17 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.ailife.android.data.SettingsStore
 import com.ailife.android.data.model.LifeEvent
 import com.ailife.android.health.HealthConnectCollector
+import com.ailife.android.health.HealthSample
+import com.ailife.android.health.HealthSampleKind
+import com.ailife.android.health.HealthHeartRateSample
+import com.ailife.android.health.HealthSleepSample
+import com.ailife.android.health.HealthStepsSample
 import com.ailife.android.health.UsageStatsCollector
 import com.ailife.android.network.testServerReachability
+import com.ailife.android.service.ContractEventQueueDrainer
 import com.ailife.android.service.EventQueueDrainer
 import com.ailife.android.service.HeartbeatQueueDrainer
 import com.ailife.android.service.LifeSyncWorker
-import com.ailife.android.service.UsageEventQueueDrainer
 import com.ailife.android.system.deviceSupportsNotificationPermission
 import com.ailife.android.system.hasUsageAccess
 import com.ailife.android.system.isForegroundAccessibilityEnabled
@@ -303,6 +308,8 @@ fun SyncScreen(settings: SettingsStore) {
     var queuedEvents by remember { mutableIntStateOf(0) }
     var queuedUsageEvents by remember { mutableIntStateOf(0) }
     var usageFailures by remember { mutableIntStateOf(0) }
+    var queuedHealthEvents by remember { mutableIntStateOf(0) }
+    var healthFailures by remember { mutableIntStateOf(0) }
     var queuedHeartbeats by remember { mutableIntStateOf(0) }
     var statusMsg by remember { mutableStateOf<String?>(null) }
 
@@ -316,9 +323,22 @@ fun SyncScreen(settings: SettingsStore) {
             0
         }
         queuedEvents = EventQueueDrainer(context, settings).queuedCount()
-        val usageDrainer = UsageEventQueueDrainer(context, settings)
+        val usageDrainer = ContractEventQueueDrainer(
+            context,
+            settings,
+            LifeSyncWorker.USAGE_QUEUE,
+            LifeSyncWorker.USAGE_FAILURES,
+        )
         queuedUsageEvents = usageDrainer.queuedCount()
         usageFailures = usageDrainer.failureCount()
+        val healthDrainer = ContractEventQueueDrainer(
+            context,
+            settings,
+            LifeSyncWorker.HEALTH_QUEUE,
+            LifeSyncWorker.HEALTH_FAILURES,
+        )
+        queuedHealthEvents = healthDrainer.queuedCount()
+        healthFailures = healthDrainer.failureCount()
         queuedHeartbeats = HeartbeatQueueDrainer(context, settings).queuedCount()
     }
 
@@ -382,8 +402,10 @@ fun SyncScreen(settings: SettingsStore) {
             ) {
                 Text("同步队列", style = MaterialTheme.typography.titleMedium)
                 InfoRow("待上传使用事件（版本化）", queuedUsageEvents.toString())
-                InfoRow("待上传健康事件（旧通道）", queuedEvents.toString())
-                InfoRow("永久失败", usageFailures.toString())
+                InfoRow("使用事件永久失败", usageFailures.toString())
+                InfoRow("待上传健康事件（版本化）", queuedHealthEvents.toString())
+                InfoRow("健康事件永久失败", healthFailures.toString())
+                InfoRow("待上传支付事件（旧通道）", queuedEvents.toString())
                 InfoRow("待上传心跳", queuedHeartbeats.toString())
                 InfoRow("上次健康同步", formatInstantMillis(settings.lastHealthSyncMillis))
             }
@@ -453,7 +475,7 @@ fun PreviewScreen(settings: SettingsStore) {
     var loading by remember { mutableStateOf(true) }
     var healthAvailable by remember { mutableStateOf(false) }
     var grantedPermissions by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var healthEventsByDay by remember { mutableStateOf<List<Pair<String, List<LifeEvent>>>>(emptyList()) }
+    var healthSamplesByDay by remember { mutableStateOf<List<Pair<String, List<HealthSample>>>>(emptyList()) }
     var usageEvents by remember { mutableStateOf<List<LifeEvent>>(emptyList()) }
 
     LaunchedEffect(settings.deviceId) {
@@ -473,29 +495,29 @@ fun PreviewScreen(settings: SettingsStore) {
             val healthRows = days.map { day ->
                 val start = day.atStartOfDay(zone).toInstant()
                 val end = day.plusDays(1).atStartOfDay(zone).toInstant()
-                day.toString() to runCatching { healthCollector.collect(settings, start, end) }.getOrDefault(emptyList())
+                day.toString() to runCatching { healthCollector.readSamples(start, end) }.getOrDefault(emptyList())
             }
             PreviewSnapshot(
                 healthAvailable = healthOk,
                 grantedPermissions = granted,
-                healthEventsByDay = healthRows,
+                healthSamplesByDay = healthRows,
                 usageEvents = usageCollector.collectRecentDays(settings, 7),
             )
         }
         healthAvailable = snapshot.healthAvailable
         grantedPermissions = snapshot.grantedPermissions
-        healthEventsByDay = snapshot.healthEventsByDay
+        healthSamplesByDay = snapshot.healthSamplesByDay
         usageEvents = snapshot.usageEvents
         loading = false
     }
 
-    val selectedDay = healthEventsByDay.getOrNull(selectedDayIndex)?.first
-    val selectedHealthEvents = healthEventsByDay.getOrNull(selectedDayIndex)?.second.orEmpty()
+    val selectedDay = healthSamplesByDay.getOrNull(selectedDayIndex)?.first
+    val selectedHealthSamples = healthSamplesByDay.getOrNull(selectedDayIndex)?.second.orEmpty()
     val selectedUsageEvents = usageEvents.filter { event ->
         selectedDay != null && event.data["date"]?.toString() == selectedDay
     }
-    val hourlySteps = remember(selectedDay, selectedHealthEvents) {
-        selectedDay?.let { stepsByHour(selectedHealthEvents, LocalDate.parse(it), ZoneId.systemDefault()) } ?: DoubleArray(24)
+    val hourlySteps = remember(selectedDay, selectedHealthSamples) {
+        selectedDay?.let { stepsByHour(selectedHealthSamples, LocalDate.parse(it), ZoneId.systemDefault()) } ?: DoubleArray(24)
     }
     val topUsageApps = remember(selectedUsageEvents) { topUsageAppsByHour(selectedUsageEvents) }
     LaunchedEffect(selectedDay, topUsageApps.size) {
@@ -534,7 +556,7 @@ fun PreviewScreen(settings: SettingsStore) {
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            healthEventsByDay.forEachIndexed { index, (day, _) ->
+            healthSamplesByDay.forEachIndexed { index, (day, _) ->
                 val selected = selectedDayIndex == index
                 if (selected) {
                     Button(
@@ -566,9 +588,9 @@ fun PreviewScreen(settings: SettingsStore) {
         }
 
         Text("${selectedDay ?: "所选日期"} 健康数据", style = MaterialTheme.typography.titleMedium)
-        DayHealthSummaryCard(selectedHealthEvents)
+        DayHealthSummaryCard(selectedHealthSamples)
         HourlyStepsCard(hourlySteps)
-        PreviewCard("健康明细", selectedHealthEvents)
+        HealthPreviewCard(selectedHealthSamples)
 
         Text("${selectedDay ?: "所选日期"} 前台应用时长", style = MaterialTheme.typography.titleMedium)
         UsageSummaryCard(selectedUsageEvents)
@@ -625,9 +647,16 @@ fun StatusScreen(settings: SettingsStore) {
     val notificationEnabled = remember(tick) { isNotificationListenerEnabled(context) }
     val manufacturer = remember { Build.MANUFACTURER.lowercase(Locale.ROOT) }
     val queuedEvents = remember(tick) { EventQueueDrainer(context, settings).queuedCount() }
-    val usageDrainer = remember(tick) { UsageEventQueueDrainer(context, settings) }
+    val usageDrainer = remember(tick) {
+        ContractEventQueueDrainer(context, settings, LifeSyncWorker.USAGE_QUEUE, LifeSyncWorker.USAGE_FAILURES)
+    }
     val queuedUsageEvents = usageDrainer.queuedCount()
     val usageFailures = usageDrainer.failureCount()
+    val healthDrainer = remember(tick) {
+        ContractEventQueueDrainer(context, settings, LifeSyncWorker.HEALTH_QUEUE, LifeSyncWorker.HEALTH_FAILURES)
+    }
+    val queuedHealthEvents = healthDrainer.queuedCount()
+    val healthFailures = healthDrainer.failureCount()
     val queuedHeartbeats = remember(tick) { HeartbeatQueueDrainer(context, settings).queuedCount() }
 
     Column(
@@ -726,6 +755,8 @@ fun StatusScreen(settings: SettingsStore) {
                 InfoRow("Owner ID", settings.ownerId)
                 InfoRow("Queued Usage Events", queuedUsageEvents.toString())
                 InfoRow("Usage Sync Failures", usageFailures.toString())
+                InfoRow("Queued Health Events", queuedHealthEvents.toString())
+                InfoRow("Health Sync Failures", healthFailures.toString())
                 InfoRow("Queued Events", queuedEvents.toString())
                 InfoRow("Queued Heartbeats", queuedHeartbeats.toString())
                 InfoRow("Last Usage Day", settings.lastUsageSyncDay.ifBlank { "无" })
@@ -742,7 +773,7 @@ private fun formatInstantMillis(value: Long): String {
 private data class PreviewSnapshot(
     val healthAvailable: Boolean,
     val grantedPermissions: Set<String>,
-    val healthEventsByDay: List<Pair<String, List<LifeEvent>>>,
+    val healthSamplesByDay: List<Pair<String, List<HealthSample>>>,
     val usageEvents: List<LifeEvent>,
 )
 
@@ -764,10 +795,13 @@ private fun permissionText(permission: String, grantedPermissions: Set<String>):
 }
 
 @Composable
-private fun DayHealthSummaryCard(events: List<LifeEvent>) {
-    val steps = events.filter { it.type == "health.steps" }.sumOf { it.value ?: 0.0 }
-    val heartRates = events.filter { it.type == "health.heart_rate" }.mapNotNull { it.value }
-    val sleepMinutes = events.filter { it.type == "health.sleep" }.sumOf { it.value ?: 0.0 }
+private fun DayHealthSummaryCard(samples: List<HealthSample>) {
+    val steps = samples.filterIsInstance<HealthStepsSample>().sumOf { it.count }
+    val heartRates = samples.filterIsInstance<HealthHeartRateSample>().map { it.beatsPerMinute }
+    val sleepMinutes = samples.filterIsInstance<HealthSleepSample>().sumOf { sample ->
+        val end = sample.endMillis ?: return@sumOf 0.0
+        java.time.Duration.ofMillis((end - sample.startMillis).coerceAtLeast(0)).toMinutes().toDouble()
+    }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -776,10 +810,10 @@ private fun DayHealthSummaryCard(events: List<LifeEvent>) {
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("当天汇总", style = MaterialTheme.typography.titleMedium)
-            InfoRow("步数", roundPreviewValue(steps))
+            InfoRow("步数", roundPreviewValue(steps.toDouble()))
             InfoRow("平均心率", if (heartRates.isEmpty()) "暂无" else "${roundPreviewValue(heartRates.average())}bpm")
-            InfoRow("睡眠", if (sleepMinutes <= 0.0) "暂无" else "${roundPreviewValue(sleepMinutes)}min")
-            InfoRow("健康记录", events.size.toString())
+            InfoRow("睡眠区间（来源提供）", if (sleepMinutes <= 0.0) "暂无" else "${roundPreviewValue(sleepMinutes)}min")
+            InfoRow("健康记录", samples.size.toString())
         }
     }
 }
@@ -1026,6 +1060,46 @@ private fun HourlyUsageCard(
     }
 }
 
+/** Local preview of Health Connect samples with their data origin attribution. */
+@Composable
+private fun HealthPreviewCard(samples: List<HealthSample>) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("健康明细（含数据来源）", style = MaterialTheme.typography.titleMedium)
+            if (samples.isEmpty()) {
+                Text("暂无数据", style = MaterialTheme.typography.bodySmall, color = TextMuted)
+            } else {
+                InfoRow("记录数", samples.size.toString())
+                samples.take(10).forEach { sample ->
+                    InfoRow(healthSampleLabel(sample), healthSampleValue(sample))
+                }
+                if (samples.size > 10) {
+                    Text("还有 ${samples.size - 10} 条未显示", style = MaterialTheme.typography.bodySmall, color = TextMuted)
+                }
+            }
+        }
+    }
+}
+
+private fun healthSampleLabel(sample: HealthSample): String = when (sample.kind) {
+    HealthSampleKind.STEPS -> "步数 · ${sample.dataOrigin}"
+    HealthSampleKind.HEART_RATE -> "心率 · ${sample.dataOrigin}"
+    HealthSampleKind.SLEEP -> "睡眠 · ${sample.dataOrigin}"
+}
+
+private fun healthSampleValue(sample: HealthSample): String = when (sample) {
+    is HealthStepsSample -> "${sample.count} 步"
+    is HealthHeartRateSample -> "${sample.beatsPerMinute} bpm"
+    is HealthSleepSample -> {
+        val end = sample.endMillis
+        if (end == null) "区间缺失" else java.time.Duration.ofMillis((end - sample.startMillis).coerceAtLeast(0)).toMinutes().toString() + "min"
+    }
+}
+
 @Composable
 private fun PreviewCard(title: String, events: List<LifeEvent>) {
     Surface(
@@ -1159,24 +1233,23 @@ private fun dayLabel(day: String): String {
     return "${parsed.monthValue}/${parsed.dayOfMonth}"
 }
 
-private fun stepsByHour(events: List<LifeEvent>, day: LocalDate, zone: ZoneId): DoubleArray {
+private fun stepsByHour(samples: List<HealthSample>, day: LocalDate, zone: ZoneId): DoubleArray {
     val result = DoubleArray(24)
     val dayStart = day.atStartOfDay(zone)
 
-    events
-        .filter { it.type == "health.steps" && it.value != null }
-        .forEach { event ->
-            val start = runCatching { java.time.Instant.parse(event.startAt).atZone(zone) }.getOrNull() ?: return@forEach
-            val end = runCatching {
-                event.endAt?.let { java.time.Instant.parse(it).atZone(zone) }
-            }.getOrNull() ?: start.plusMinutes(1)
-            val totalMs = java.time.Duration.between(start, end).toMillis().coerceAtLeast(1L)
-            val steps = event.value ?: 0.0
+    samples
+        .filterIsInstance<HealthStepsSample>()
+        .forEach { sample ->
+            val end = sample.endMillis ?: return@forEach
+            val start = java.time.Instant.ofEpochMilli(sample.startMillis).atZone(zone)
+            val endZoned = java.time.Instant.ofEpochMilli(end).atZone(zone)
+            val totalMs = java.time.Duration.between(start, endZoned).toMillis().coerceAtLeast(1L)
+            val steps = sample.count.toDouble()
 
             for (hour in 0 until 24) {
                 val hourStart = dayStart.plusHours(hour.toLong())
                 val hourEnd = hourStart.plusHours(1)
-                val overlapMs = overlapMillis(start, end, hourStart, hourEnd)
+                val overlapMs = overlapMillis(start, endZoned, hourStart, hourEnd)
                 if (overlapMs > 0L) {
                     result[hour] += steps * overlapMs.toDouble() / totalMs.toDouble()
                 }

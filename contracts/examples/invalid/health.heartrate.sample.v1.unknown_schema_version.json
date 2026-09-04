@@ -1,0 +1,29 @@
+{
+  "event_id": "4e815c2c-905f-4162-be73-af1a2b3c4d58",
+  "event_type": "health.heartrate.sample",
+  "schema_version": 2,
+  "owner_id": "local",
+  "source": {
+    "kind": "android.healthconnect",
+    "record_id": "6f2b3c4d-5e6f-7081-9bac-1d2e3f4a5b6c"
+  },
+  "device": {
+    "id": "phone",
+    "platform": "android"
+  },
+  "start_at": "2026-08-20T02:14:30.000Z",
+  "capture_timezone": "Asia/Shanghai",
+  "capture_offset_minutes": 480,
+  "privacy_level": "sensitive",
+  "revision": 1,
+  "finalization_state": "final",
+  "provenance": {
+    "collector_version": "0.2.0",
+    "observed_at": "2026-08-20T02:05:00.000Z"
+  },
+  "invalidated": false,
+  "payload": {
+    "beats_per_minute": 62,
+    "data_origin": "com.mi.health"
+  }
+}

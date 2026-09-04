@@ -100,7 +100,10 @@ export function createEventValidator() {
       if (end <= start) {
         return invalid("invalid_time_range", "/end_at", "End must be later than start.");
       }
-      if (event.finalization_state === "final" && event.payload.duration.value !== end - start) {
+      // Interval-bounded payloads declare their duration; instantaneous
+      // payloads (heart rate samples) carry no duration to compare.
+      const duration = event.payload?.duration;
+      if (duration && typeof duration.value === "number" && duration.value !== end - start) {
         return invalid("duration_mismatch", "/payload/duration/value", "Duration must match the event time range.");
       }
     }

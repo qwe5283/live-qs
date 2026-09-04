@@ -32,10 +32,13 @@ export function ownerAuth() {
 
 /**
  * Authenticates a Device or Query Token bearer credential and enforces the
- * requested scope. Denials record a `credential.deny` audit entry; successful
- * authentications record `credential.use` and throttle-update last_used_at.
+ * requested scope. `scope` demands one exact scope; `anyScope` accepts when
+ * the credential holds at least one of the listed scopes (finer per-item
+ * boundaries stay with the endpoint). Denials record a `credential.deny`
+ * audit entry; successful authentications record `credential.use` and
+ * throttle-update last_used_at.
  */
-export function credentialBearerAuth(env: Env, options: { scope?: CredentialScope } = {}) {
+export function credentialBearerAuth(env: Env, options: { scope?: CredentialScope; anyScope?: CredentialScope[] } = {}) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (mongoose.connection.readyState !== 1) {
       sendError(res, 503, "service_unavailable", "Authentication is unavailable because the database is not connected.");
@@ -63,7 +66,8 @@ export function credentialBearerAuth(env: Env, options: { scope?: CredentialScop
       sendError(res, 401, resolved.denial, messages[resolved.denial] ?? "The bearer credential was rejected.");
       return;
     }
-    if (options.scope && !resolved.scopes.includes(options.scope)) {
+    const requiredScopes: string[] = options.anyScope ?? (options.scope ? [options.scope] : []);
+    if (requiredScopes.length > 0 && !requiredScopes.some((scope) => resolved.scopes.includes(scope))) {
       await recordAuditLog({
         userId: resolved.userId,
         actorType: resolved.kind === "device_token" ? "device" : "query",
@@ -72,7 +76,7 @@ export function credentialBearerAuth(env: Env, options: { scope?: CredentialScop
         status: "error",
         details: {
           reason: "insufficient_scope",
-          required_scope: options.scope,
+          required_scope: requiredScopes.join("|"),
           credential_id: resolved.id,
           path: req.path,
         },
@@ -97,7 +101,7 @@ export function credentialBearerAuth(env: Env, options: { scope?: CredentialScop
  * Guard for endpoints that accept an Owner session or a Query Token: a bearer
  * credential takes precedence, otherwise the browser session is used.
  */
-export function sessionOrCredentialAuth(env: Env, options: { scope?: CredentialScope } = {}) {
+export function sessionOrCredentialAuth(env: Env, options: { scope?: CredentialScope; anyScope?: CredentialScope[] } = {}) {
   const bearerAuth = credentialBearerAuth(env, options);
   const sessionAuth = ownerAuth();
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {

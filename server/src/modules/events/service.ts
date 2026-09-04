@@ -1,5 +1,5 @@
 import type {
-  ActivityIntervalEventV1,
+  VersionedEvent,
   CredentialPrivacyCeiling,
   EventAcknowledgement,
   EventBatchResponse,
@@ -12,11 +12,27 @@ import { BucketModel, EventModel, EventRevisionModel } from "../../db/models.js"
 import type { CredentialAuthContext } from "../credentials/service.js";
 import { hmacText } from "../../shared/privacy.js";
 import { AppError } from "../../shared/errors.js";
-import { REGISTERED_EVENT_TYPES, validateRegisteredEvent } from "./payload-registry.js";
+import {
+  ACTIVITY_EVENT_TYPES,
+  HEALTH_EVENT_TYPES,
+  REGISTERED_EVENT_TYPES,
+  defaultPrivacyLevel,
+  requiredWriteScope,
+  validateRegisteredEvent,
+} from "./payload-registry.js";
+import type { RegisteredEventType } from "./payload-registry.js";
 import type { EventRow } from "../../types/contracts.js";
 import { isDuplicateKeyError } from "../../shared/mongo.js";
 
 export { REGISTERED_EVENT_TYPES };
+
+/** Registered event types granted by held read scopes; a read never crosses an ungranted domain. */
+export function eventTypesForReadScopes(scopes: string[] | undefined): string[] {
+  const granted = new Set<string>();
+  if (scopes?.includes("events:read")) ACTIVITY_EVENT_TYPES.forEach((type) => granted.add(type));
+  if (scopes?.includes("health:read")) HEALTH_EVENT_TYPES.forEach((type) => granted.add(type));
+  return [...granted];
+}
 
 export interface EventRangeQuery {
   userId: string;
@@ -30,6 +46,14 @@ export interface EventRangeQuery {
   privacyCeiling?: CredentialPrivacyCeiling;
   /** Credential-restricted event types; empty or absent means unrestricted. */
   allowedEventTypes?: string[];
+  /** Event types granted by the credential's read scopes; absent for Owner sessions. */
+  scopeGrantedEventTypes?: string[];
+  /**
+   * Types counted as the unrestricted baseline for completeness reporting.
+   * Defaults to every registered type; a domain read (health) baselines its
+   * own domain so out-of-domain data never marks the page partial.
+   */
+  completenessBaseline?: string[];
 }
 
 /** Levels a read may return per privacy ceiling; `private` cannot enter the contract envelope. */
@@ -45,10 +69,11 @@ export function privacyLevelsForRead(privacyCeiling?: CredentialPrivacyCeiling):
 }
 
 /** Registered event types a read may touch; a non-empty allowed list is an exact intersection. */
-export function readableEventTypes(allowedEventTypes?: string[]): string[] {
-  if (allowedEventTypes === undefined || allowedEventTypes.length === 0) return [...REGISTERED_EVENT_TYPES];
+export function readableEventTypes(allowedEventTypes?: string[], domainTypes: readonly string[] = REGISTERED_EVENT_TYPES): string[] {
+  const base = domainTypes.filter((type) => (REGISTERED_EVENT_TYPES as readonly string[]).includes(type));
+  if (allowedEventTypes === undefined || allowedEventTypes.length === 0) return base;
   const allowed = new Set(allowedEventTypes);
-  return REGISTERED_EVENT_TYPES.filter((type) => allowed.has(type));
+  return base.filter((type) => allowed.has(type));
 }
 
 /**
@@ -58,14 +83,14 @@ export function readableEventTypes(allowedEventTypes?: string[]): string[] {
  * are never returned. The payload was validated at ingest against the schema
  * registry and is passed through opaquely here.
  */
-function toEnvelopeEvent(row: EventRow): ActivityIntervalEventV1 {
-  const envelope: ActivityIntervalEventV1 = {
+function toEnvelopeEvent(row: EventRow): VersionedEvent {
+  const envelope: VersionedEvent = {
     event_id: row.id,
-    event_type: "activity.interval",
+    event_type: (row.type ?? "activity.interval") as VersionedEvent["event_type"],
     schema_version: row.schema_version ?? 1,
     owner_id: row.user_id,
     source: {
-      kind: (row.source_kind ?? row.source) as ActivityIntervalEventV1["source"]["kind"],
+      kind: (row.source_kind ?? row.source) as VersionedEvent["source"]["kind"],
       record_id: row.source_record_id ?? row.id,
     },
     device: { id: row.device_id, platform: row.device_platform === "android" ? "android" : "windows" },
@@ -77,7 +102,7 @@ function toEnvelopeEvent(row: EventRow): ActivityIntervalEventV1 {
     finalization_state: row.finalization_state === "final" ? "final" : "checkpoint",
     provenance: row.provenance ?? { collector_version: "0.0.0", observed_at: row.created_at.toISOString() },
     invalidated: row.invalidated ?? false,
-    payload: row.data as unknown as ActivityIntervalEventV1["payload"],
+    payload: row.data as unknown as VersionedEvent["payload"],
   };
   if (row.end_at) envelope.end_at = row.end_at.toISOString();
   return envelope;
@@ -105,16 +130,24 @@ function decodeCursor(cursor: string): { startAt: Date; id: string } | null {
 }
 
 export async function listEvents(query: EventRangeQuery): Promise<EventPage> {
+  // Scope-granted domains bound credential reads before the optional
+  // allowed_event_types allow-list is applied; Owner sessions pass no scope
+  // grant and read every registered domain.
+  const domainTypes = query.scopeGrantedEventTypes ?? REGISTERED_EVENT_TYPES;
   const credentialRestricted = query.privacyCeiling !== undefined
-    || (query.allowedEventTypes !== undefined && query.allowedEventTypes.length > 0);
+    || (query.allowedEventTypes !== undefined && query.allowedEventTypes.length > 0)
+    || query.scopeGrantedEventTypes !== undefined;
   const privacyLevels = privacyLevelsForRead(query.privacyCeiling);
-  const restrictedTypes = readableEventTypes(query.allowedEventTypes);
+  const restrictedTypes = readableEventTypes(query.allowedEventTypes, domainTypes);
 
+  const baselineTypes = query.completenessBaseline ?? REGISTERED_EVENT_TYPES;
   const unrestrictedFilter: Record<string, unknown> = {
     user_id: query.userId,
     start_at: { $gte: query.from, $lt: query.to },
     privacy_level: { $in: privacyLevelsForRead() },
-    type: query.eventType ? { $eq: query.eventType, $in: readableEventTypes() } : { $in: readableEventTypes() },
+    type: query.eventType
+      ? { $eq: query.eventType, $in: baselineTypes }
+      : { $in: baselineTypes },
   };
   const filter: Record<string, unknown> = {
     user_id: query.userId,
@@ -175,8 +208,8 @@ const PRIVACY_RANK: Record<CredentialPrivacyCeiling | "normal" | "sensitive", nu
 interface ParsedBatchItem {
   eventId: string;
   ownerId: string;
-  eventType: "activity.interval";
-  schemaVersion: 1;
+  eventType: RegisteredEventType;
+  schemaVersion: number;
   revision: number;
   privacy: "normal" | "sensitive";
   startAt: Date;
@@ -205,9 +238,10 @@ function parseBatchItem(raw: unknown): ParsedBatchResult {
   if (typeof event.revision !== "number" || !Number.isInteger(event.revision) || event.revision < 1) {
     return { error: { code: "invalid_event", message: "revision must be a positive integer." }, eventId, revision: revisionResult };
   }
-  if (event.event_type !== "activity.interval") {
+  if (typeof event.event_type !== "string" || !(REGISTERED_EVENT_TYPES as readonly string[]).includes(event.event_type)) {
     return { error: { code: "unknown_event_type", message: "The event type is not registered." }, eventId, revision: revisionResult };
   }
+  const eventType = event.event_type as RegisteredEventType;
   if (event.schema_version !== 1) {
     return { error: { code: "unknown_schema_version", message: "The schema version is not registered." }, eventId, revision: revisionResult };
   }
@@ -259,10 +293,14 @@ function parseBatchItem(raw: unknown): ParsedBatchResult {
   const item: ParsedBatchItem = {
     eventId,
     ownerId: event.owner_id,
-    eventType: "activity.interval",
+    eventType,
     schemaVersion: 1,
     revision: event.revision,
-    privacy: event.privacy_level === "sensitive" ? "sensitive" : "normal",
+    // Health observations default to sensitive (per registered schema); the
+    // contract envelope default of normal still applies to activity events.
+    privacy: event.privacy_level === undefined
+      ? defaultPrivacyLevel(eventType)
+      : event.privacy_level === "sensitive" ? "sensitive" : "normal",
     startAt,
     endAt,
     source: { kind: sourceKind, recordId: sourceRecordId },
@@ -360,6 +398,16 @@ async function ingestBatchItem(env: Env, credential: CredentialAuthContext, raw:
     return acknowledgement({
       event_id: item.eventId, revision: item.revision, status: "rejected",
       error: { code: "invalid_event", message: "owner_id must match the credential owner." },
+    });
+  }
+  // Domain scopes are enforced per item: activity items need events:write and
+  // health items need health:write, so a single-domain credential gets a
+  // diagnosable rejection for out-of-domain items instead of a batch failure.
+  const requiredScope = requiredWriteScope(item.eventType);
+  if (!credential.scopes.includes(requiredScope)) {
+    return acknowledgement({
+      event_id: item.eventId, revision: item.revision, status: "rejected",
+      error: { code: "insufficient_scope", message: `The credential lacks the ${requiredScope} scope required for ${item.eventType}.` },
     });
   }
   if (credential.allowed_event_types.length > 0 && !credential.allowed_event_types.includes(item.eventType)) {

@@ -1,11 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://live-qs.local/contracts/schemas/event.schema.json",
-  "title": "LiveQs Registered Event",
+  "title": "Versioned Event",
   "description": "Closed union of every event type and schema version accepted by V1.",
   "oneOf": [
     {
       "$ref": "./events/activity.interval.v1.schema.json"
+    },
+    {
+      "$ref": "./events/health.heartrate.sample.v1.schema.json"
+    },
+    {
+      "$ref": "./events/health.sleep.session.v1.schema.json"
+    },
+    {
+      "$ref": "./events/health.step.sample.v1.schema.json"
     }
   ]
 }

@@ -117,7 +117,7 @@ import { fetchEvents } from "../api/events";
 import { fetchUsageDayReport, fetchUsageWeekReport } from "../api/metrics";
 import { fetchOwnerSettings } from "../api/settings";
 import { fetchUsageApps, fetchUsageTimeline } from "../api/dashboard";
-import type { ActivityIntervalEventV1, UsageDayReport, UsageWeekReport } from "../generated/contract-models";
+import type { VersionedEvent, UsageDayReport, UsageWeekReport } from "../generated/contract-models";
 import type { UsageAppsResponse, UsageTimelineResponse } from "../api/types";
 import BaseChart from "../components/charts/BaseChart.vue";
 import EmptyState from "../components/common/EmptyState.vue";
@@ -130,7 +130,7 @@ const dayReport = ref<UsageDayReport | null>(null);
 const weekReport = ref<UsageWeekReport | null>(null);
 const apps = ref<UsageAppsResponse | null>(null);
 const timeline = ref<UsageTimelineResponse | null>(null);
-const events = ref<ActivityIntervalEventV1[]>([]);
+const events = ref<VersionedEvent[]>([]);
 const nextEventCursor = ref<string | null>(null);
 const eventContext = ref<string>("");
 const loading = ref(false);
@@ -206,7 +206,7 @@ const lanes = computed(() => {
     lane.bars.push({
       leftPercent: ((barStartMs - startMs) / span) * 100,
       widthPercent: ((barEndMs - barStartMs) / span) * 100,
-      afk: event.payload.is_afk,
+      afk: event.payload.is_afk ?? false,
       title: [
         event.payload.application_label ?? event.payload.application_id,
         event.payload.is_afk ? "AFK" : "活跃",
@@ -231,7 +231,7 @@ const eventRows = computed(() => events.value.map((event) => ({
   app: event.payload.application_label ?? event.payload.application_id,
   device: `${event.device.platform} · ${event.device.id}`,
   captureZone: formatCaptureZone(event.capture_timezone, event.capture_offset_minutes),
-  duration: formatMinutes(event.payload.duration.value / 60_000),
+  duration: formatMinutes((event.payload.duration?.value ?? 0) / 60_000),
   state: [
     event.payload.is_afk ? "AFK" : "活跃",
     event.finalization_state === "final" ? "已结束" : "检查点",

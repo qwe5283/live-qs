@@ -14,7 +14,7 @@ export interface ProtocolModels {
   DeviceStatusList: DeviceStatusList;
   Error: Error;
   ErrorResponse: ErrorResponse;
-  Event: ActivityIntervalEventV1;
+  Event: VersionedEvent;
   EventAcknowledgement: EventAcknowledgement;
   EventBatchRequest: EventBatchRequest;
   EventBatchResponse: EventBatchResponse;
@@ -52,6 +52,10 @@ export interface CredentialCreateRequest {
    */
   name: string;
   privacy_ceiling?: CredentialPrivacyCeiling;
+  /**
+   * Non-empty subset of the actor type's scopes: device tokens may hold events:write and
+   * health:write; query tokens may hold events:read and health:read.
+   */
   scopes: CredentialScope[];
 }
 
@@ -68,10 +72,16 @@ export type CredentialKind = "device_token" | "query_token";
 export type CredentialPrivacyCeiling = "normal" | "sensitive" | "private";
 
 /**
- * Capability granted to the credential. Device tokens carry events:write and query tokens
- * carry events:read; a credential never holds a scope outside its actor type.
+ * Capability granted to the credential. Scopes are domain-scoped: events:write and
+ * health:write restrict which event domains a device token may upload (activity intervals
+ * versus Health Connect observations), events:read and health:read restrict which domains a
+ * query token may read. A credential never holds a scope outside its actor type.
  */
-export type CredentialScope = "events:write" | "events:read";
+export type CredentialScope =
+  | "events:write"
+  | "events:read"
+  | "health:write"
+  | "health:read";
 
 export interface CredentialCreated {
   credential: CredentialView;
@@ -186,17 +196,32 @@ export interface ErrorResponse {
 }
 
 /**
+ * Closed union of every event type and schema version accepted by V1.
+ *
  * A privacy-minimized foreground or AFK interval produced by a device collector.
  *
  * Stable metadata shared by every persisted V1 observation.
  *
- * Closed union of every event type and schema version accepted by V1.
+ * A source-provided instantaneous heart rate measurement. One event per sample; start_at is
+ * the measurement instant and the event carries no end_at because a heart rate sample has
+ * no duration.
+ *
+ * A sleep interval exactly as provided by the origin application through Health Connect.
+ * The bounds are reported observations, not inferences: the system never describes
+ * device-idle time as sleep and never derives sleep from absence of activity.
+ *
+ * A source-provided cumulative step count observed over a bounded interval. Health Connect
+ * reports one record per origin application; the count is the total steps during [start_at,
+ * end_at], never a rate.
  */
-export interface ActivityIntervalEventV1 {
+export interface VersionedEvent {
   event_type: EventType;
   payload: Payload;
   /**
    * Private observations are blocked on-device and cannot enter this contract.
+   *
+   * Health observations default to sensitive; credentials need an adequate privacy ceiling to
+   * upload or read them.
    */
   privacy_level: PrivacyLevel;
   schema_version: number;
@@ -209,6 +234,10 @@ export interface ActivityIntervalEventV1 {
   device: Device;
   /**
    * Exclusive UTC instant when known.
+   *
+   * Exclusive UTC wake boundary as provided by the origin.
+   *
+   * Exclusive UTC end of the counted interval.
    */
   end_at?: string;
   /**
@@ -231,7 +260,11 @@ export interface Device {
   platform: Platform;
 }
 
-export type EventType = "activity.interval";
+export type EventType =
+  | "activity.interval"
+  | "health.heartrate.sample"
+  | "health.sleep.session"
+  | "health.step.sample";
 
 export type FinalizationState = "checkpoint" | "final";
 
@@ -239,15 +272,31 @@ export interface Payload {
   /**
    * Executable name or Android package name; never a full executable path.
    */
-  application_id: string;
+  application_id?: string;
   application_label?: string;
   classification?: Classification;
-  duration: Duration;
-  is_afk: boolean;
+  duration?: Duration;
+  is_afk?: boolean;
   /**
    * Approved semantic subject identifier, when classification produced one.
    */
   subject_id?: string;
+  /**
+   * Unit: beats per minute (bpm). Readings outside the plausible range are rejected as
+   * invalid instead of being rendered.
+   */
+  beats_per_minute?: number;
+  /**
+   * Package name of the application that wrote the record into Health Connect. Observations
+   * from different origins stay distinct; a similar value from another origin never deletes
+   * this one.
+   *
+   * Package name of the application that wrote the record into Health Connect. Observations
+   * from different origins stay distinct; overlapping intervals from another origin never
+   * delete this one.
+   */
+  data_origin?: string;
+  count?: Count;
 }
 
 export interface Classification {
@@ -256,8 +305,21 @@ export interface Classification {
   rule_version: number;
 }
 
+export interface Count {
+  unit: StepUnit;
+  /**
+   * Cumulative steps during the interval.
+   */
+  value: number;
+}
+
+export type StepUnit = "steps";
+
 export interface Duration {
   unit: DurationUnit;
+  /**
+   * Sleep duration in milliseconds, equal to end_at - start_at.
+   */
   value: number;
 }
 
@@ -265,6 +327,9 @@ export type DurationUnit = "ms";
 
 /**
  * Private observations are blocked on-device and cannot enter this contract.
+ *
+ * Health observations default to sensitive; credentials need an adequate privacy ceiling to
+ * upload or read them.
  */
 export type PrivacyLevel = "normal" | "sensitive";
 
@@ -277,6 +342,9 @@ export interface Source {
   kind: SourceKind;
   /**
    * Stable identifier supplied by the originating adapter.
+   *
+   * Stable record identifier supplied by Health Connect for the originating record; retained
+   * so source record counts reconcile against server acknowledgements.
    */
   record_id: string;
 }
@@ -285,11 +353,15 @@ export interface Source {
  * Collector mechanism that observed the interval. UsageStats is the authoritative source
  * for Android daily application totals; accessibility observations only support current and
  * contextual activity.
+ *
+ * Health Connect records read by the Android collector. The origin application inside each
+ * payload is the data origin; the collector itself is only the transport.
  */
 export type SourceKind =
   | "windows.foreground"
   | "android.accessibility"
-  | "android.usagestats";
+  | "android.usagestats"
+  | "android.healthconnect";
 
 export interface EventAcknowledgement {
   error?: Error | null;
@@ -301,7 +373,7 @@ export interface EventAcknowledgement {
 export type Status = "accepted" | "duplicate" | "stale_revision" | "rejected";
 
 export interface EventBatchRequest {
-  events: ActivityIntervalEventV1[];
+  events: VersionedEvent[];
 }
 
 export interface EventBatchResponse {
@@ -313,7 +385,7 @@ export interface EventBatchResponse {
 
 export interface EventPage {
   context: QueryContext;
-  data: ActivityIntervalEventV1[];
+  data: VersionedEvent[];
   page: PageMetadata;
 }
 

@@ -4,7 +4,7 @@ import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import com.ailife.android.data.SettingsStore
-import com.ailife.android.generated.ActivityIntervalEventV1
+import com.ailife.android.generated.VersionedEvent
 import com.ailife.android.health.UsageStatsCollector
 import java.io.File
 import java.time.ZoneId
@@ -28,7 +28,7 @@ class UsageStatsEventSource(
     private val settings: SettingsStore,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
-    fun collectPendingEvents(): List<ActivityIntervalEventV1> {
+    fun collectPendingEvents(): List<VersionedEvent> {
         if (!UsageStatsCollector.hasUsageAccess(context)) return emptyList()
 
         val now = nowMillis()

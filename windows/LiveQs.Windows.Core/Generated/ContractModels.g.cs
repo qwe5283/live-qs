@@ -57,7 +57,7 @@ public partial class ProtocolModels
     public ErrorResponse ErrorResponse { get; set; }
 
     [JsonPropertyName("Event")]
-    public ActivityIntervalEventV1 Event { get; set; }
+    public VersionedEvent Event { get; set; }
 
     [JsonPropertyName("EventAcknowledgement")]
     public EventAcknowledgement EventAcknowledgement { get; set; }
@@ -145,6 +145,10 @@ public partial class CredentialCreateRequest
     [JsonPropertyName("privacy_ceiling")]
     public CredentialPrivacyCeiling? PrivacyCeiling { get; set; }
 
+    /// <summary>
+    /// Non-empty subset of the actor type's scopes: device tokens may hold events:write and
+    /// health:write; query tokens may hold events:read and health:read.
+    /// </summary>
     [JsonPropertyName("scopes")]
     public CredentialScope[] Scopes { get; set; }
 }
@@ -330,13 +334,25 @@ public partial class ErrorResponse
 }
 
 /// <summary>
+/// Closed union of every event type and schema version accepted by V1.
+///
 /// A privacy-minimized foreground or AFK interval produced by a device collector.
 ///
 /// Stable metadata shared by every persisted V1 observation.
 ///
-/// Closed union of every event type and schema version accepted by V1.
+/// A source-provided instantaneous heart rate measurement. One event per sample; start_at is
+/// the measurement instant and the event carries no end_at because a heart rate sample has
+/// no duration.
+///
+/// A sleep interval exactly as provided by the origin application through Health Connect.
+/// The bounds are reported observations, not inferences: the system never describes
+/// device-idle time as sleep and never derives sleep from absence of activity.
+///
+/// A source-provided cumulative step count observed over a bounded interval. Health Connect
+/// reports one record per origin application; the count is the total steps during [start_at,
+/// end_at], never a rate.
 /// </summary>
-public partial class ActivityIntervalEventV1
+public partial class VersionedEvent
 {
     [JsonPropertyName("event_type")]
     public EventType EventType { get; set; }
@@ -346,6 +362,9 @@ public partial class ActivityIntervalEventV1
 
     /// <summary>
     /// Private observations are blocked on-device and cannot enter this contract.
+    ///
+    /// Health observations default to sensitive; credentials need an adequate privacy ceiling to
+    /// upload or read them.
     /// </summary>
     [JsonPropertyName("privacy_level")]
     public PrivacyLevel PrivacyLevel { get; set; }
@@ -371,6 +390,10 @@ public partial class ActivityIntervalEventV1
 
     /// <summary>
     /// Exclusive UTC instant when known.
+    ///
+    /// Exclusive UTC wake boundary as provided by the origin.
+    ///
+    /// Exclusive UTC end of the counted interval.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("end_at")]
@@ -420,9 +443,10 @@ public partial class Payload
     /// <summary>
     /// Executable name or Android package name; never a full executable path.
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("application_id")]
     [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
-    public string ApplicationId { get; set; }
+    public string? ApplicationId { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("application_label")]
@@ -433,11 +457,13 @@ public partial class Payload
     [JsonPropertyName("classification")]
     public Classification? Classification { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("duration")]
-    public Duration Duration { get; set; }
+    public Duration? Duration { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("is_afk")]
-    public bool IsAfk { get; set; }
+    public bool? IsAfk { get; set; }
 
     /// <summary>
     /// Approved semantic subject identifier, when classification produced one.
@@ -446,6 +472,32 @@ public partial class Payload
     [JsonPropertyName("subject_id")]
     [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
     public string? SubjectId { get; set; }
+
+    /// <summary>
+    /// Unit: beats per minute (bpm). Readings outside the plausible range are rejected as
+    /// invalid instead of being rendered.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("beats_per_minute")]
+    public long? BeatsPerMinute { get; set; }
+
+    /// <summary>
+    /// Package name of the application that wrote the record into Health Connect. Observations
+    /// from different origins stay distinct; a similar value from another origin never deletes
+    /// this one.
+    ///
+    /// Package name of the application that wrote the record into Health Connect. Observations
+    /// from different origins stay distinct; overlapping intervals from another origin never
+    /// delete this one.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("data_origin")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string? DataOrigin { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("count")]
+    public Count? Count { get; set; }
 }
 
 public partial class Classification
@@ -462,11 +514,26 @@ public partial class Classification
     public long RuleVersion { get; set; }
 }
 
+public partial class Count
+{
+    [JsonPropertyName("unit")]
+    public StepUnit Unit { get; set; }
+
+    /// <summary>
+    /// Cumulative steps during the interval.
+    /// </summary>
+    [JsonPropertyName("value")]
+    public long Value { get; set; }
+}
+
 public partial class Duration
 {
     [JsonPropertyName("unit")]
     public DurationUnit Unit { get; set; }
 
+    /// <summary>
+    /// Sleep duration in milliseconds, equal to end_at - start_at.
+    /// </summary>
     [JsonPropertyName("value")]
     public long Value { get; set; }
 }
@@ -487,6 +554,9 @@ public partial class Source
 
     /// <summary>
     /// Stable identifier supplied by the originating adapter.
+    ///
+    /// Stable record identifier supplied by Health Connect for the originating record; retained
+    /// so source record counts reconcile against server acknowledgements.
     /// </summary>
     [JsonPropertyName("record_id")]
     [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
@@ -511,7 +581,7 @@ public partial class EventAcknowledgement
 public partial class EventBatchRequest
 {
     [JsonPropertyName("events")]
-    public ActivityIntervalEventV1[] Events { get; set; }
+    public VersionedEvent[] Events { get; set; }
 }
 
 public partial class EventBatchResponse
@@ -529,7 +599,7 @@ public partial class EventPage
     public QueryContext Context { get; set; }
 
     [JsonPropertyName("data")]
-    public ActivityIntervalEventV1[] Data { get; set; }
+    public VersionedEvent[] Data { get; set; }
 
     [JsonPropertyName("page")]
     public PageMetadata Page { get; set; }
@@ -775,24 +845,31 @@ public enum CredentialKind { DeviceToken, QueryToken };
 public enum CredentialPrivacyCeiling { Normal, Private, Sensitive };
 
 /// <summary>
-/// Capability granted to the credential. Device tokens carry events:write and query tokens
-/// carry events:read; a credential never holds a scope outside its actor type.
+/// Capability granted to the credential. Scopes are domain-scoped: events:write and
+/// health:write restrict which event domains a device token may upload (activity intervals
+/// versus Health Connect observations), events:read and health:read restrict which domains a
+/// query token may read. A credential never holds a scope outside its actor type.
 /// </summary>
-public enum CredentialScope { EventsRead, EventsWrite };
+public enum CredentialScope { EventsRead, EventsWrite, HealthRead, HealthWrite };
 
 /// <summary>
 /// Collector platform the heartbeat originates from.
 /// </summary>
 public enum Platform { Android, Windows };
 
-public enum EventType { ActivityInterval };
+public enum EventType { ActivityInterval, HealthHeartrateSample, HealthSleepSession, HealthStepSample };
 
 public enum FinalizationState { Checkpoint, Final };
+
+public enum StepUnit { Steps };
 
 public enum DurationUnit { Ms };
 
 /// <summary>
 /// Private observations are blocked on-device and cannot enter this contract.
+///
+/// Health observations default to sensitive; credentials need an adequate privacy ceiling to
+/// upload or read them.
 /// </summary>
 public enum PrivacyLevel { Normal, Sensitive };
 
@@ -800,8 +877,11 @@ public enum PrivacyLevel { Normal, Sensitive };
 /// Collector mechanism that observed the interval. UsageStats is the authoritative source
 /// for Android daily application totals; accessibility observations only support current and
 /// contextual activity.
+///
+/// Health Connect records read by the Android collector. The origin application inside each
+/// payload is the data origin; the collector itself is only the transport.
 /// </summary>
-public enum SourceKind { AndroidAccessibility, AndroidUsagestats, WindowsForeground };
+public enum SourceKind { AndroidAccessibility, AndroidHealthconnect, AndroidUsagestats, WindowsForeground };
 
 public enum Status { Accepted, Duplicate, Rejected, StaleRevision };
 
@@ -829,6 +909,7 @@ public static class ContractJson
             PlatformConverter.Singleton,
             EventTypeConverter.Singleton,
             FinalizationStateConverter.Singleton,
+            StepUnitConverter.Singleton,
             DurationUnitConverter.Singleton,
             PrivacyLevelConverter.Singleton,
             SourceKindConverter.Singleton,
@@ -954,6 +1035,10 @@ internal class CredentialScopeConverter : JsonConverter<CredentialScope>
                 return CredentialScope.EventsRead;
             case "events:write":
                 return CredentialScope.EventsWrite;
+            case "health:read":
+                return CredentialScope.HealthRead;
+            case "health:write":
+                return CredentialScope.HealthWrite;
         }
         throw new Exception("Cannot unmarshal type CredentialScope");
     }
@@ -967,6 +1052,12 @@ internal class CredentialScopeConverter : JsonConverter<CredentialScope>
                 return;
             case CredentialScope.EventsWrite:
                 JsonSerializer.Serialize(writer, "events:write", options);
+                return;
+            case CredentialScope.HealthRead:
+                JsonSerializer.Serialize(writer, "health:read", options);
+                return;
+            case CredentialScope.HealthWrite:
+                JsonSerializer.Serialize(writer, "health:write", options);
                 return;
         }
         throw new Exception("Cannot marshal type CredentialScope");
@@ -1070,19 +1161,36 @@ internal class EventTypeConverter : JsonConverter<EventType>
     public override EventType Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         var value = reader.GetString();
-        if (value == "activity.interval")
+        switch (value)
         {
-            return EventType.ActivityInterval;
+            case "activity.interval":
+                return EventType.ActivityInterval;
+            case "health.heartrate.sample":
+                return EventType.HealthHeartrateSample;
+            case "health.sleep.session":
+                return EventType.HealthSleepSession;
+            case "health.step.sample":
+                return EventType.HealthStepSample;
         }
         throw new Exception("Cannot unmarshal type EventType");
     }
 
     public override void Write(Utf8JsonWriter writer, EventType value, JsonSerializerOptions options)
     {
-        if (value == EventType.ActivityInterval)
+        switch (value)
         {
-            JsonSerializer.Serialize(writer, "activity.interval", options);
-            return;
+            case EventType.ActivityInterval:
+                JsonSerializer.Serialize(writer, "activity.interval", options);
+                return;
+            case EventType.HealthHeartrateSample:
+                JsonSerializer.Serialize(writer, "health.heartrate.sample", options);
+                return;
+            case EventType.HealthSleepSession:
+                JsonSerializer.Serialize(writer, "health.sleep.session", options);
+                return;
+            case EventType.HealthStepSample:
+                JsonSerializer.Serialize(writer, "health.step.sample", options);
+                return;
         }
         throw new Exception("Cannot marshal type EventType");
     }
@@ -1149,6 +1257,33 @@ internal class MinMaxValueCheckConverter : JsonConverter<double>
     }
 
     public static readonly MinMaxValueCheckConverter Singleton = new MinMaxValueCheckConverter();
+}
+
+internal class StepUnitConverter : JsonConverter<StepUnit>
+{
+    public override bool CanConvert(Type t) => t == typeof(StepUnit);
+
+    public override StepUnit Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        if (value == "steps")
+        {
+            return StepUnit.Steps;
+        }
+        throw new Exception("Cannot unmarshal type StepUnit");
+    }
+
+    public override void Write(Utf8JsonWriter writer, StepUnit value, JsonSerializerOptions options)
+    {
+        if (value == StepUnit.Steps)
+        {
+            JsonSerializer.Serialize(writer, "steps", options);
+            return;
+        }
+        throw new Exception("Cannot marshal type StepUnit");
+    }
+
+    public static readonly StepUnitConverter Singleton = new StepUnitConverter();
 }
 
 internal class DurationUnitConverter : JsonConverter<DurationUnit>
@@ -1223,6 +1358,8 @@ internal class SourceKindConverter : JsonConverter<SourceKind>
         {
             case "android.accessibility":
                 return SourceKind.AndroidAccessibility;
+            case "android.healthconnect":
+                return SourceKind.AndroidHealthconnect;
             case "android.usagestats":
                 return SourceKind.AndroidUsagestats;
             case "windows.foreground":
@@ -1237,6 +1374,9 @@ internal class SourceKindConverter : JsonConverter<SourceKind>
         {
             case SourceKind.AndroidAccessibility:
                 JsonSerializer.Serialize(writer, "android.accessibility", options);
+                return;
+            case SourceKind.AndroidHealthconnect:
+                JsonSerializer.Serialize(writer, "android.healthconnect", options);
                 return;
             case SourceKind.AndroidUsagestats:
                 JsonSerializer.Serialize(writer, "android.usagestats", options);

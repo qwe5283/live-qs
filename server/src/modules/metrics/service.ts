@@ -10,6 +10,7 @@ import { EventModel } from "../../db/models.js";
 import type { EventRow } from "../../types/contracts.js";
 import { zonedDayRange, zonedWeekRange } from "../../shared/date-utils.js";
 import { privacyLevelsForRead, readableEventTypes } from "../events/service.js";
+import { ACTIVITY_EVENT_TYPES } from "../events/payload-registry.js";
 import { clipInterval, minutesFromMs, summedDurationMs, unionedDurationMs } from "./interval-metrics.js";
 import type { ClippedInterval } from "./interval-metrics.js";
 
@@ -18,11 +19,16 @@ import type { ClippedInterval } from "./interval-metrics.js";
  * privacy ceiling and allowed event types as raw event reads: a credential
  * never learns aggregate numbers derived from data it may not read, and the
  * query context reports `partial` completeness when data was withheld.
+ * Usage metrics only ever consume activity intervals; health observations
+ * (steps, heart rate, sleep) never enter device or active minutes.
  */
 export interface MetricsReadOptions {
   privacyCeiling?: CredentialPrivacyCeiling;
   allowedEventTypes?: string[];
 }
+
+/** The registered types usage metrics are computed from. */
+const METRIC_EVENT_TYPES = ACTIVITY_EVENT_TYPES;
 
 interface IntervalRow {
   deviceId: string;
@@ -41,7 +47,7 @@ interface IntervalRow {
 async function fetchIntervalRows(userId: string, from: Date, to: Date, options: MetricsReadOptions): Promise<IntervalRow[]> {
   const filter: Record<string, unknown> = {
     user_id: userId,
-    type: { $in: readableEventTypes(options.allowedEventTypes) },
+    type: { $in: readableEventTypes(options.allowedEventTypes, METRIC_EVENT_TYPES) },
     privacy_level: { $in: privacyLevelsForRead(options.privacyCeiling) },
     invalidated: { $ne: true },
     start_at: { $lt: to },
@@ -121,10 +127,10 @@ async function buildContext(
       start_at: { $lt: to },
       end_at: { $gt: from },
     };
-    const unrestricted = await EventModel.countDocuments({ ...baseFilter, type: { $in: readableEventTypes() }, privacy_level: { $in: privacyLevelsForRead() } });
+    const unrestricted = await EventModel.countDocuments({ ...baseFilter, type: { $in: readableEventTypes(undefined, METRIC_EVENT_TYPES) }, privacy_level: { $in: privacyLevelsForRead() } });
     const restricted = await EventModel.countDocuments({
       ...baseFilter,
-      type: { $in: readableEventTypes(options.allowedEventTypes) },
+      type: { $in: readableEventTypes(options.allowedEventTypes, METRIC_EVENT_TYPES) },
       privacy_level: { $in: privacyLevelsForRead(options.privacyCeiling) },
     });
     if (unrestricted > restricted) completeness = "partial";

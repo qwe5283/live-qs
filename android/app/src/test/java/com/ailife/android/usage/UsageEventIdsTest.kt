@@ -1,5 +1,6 @@
 package com.ailife.android.usage
 
+import com.ailife.android.identity.UuidNameIds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -14,11 +15,11 @@ class UsageEventIdsTest {
         val namespace = UUID.fromString("10eace7c-1a13-4a4c-af9c-5f4a1d2b3c9d")
         assertEquals(
             UUID.fromString("3dff000c-a867-5737-9ba3-00ee97140c98"),
-            UsageEventIds.newUuid5(namespace, "liveqs:activity.interval:device-1:install-1:42"),
+            UuidNameIds.newUuid5(namespace, "liveqs:activity.interval:device-1:install-1:42"),
         )
         assertEquals(
             UUID.fromString("c059eec1-35e5-54c3-94e8-ca80559b4e68"),
-            UsageEventIds.newUuid5(namespace, "liveqs:activity.interval:device-1:install-1:43"),
+            UuidNameIds.newUuid5(namespace, "liveqs:activity.interval:device-1:install-1:43"),
         )
     }
 
