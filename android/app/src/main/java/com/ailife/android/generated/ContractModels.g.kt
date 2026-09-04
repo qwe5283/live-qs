@@ -16,6 +16,24 @@ import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class ProtocolModels(
+    @SerialName("ClassificationRule")
+    val classificationRule: ClassificationRule,
+
+    @SerialName("ClassificationRuleInput")
+    val classificationRuleInput: ClassificationRuleInput,
+
+    @SerialName("ClassificationRuleKind")
+    val classificationRuleKind: ClassificationRuleKind,
+
+    @SerialName("ClassificationRulePlatform")
+    val classificationRulePlatform: ClassificationRulePlatform,
+
+    @SerialName("ClassificationRuleSet")
+    val classificationRuleSet: ClassificationRuleSet,
+
+    @SerialName("ClassificationRuleSetUpdateRequest")
+    val classificationRuleSetUpdateRequest: ClassificationRuleSetUpdateRequest,
+
     @SerialName("CorrectionField")
     val correctionField: CorrectionField,
 
@@ -103,6 +121,12 @@ data class ProtocolModels(
     @SerialName("QueryContext")
     val queryContext: QueryContext,
 
+    @SerialName("SemanticEntity")
+    val semanticEntity: SemanticEntity,
+
+    @SerialName("SemanticEntityKind")
+    val semanticEntityKind: SemanticEntityKind,
+
     @SerialName("SourceConflict")
     val sourceConflict: SourceConflict,
 
@@ -132,6 +156,187 @@ data class ProtocolModels(
 
     @SerialName("UsageWeekReport")
     val usageWeekReport: UsageWeekReport
+)
+
+@Serializable
+data class ClassificationRule(
+    val confidence: Double,
+
+    /**
+     * True for dynamic project discovery rules.
+     */
+    val dynamic: Boolean? = null,
+
+    val kind: ClassificationRuleKind,
+    val pattern: String,
+    val platform: ClassificationRulePlatform,
+    val priority: Long,
+
+    @SerialName("rule_id")
+    val ruleId: String,
+
+    /**
+     * Target entity identifier, or null for dynamic discovery rules.
+     */
+    @SerialName("subject_entity_id")
+    val subjectEntityId: String? = null,
+
+    /**
+     * When this rule version was published; null only inside an update request.
+     */
+    @SerialName("updated_at")
+    val updatedAt: String? = null,
+
+    /**
+     * Server-managed per-rule version, incremented every time the rule is created or changed so
+     * uploaded classifications stay explainable against the exact rule that produced them.
+     */
+    val version: Long
+)
+
+/**
+ * application matches the executable or package name exactly (the comparison is
+ * case-insensitive for Windows executables and exact for Android package names);
+ * title_keyword matches when the local window title contains the keyword
+ * case-insensitively; title_regex matches the local window title against a regular
+ * expression, which is the only way to extract a candidate project name.
+ */
+@Serializable
+enum class ClassificationRuleKind(val value: String) {
+    @SerialName("application") APPLICATION("application"),
+    @SerialName("title_keyword") TITLE_KEYWORD("title_keyword"),
+    @SerialName("title_regex") TITLE_REGEX("title_regex");
+}
+
+/**
+ * Collector platform the rule applies to; any applies everywhere. Title rules are only
+ * executable on platforms that observe window titles.
+ */
+@Serializable
+enum class ClassificationRulePlatform(val value: String) {
+    @SerialName("android") ANDROID("android"),
+    @SerialName("any") CLASSIFICATION_RULE_PLATFORM_ANY("any"),
+    @SerialName("windows") WINDOWS("windows");
+}
+
+@Serializable
+data class ClassificationRuleInput(
+    /**
+     * Confidence echoed in uploaded classifications. Defaults to 1 for application rules, 0.9
+     * for title_regex, and 0.8 for title_keyword.
+     */
+    val confidence: Double? = null,
+
+    /**
+     * Dynamic project discovery: the rule is a title_regex with at least one capture group, and
+     * capture group 1 names a candidate project. The device reports such projects as opaque
+     * identifiers derived with a device-secret HMAC until the Owner approves an alias; the raw
+     * name never leaves the device. Exactly one of subject_entity_id and dynamic must be set.
+     */
+    val dynamic: Boolean? = null,
+
+    val kind: ClassificationRuleKind,
+
+    /**
+     * The application or package name for application rules, the keyword for title_keyword
+     * rules, or the regular expression source for title_regex rules. It is a matching
+     * expression defined by the Owner, never device raw text.
+     */
+    val pattern: String,
+
+    val platform: ClassificationRulePlatform? = null,
+
+    /**
+     * Rule precedence: when several rules match, the highest priority wins, and equal
+     * priorities resolve deterministically by ascending rule_id. Defaults to 0.
+     */
+    val priority: Long? = null,
+
+    /**
+     * Owner-chosen stable rule identifier cited by uploaded classifications, such as
+     * edge.bilibili.title.
+     */
+    @SerialName("rule_id")
+    val ruleId: String,
+
+    /**
+     * Entity a match is mapped to. Exactly one of subject_entity_id and dynamic must be set,
+     * and the entity must exist in the same update.
+     */
+    @SerialName("subject_entity_id")
+    val subjectEntityId: String? = null
+)
+
+@Serializable
+data class ClassificationRuleSet(
+    /**
+     * Owner-approved semantic subjects. Unapproved project names never appear here.
+     */
+    val entities: List<SemanticEntity>,
+
+    /**
+     * Distribution version of the whole document. Version 0 with empty entities and rules
+     * applies until the Owner publishes the first rule set; every Owner update increments it by
+     * one, so devices can tell whether their cached copy is current.
+     */
+    @SerialName("rule_set_version")
+    val ruleSetVersion: Long,
+
+    /**
+     * Versioned rules devices execute locally, ordered by descending priority.
+     */
+    val rules: List<ClassificationRule>,
+
+    /**
+     * When this version was published; null for the untouched default.
+     */
+    @SerialName("updated_at")
+    val updatedAt: String? = null
+)
+
+@Serializable
+data class SemanticEntity(
+    /**
+     * Owner-chosen stable subject identifier uploaded in event payloads, such as svc.bilibili
+     * or project.liveqs. Renaming the display label never changes this identifier, so history
+     * stays comparable.
+     */
+    @SerialName("entity_id")
+    val entityId: String,
+
+    val kind: SemanticEntityKind,
+
+    /**
+     * Owner-approved display label, such as 哔哩哔哩 or LiveQs. This is the only project name that
+     * ever exists on the service side; unapproved names stay on the collecting device.
+     */
+    val name: String
+)
+
+/**
+ * Service entities name a cross-platform service (a browser session and a native package
+ * can both map to one service subject); project entities name an Owner-approved project
+ * alias used to separate work time, for example per-project IDE activity.
+ */
+@Serializable
+enum class SemanticEntityKind(val value: String) {
+    @SerialName("project") PROJECT("project"),
+    @SerialName("service") SERVICE("service");
+}
+
+@Serializable
+data class ClassificationRuleSetUpdateRequest(
+    /**
+     * Full replacement of the semantic dictionary.
+     */
+    val entities: List<SemanticEntity>,
+
+    /**
+     * Full replacement of the rule set. Every rule must reference an entity in the same
+     * request; server-managed versions are assigned by the response, so input rules carry no
+     * version fields.
+     */
+    val rules: List<ClassificationRuleInput>
 )
 
 @Serializable
@@ -211,8 +416,8 @@ data class CredentialCreateRequest(
 
     /**
      * Non-empty subset of the actor type's scopes: device tokens may hold events:write,
-     * health:write, and payment:write; query tokens may hold events:read, health:read, and
-     * payment:read.
+     * health:write, payment:write, and rules:read; query tokens may hold events:read,
+     * health:read, and payment:read.
      */
     val scopes: List<CredentialScope>
 )
@@ -243,7 +448,10 @@ enum class CredentialPrivacyCeiling(val value: String) {
  * health:write, and payment:write restrict which event domains a device token may upload
  * (activity intervals, Health Connect observations, payment transactions), while
  * events:read, health:read, and payment:read restrict which domains a query token may read.
- * A credential never holds a scope outside its actor type.
+ * rules:read lets a device token download the classification rule set so it can classify
+ * locally; it is device-only, because rule distribution is a collector concern and the
+ * management plane stays with the Owner session. A credential never holds a scope outside
+ * its actor type.
  */
 @Serializable
 enum class CredentialScope(val value: String) {
@@ -252,7 +460,8 @@ enum class CredentialScope(val value: String) {
     @SerialName("health:read") HEALTH_READ("health:read"),
     @SerialName("health:write") HEALTH_WRITE("health:write"),
     @SerialName("payment:read") PAYMENT_READ("payment:read"),
-    @SerialName("payment:write") PAYMENT_WRITE("payment:write");
+    @SerialName("payment:write") PAYMENT_WRITE("payment:write"),
+    @SerialName("rules:read") RULES_READ("rules:read");
 }
 
 @Serializable

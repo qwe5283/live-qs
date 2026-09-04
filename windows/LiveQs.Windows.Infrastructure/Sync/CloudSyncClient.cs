@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.Http;
 using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Core.Classification;
 using LiveQs.Windows.Core.Settings;
 using LiveQs.Windows.Core.Sync;
 
@@ -13,8 +14,15 @@ namespace LiveQs.Windows.Infrastructure.Sync;
 /// (POST /api/v1/events/batch) with a Device Token. Each outbox item becomes
 /// one contract envelope keyed by a stable event identity; per-item
 /// acknowledgements decide whether the outbox entry may be removed.
+/// Classification runs locally against the cached Owner rule set: the upload
+/// carries only the subject, rule id, rule version, and confidence — never
+/// the raw window title it was derived from.
 /// </summary>
-public sealed class CloudSyncClient(IHttpClientFactory httpClientFactory, ISyncQueueStore syncQueue, TimeProvider timeProvider) : ISyncClient
+public sealed class CloudSyncClient(
+    IHttpClientFactory httpClientFactory,
+    ISyncQueueStore syncQueue,
+    IClassificationRuleStore classificationRuleStore,
+    TimeProvider timeProvider) : ISyncClient
 {
     /// <summary>The contract limits one batch to 100 items.</summary>
     private const int MaxBatchSize = 100;
@@ -23,23 +31,32 @@ public sealed class CloudSyncClient(IHttpClientFactory httpClientFactory, ISyncQ
     {
         if (items.Count == 0) return [];
         var installId = await syncQueue.GetInstallIdAsync(cancellationToken);
+        var cachedRuleSet = await classificationRuleStore.GetCachedRuleSetAsync(cancellationToken);
+        var classificationSecret = await classificationRuleStore.GetClassificationSecretAsync(cancellationToken);
         var outcomes = new List<SyncOutcome>(items.Count);
         foreach (var chunk in items.Chunk(MaxBatchSize))
         {
-            outcomes.AddRange(await UploadChunkAsync(chunk, settings, installId, cancellationToken));
+            outcomes.AddRange(await UploadChunkAsync(chunk, settings, installId, cachedRuleSet, classificationSecret, cancellationToken));
         }
         return outcomes;
     }
 
     private async Task<IReadOnlyList<SyncOutcome>> UploadChunkAsync(
-        IReadOnlyList<SyncQueueItem> chunk, AppSettings settings, string installId, CancellationToken cancellationToken)
+        IReadOnlyList<SyncQueueItem> chunk,
+        AppSettings settings,
+        string installId,
+        Core.Contracts.ClassificationRuleSet? cachedRuleSet,
+        string classificationSecret,
+        CancellationToken cancellationToken)
     {
         var client = httpClientFactory.CreateClient("cloud-sync");
         client.BaseAddress = new Uri($"{settings.ServerBaseUrl.TrimEnd('/')}/");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.DeviceToken);
 
         var observedAt = timeProvider.GetUtcNow();
-        var events = chunk.Select(item => ToEnvelope(item, settings, installId, observedAt)).ToArray();
+        var events = chunk.Select(item => ToEnvelope(
+            item, settings, installId, observedAt,
+            ClassifyItem(item, cachedRuleSet, classificationSecret))).ToArray();
         using var response = await client.PostAsJsonAsync(
             "api/v1/events/batch", new Core.Contracts.EventBatchRequest { Events = events }, Core.Contracts.ContractJson.Options, cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -55,6 +72,20 @@ public sealed class CloudSyncClient(IHttpClientFactory httpClientFactory, ISyncQ
             throw new InvalidOperationException("云端批量响应数量与请求不一致。");
         }
         return chunk.Zip(batch.Results, MapOutcome).ToArray();
+    }
+
+    /// <summary>
+    /// Classifies a pending item against the cached rule set. AFK intervals
+    /// carry no subject: there is no activity to name while the user is away.
+    /// </summary>
+    internal static ClassificationOutcome? ClassifyItem(
+        SyncQueueItem item,
+        Core.Contracts.ClassificationRuleSet? cachedRuleSet,
+        string classificationSecret)
+    {
+        if (item.IsAfk) return null;
+        return ClassificationEngine.Classify(
+            cachedRuleSet, "windows", item.AppId, item.WindowTitle, classificationSecret);
     }
 
     private static SyncOutcome MapOutcome(SyncQueueItem item, Core.Contracts.EventAcknowledgement acknowledgement) => acknowledgement.Status switch
@@ -73,7 +104,11 @@ public sealed class CloudSyncClient(IHttpClientFactory httpClientFactory, ISyncQ
         : "rejected";
 
     internal static Core.Contracts.VersionedEvent ToEnvelope(
-        SyncQueueItem item, AppSettings settings, string installId, DateTimeOffset observedAt)
+        SyncQueueItem item,
+        AppSettings settings,
+        string installId,
+        DateTimeOffset observedAt,
+        ClassificationOutcome? classification = null)
     {
         var payload = new Core.Contracts.Payload
         {
@@ -88,6 +123,18 @@ public sealed class CloudSyncClient(IHttpClientFactory httpClientFactory, ISyncQ
             },
         };
         if (!string.IsNullOrWhiteSpace(item.AppName)) payload.ApplicationLabel = item.AppName;
+        if (classification is { } outcome)
+        {
+            // Explainable labels only: subject, rule id, rule version,
+            // confidence. The matched title stays local.
+            payload.SubjectId = outcome.SubjectId;
+            payload.Classification = new Core.Contracts.Classification
+            {
+                RuleId = outcome.RuleId,
+                RuleVersion = outcome.RuleVersion,
+                Confidence = outcome.Confidence,
+            };
+        }
 
         return new Core.Contracts.VersionedEvent
         {

@@ -3,6 +3,12 @@
 // Run `npm --prefix contracts run generate`; do not edit by hand.
 
 export interface ProtocolModels {
+  ClassificationRule: ClassificationRule;
+  ClassificationRuleInput: ClassificationRuleInput;
+  ClassificationRuleKind: ClassificationRuleKind;
+  ClassificationRulePlatform: ClassificationRulePlatform;
+  ClassificationRuleSet: ClassificationRuleSet;
+  ClassificationRuleSetUpdateRequest: ClassificationRuleSetUpdateRequest;
   CorrectionField: CorrectionField;
   CorrectionImpact: CorrectionImpact;
   CredentialCreated: CredentialCreated;
@@ -32,6 +38,8 @@ export interface ProtocolModels {
   OwnerStatus: OwnerStatus;
   PageMetadata: PageMetadata;
   QueryContext: QueryContext;
+  SemanticEntity: SemanticEntity;
+  SemanticEntityKind: SemanticEntityKind;
   SourceConflict: SourceConflict;
   SourcePolicyDocument: SourcePolicyDocument;
   SourcePolicyEntry: SourcePolicyEntry;
@@ -42,6 +50,144 @@ export interface ProtocolModels {
   UsageDeviceMetrics: UsageDeviceMetrics;
   UsageMetrics: UsageMetrics;
   UsageWeekReport: UsageWeekReport;
+}
+
+export interface ClassificationRule {
+  confidence: number;
+  /**
+   * True for dynamic project discovery rules.
+   */
+  dynamic?: boolean;
+  kind: ClassificationRuleKind;
+  pattern: string;
+  platform: ClassificationRulePlatform;
+  priority: number;
+  rule_id: string;
+  /**
+   * Target entity identifier, or null for dynamic discovery rules.
+   */
+  subject_entity_id?: null | string;
+  /**
+   * When this rule version was published; null only inside an update request.
+   */
+  updated_at: null | string;
+  /**
+   * Server-managed per-rule version, incremented every time the rule is created or changed so
+   * uploaded classifications stay explainable against the exact rule that produced them.
+   */
+  version: number;
+}
+
+/**
+ * application matches the executable or package name exactly (the comparison is
+ * case-insensitive for Windows executables and exact for Android package names);
+ * title_keyword matches when the local window title contains the keyword
+ * case-insensitively; title_regex matches the local window title against a regular
+ * expression, which is the only way to extract a candidate project name.
+ */
+export type ClassificationRuleKind =
+  | "application"
+  | "title_keyword"
+  | "title_regex";
+
+/**
+ * Collector platform the rule applies to; any applies everywhere. Title rules are only
+ * executable on platforms that observe window titles.
+ */
+export type ClassificationRulePlatform = "windows" | "android" | "any";
+
+export interface ClassificationRuleInput {
+  /**
+   * Confidence echoed in uploaded classifications. Defaults to 1 for application rules, 0.9
+   * for title_regex, and 0.8 for title_keyword.
+   */
+  confidence?: number;
+  /**
+   * Dynamic project discovery: the rule is a title_regex with at least one capture group, and
+   * capture group 1 names a candidate project. The device reports such projects as opaque
+   * identifiers derived with a device-secret HMAC until the Owner approves an alias; the raw
+   * name never leaves the device. Exactly one of subject_entity_id and dynamic must be set.
+   */
+  dynamic?: boolean;
+  kind: ClassificationRuleKind;
+  /**
+   * The application or package name for application rules, the keyword for title_keyword
+   * rules, or the regular expression source for title_regex rules. It is a matching
+   * expression defined by the Owner, never device raw text.
+   */
+  pattern: string;
+  platform?: ClassificationRulePlatform;
+  /**
+   * Rule precedence: when several rules match, the highest priority wins, and equal
+   * priorities resolve deterministically by ascending rule_id. Defaults to 0.
+   */
+  priority?: number;
+  /**
+   * Owner-chosen stable rule identifier cited by uploaded classifications, such as
+   * edge.bilibili.title.
+   */
+  rule_id: string;
+  /**
+   * Entity a match is mapped to. Exactly one of subject_entity_id and dynamic must be set,
+   * and the entity must exist in the same update.
+   */
+  subject_entity_id?: string;
+}
+
+export interface ClassificationRuleSet {
+  /**
+   * Owner-approved semantic subjects. Unapproved project names never appear here.
+   */
+  entities: SemanticEntity[];
+  /**
+   * Distribution version of the whole document. Version 0 with empty entities and rules
+   * applies until the Owner publishes the first rule set; every Owner update increments it by
+   * one, so devices can tell whether their cached copy is current.
+   */
+  rule_set_version: number;
+  /**
+   * Versioned rules devices execute locally, ordered by descending priority.
+   */
+  rules: ClassificationRule[];
+  /**
+   * When this version was published; null for the untouched default.
+   */
+  updated_at?: null | string;
+}
+
+export interface SemanticEntity {
+  /**
+   * Owner-chosen stable subject identifier uploaded in event payloads, such as svc.bilibili
+   * or project.liveqs. Renaming the display label never changes this identifier, so history
+   * stays comparable.
+   */
+  entity_id: string;
+  kind: SemanticEntityKind;
+  /**
+   * Owner-approved display label, such as 哔哩哔哩 or LiveQs. This is the only project name that
+   * ever exists on the service side; unapproved names stay on the collecting device.
+   */
+  name: string;
+}
+
+/**
+ * Service entities name a cross-platform service (a browser session and a native package
+ * can both map to one service subject); project entities name an Owner-approved project
+ * alias used to separate work time, for example per-project IDE activity.
+ */
+export type SemanticEntityKind = "service" | "project";
+
+export interface ClassificationRuleSetUpdateRequest {
+  /**
+   * Full replacement of the semantic dictionary.
+   */
+  entities: SemanticEntity[];
+  /**
+   * Full replacement of the rule set. Every rule must reference an entity in the same
+   * request; server-managed versions are assigned by the response, so input rules carry no
+   * version fields.
+   */
+  rules: ClassificationRuleInput[];
 }
 
 export interface CorrectionField {
@@ -103,8 +249,8 @@ export interface CredentialCreateRequest {
   privacy_ceiling?: CredentialPrivacyCeiling;
   /**
    * Non-empty subset of the actor type's scopes: device tokens may hold events:write,
-   * health:write, and payment:write; query tokens may hold events:read, health:read, and
-   * payment:read.
+   * health:write, payment:write, and rules:read; query tokens may hold events:read,
+   * health:read, and payment:read.
    */
   scopes: CredentialScope[];
 }
@@ -126,7 +272,10 @@ export type CredentialPrivacyCeiling = "normal" | "sensitive" | "private";
  * health:write, and payment:write restrict which event domains a device token may upload
  * (activity intervals, Health Connect observations, payment transactions), while
  * events:read, health:read, and payment:read restrict which domains a query token may read.
- * A credential never holds a scope outside its actor type.
+ * rules:read lets a device token download the classification rule set so it can classify
+ * locally; it is device-only, because rule distribution is a collector concern and the
+ * management plane stays with the Owner session. A credential never holds a scope outside
+ * its actor type.
  */
 export type CredentialScope =
   | "events:write"
@@ -134,7 +283,8 @@ export type CredentialScope =
   | "health:write"
   | "health:read"
   | "payment:write"
-  | "payment:read";
+  | "payment:read"
+  | "rules:read";
 
 export interface CredentialCreated {
   credential: CredentialView;

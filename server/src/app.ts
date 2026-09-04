@@ -6,6 +6,7 @@ import { ownerAuth } from "./middleware/auth.js";
 import { errorHandler, notFound } from "./middleware/errors.js";
 import { assignRequestId } from "./middleware/request-id.js";
 import { adminRouter } from "./modules/admin/routes.js";
+import { classificationRouter } from "./modules/classification/routes.js";
 import { contextRouter, publicRouter } from "./modules/context/routes.js";
 import { correctionsRouter } from "./modules/corrections/routes.js";
 import { credentialsRouter } from "./modules/credentials/routes.js";
@@ -40,6 +41,7 @@ export function createApp(env: Env, clock: Clock = systemClock) {
   app.use("/api/v1/events", correctionsRouter(env));
   app.use("/api/v1/metrics", metricsRouter(env));
   app.use("/api/v1/source-policy", sourcePolicyRouter(env));
+  app.use("/api/v1/classification", classificationRouter(env));
   app.use("/api/v1", heartbeatsRouter(env, clock));
   app.use("/api/v1/health", healthEventsRouter(env));
   app.use("/api/v1/payment", paymentEventsRouter(env));

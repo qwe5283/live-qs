@@ -31,6 +31,10 @@
             <PayCircleOutlined />
             <span>消费支出</span>
           </a-menu-item>
+          <a-menu-item key="/classification">
+            <TagsOutlined />
+            <span>语义分类</span>
+          </a-menu-item>
           <a-menu-item key="/credentials">
             <KeyOutlined />
             <span>凭据管理</span>
@@ -62,6 +66,7 @@ import {
   KeyOutlined,
   PayCircleOutlined,
   SettingOutlined,
+  TagsOutlined,
 } from "@ant-design/icons-vue";
 import AppHeader from "./AppHeader.vue";
 import { useSettingsStore } from "../../stores/settings";

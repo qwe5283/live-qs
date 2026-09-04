@@ -13,11 +13,12 @@ const TOKEN_PREFIX: Record<CredentialKind, string> = {
  * Scopes a credential of each kind may carry, as a non-empty subset.
  * Capabilities never cross actor types: device tokens hold write scopes
  * (events:write for activity, health:write for Health Connect observations,
- * payment:write for payment transactions), query tokens hold the matching
- * read scopes.
+ * payment:write for payment transactions) plus rules:read, the read-only
+ * distribution scope that lets a collector download the classification rule
+ * set; query tokens hold the matching read scopes.
  */
 export const KIND_SCOPES: Record<CredentialKind, CredentialScope[]> = {
-  device_token: ["events:write", "health:write", "payment:write"],
+  device_token: ["events:write", "health:write", "payment:write", "rules:read"],
   query_token: ["events:read", "health:read", "payment:read"],
 };
 
@@ -78,7 +79,7 @@ export function assertScopesMatchKind(kind: CredentialKind, scopes: string[]): v
     throw new AppError(
       400,
       kind === "device_token"
-        ? "A device token may only carry write scopes: events:write, health:write, payment:write."
+        ? "A device token may only carry device scopes: events:write, health:write, payment:write, rules:read."
         : "A query token may only carry read scopes: events:read, health:read, payment:read.",
       "invalid_scope",
     );

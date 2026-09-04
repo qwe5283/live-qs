@@ -76,6 +76,31 @@ class ReportClient(
         }
     }
 
+    /**
+     * Downloads the Owner's published classification rule set so the device
+     * keeps classifying locally. The body is returned raw; caching and
+     * offline fallback belong to the rule set cache.
+     */
+    fun getRuleSet(): Result<String> {
+        val request = Request.Builder()
+            .url("${serverUrl.trimEnd('/')}/api/v1/classification/ruleset")
+            .addHeader("Authorization", "Bearer $token")
+            .get()
+            .build()
+
+        return try {
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    return Result.failure(IOException("HTTP ${response.code}: $body"))
+                }
+                Result.success(body)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     fun close() {
         client.dispatcher.executorService.shutdown()
         client.connectionPool.evictAll()

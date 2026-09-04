@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Activity;
+using LiveQs.Windows.Core.Contracts;
 using LiveQs.Windows.Core.Settings;
 using LiveQs.Windows.Core.Sync;
 using LiveQs.Windows.Infrastructure.Persistence.Sqlite;
@@ -24,7 +25,7 @@ public sealed class SyncTests : IDisposable
         await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow), TimeSpan.FromSeconds(10));
 
         var handler = new RecordingHandler { ResponseFactory = body => AckResponse(body, "accepted") };
-        var client = new CloudSyncClient(new SingleClientFactory(handler), repository, TimeProvider.System);
+        var client = new CloudSyncClient(new SingleClientFactory(handler), repository, repository, TimeProvider.System);
         var items = await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1));
 
         var outcomes = await client.UploadAsync(items, settings, CancellationToken.None);
@@ -81,7 +82,7 @@ public sealed class SyncTests : IDisposable
                 return builder.ToString();
             },
         };
-        var client = new CloudSyncClient(new SingleClientFactory(handler), repository, TimeProvider.System);
+        var client = new CloudSyncClient(new SingleClientFactory(handler), repository, repository, TimeProvider.System);
 
         var outcomes = await client.UploadAsync(items, settings, CancellationToken.None);
 
@@ -106,7 +107,7 @@ public sealed class SyncTests : IDisposable
         Assert.Equal(101, items.Count);
 
         var handler = new RecordingHandler { ResponseFactory = body => AckResponse(body, "accepted") };
-        var client = new CloudSyncClient(new SingleClientFactory(handler), repository, TimeProvider.System);
+        var client = new CloudSyncClient(new SingleClientFactory(handler), repository, repository, TimeProvider.System);
 
         var outcomes = await client.UploadAsync(items, settings, CancellationToken.None);
 
@@ -205,7 +206,14 @@ public sealed class SyncTests : IDisposable
     }
 
     private static SyncWorker CreateWorker(SqliteActivityRepository repository, StubSyncClient client, SyncStatusService statusService) =>
-        new(repository, repository, client, statusService, TimeProvider.System, NullLogger<SyncWorker>.Instance);
+        new(repository, repository, client, statusService, new NoopRuleSync(repository), TimeProvider.System, NullLogger<SyncWorker>.Instance);
+
+    /// <summary>Refresh stub: the worker's rule refresh never interferes with outbox assertions.</summary>
+    private sealed class NoopRuleSync(SqliteActivityRepository repository) : IClassificationRuleSync
+    {
+        public Task<ClassificationRuleSet?> RefreshAsync(AppSettings settings, CancellationToken cancellationToken = default) =>
+            repository.GetCachedRuleSetAsync(cancellationToken);
+    }
 
     private static AppSettings CloudSettings() => new()
     {

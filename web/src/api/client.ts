@@ -48,6 +48,16 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   });
 }
 
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  const settings = useSettingsStore();
+  const url = new URL(path, `${settings.apiBase}/`);
+  return request<T>(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 function describeError(body: { error?: unknown }, status: number): string {
   const error = body.error;
   if (typeof error === "string") return error;

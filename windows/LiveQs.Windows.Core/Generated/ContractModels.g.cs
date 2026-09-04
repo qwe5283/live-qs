@@ -23,6 +23,24 @@ using System.Globalization;
 
 public partial class ProtocolModels
 {
+    [JsonPropertyName("ClassificationRule")]
+    public ClassificationRule ClassificationRule { get; set; }
+
+    [JsonPropertyName("ClassificationRuleInput")]
+    public ClassificationRuleInput ClassificationRuleInput { get; set; }
+
+    [JsonPropertyName("ClassificationRuleKind")]
+    public ClassificationRuleKind ClassificationRuleKind { get; set; }
+
+    [JsonPropertyName("ClassificationRulePlatform")]
+    public ClassificationRulePlatform ClassificationRulePlatform { get; set; }
+
+    [JsonPropertyName("ClassificationRuleSet")]
+    public ClassificationRuleSet ClassificationRuleSet { get; set; }
+
+    [JsonPropertyName("ClassificationRuleSetUpdateRequest")]
+    public ClassificationRuleSetUpdateRequest ClassificationRuleSetUpdateRequest { get; set; }
+
     [JsonPropertyName("CorrectionField")]
     public CorrectionField CorrectionField { get; set; }
 
@@ -110,6 +128,12 @@ public partial class ProtocolModels
     [JsonPropertyName("QueryContext")]
     public QueryContext QueryContext { get; set; }
 
+    [JsonPropertyName("SemanticEntity")]
+    public SemanticEntity SemanticEntity { get; set; }
+
+    [JsonPropertyName("SemanticEntityKind")]
+    public SemanticEntityKind SemanticEntityKind { get; set; }
+
     [JsonPropertyName("SourceConflict")]
     public SourceConflict SourceConflict { get; set; }
 
@@ -141,6 +165,188 @@ public partial class ProtocolModels
     public UsageWeekReport UsageWeekReport { get; set; }
 }
 
+public partial class ClassificationRule
+{
+    [JsonPropertyName("confidence")]
+    [JsonConverter(typeof(MinMaxValueCheckConverter))]
+    public double Confidence { get; set; }
+
+    /// <summary>
+    /// True for dynamic project discovery rules.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("dynamic")]
+    public bool? Dynamic { get; set; }
+
+    [JsonPropertyName("kind")]
+    public ClassificationRuleKind Kind { get; set; }
+
+    [JsonPropertyName("pattern")]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    public string Pattern { get; set; }
+
+    [JsonPropertyName("platform")]
+    public ClassificationRulePlatform Platform { get; set; }
+
+    [JsonPropertyName("priority")]
+    public long Priority { get; set; }
+
+    [JsonPropertyName("rule_id")]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    public string RuleId { get; set; }
+
+    /// <summary>
+    /// Target entity identifier, or null for dynamic discovery rules.
+    /// </summary>
+    [JsonPropertyName("subject_entity_id")]
+    public string SubjectEntityId { get; set; }
+
+    /// <summary>
+    /// When this rule version was published; null only inside an update request.
+    /// </summary>
+    [JsonPropertyName("updated_at")]
+    public string UpdatedAt { get; set; }
+
+    /// <summary>
+    /// Server-managed per-rule version, incremented every time the rule is created or changed so
+    /// uploaded classifications stay explainable against the exact rule that produced them.
+    /// </summary>
+    [JsonPropertyName("version")]
+    public long Version { get; set; }
+}
+
+public partial class ClassificationRuleInput
+{
+    /// <summary>
+    /// Confidence echoed in uploaded classifications. Defaults to 1 for application rules, 0.9
+    /// for title_regex, and 0.8 for title_keyword.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("confidence")]
+    [JsonConverter(typeof(MinMaxValueCheckConverter))]
+    public double? Confidence { get; set; }
+
+    /// <summary>
+    /// Dynamic project discovery: the rule is a title_regex with at least one capture group, and
+    /// capture group 1 names a candidate project. The device reports such projects as opaque
+    /// identifiers derived with a device-secret HMAC until the Owner approves an alias; the raw
+    /// name never leaves the device. Exactly one of subject_entity_id and dynamic must be set.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("dynamic")]
+    public bool? Dynamic { get; set; }
+
+    [JsonPropertyName("kind")]
+    public ClassificationRuleKind Kind { get; set; }
+
+    /// <summary>
+    /// The application or package name for application rules, the keyword for title_keyword
+    /// rules, or the regular expression source for title_regex rules. It is a matching
+    /// expression defined by the Owner, never device raw text.
+    /// </summary>
+    [JsonPropertyName("pattern")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string Pattern { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("platform")]
+    public ClassificationRulePlatform? Platform { get; set; }
+
+    /// <summary>
+    /// Rule precedence: when several rules match, the highest priority wins, and equal
+    /// priorities resolve deterministically by ascending rule_id. Defaults to 0.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("priority")]
+    public long? Priority { get; set; }
+
+    /// <summary>
+    /// Owner-chosen stable rule identifier cited by uploaded classifications, such as
+    /// edge.bilibili.title.
+    /// </summary>
+    [JsonPropertyName("rule_id")]
+    [JsonConverter(typeof(TentacledMinMaxLengthCheckConverter))]
+    public string RuleId { get; set; }
+
+    /// <summary>
+    /// Entity a match is mapped to. Exactly one of subject_entity_id and dynamic must be set,
+    /// and the entity must exist in the same update.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("subject_entity_id")]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    public string? SubjectEntityId { get; set; }
+}
+
+public partial class ClassificationRuleSet
+{
+    /// <summary>
+    /// Owner-approved semantic subjects. Unapproved project names never appear here.
+    /// </summary>
+    [JsonPropertyName("entities")]
+    public SemanticEntity[] Entities { get; set; }
+
+    /// <summary>
+    /// Distribution version of the whole document. Version 0 with empty entities and rules
+    /// applies until the Owner publishes the first rule set; every Owner update increments it by
+    /// one, so devices can tell whether their cached copy is current.
+    /// </summary>
+    [JsonPropertyName("rule_set_version")]
+    public long RuleSetVersion { get; set; }
+
+    /// <summary>
+    /// Versioned rules devices execute locally, ordered by descending priority.
+    /// </summary>
+    [JsonPropertyName("rules")]
+    public ClassificationRule[] Rules { get; set; }
+
+    /// <summary>
+    /// When this version was published; null for the untouched default.
+    /// </summary>
+    [JsonPropertyName("updated_at")]
+    public string UpdatedAt { get; set; }
+}
+
+public partial class SemanticEntity
+{
+    /// <summary>
+    /// Owner-chosen stable subject identifier uploaded in event payloads, such as svc.bilibili
+    /// or project.liveqs. Renaming the display label never changes this identifier, so history
+    /// stays comparable.
+    /// </summary>
+    [JsonPropertyName("entity_id")]
+    [JsonConverter(typeof(TentacledMinMaxLengthCheckConverter))]
+    public string EntityId { get; set; }
+
+    [JsonPropertyName("kind")]
+    public SemanticEntityKind Kind { get; set; }
+
+    /// <summary>
+    /// Owner-approved display label, such as 哔哩哔哩 or LiveQs. This is the only project name that
+    /// ever exists on the service side; unapproved names stay on the collecting device.
+    /// </summary>
+    [JsonPropertyName("name")]
+    [JsonConverter(typeof(StickyMinMaxLengthCheckConverter))]
+    public string Name { get; set; }
+}
+
+public partial class ClassificationRuleSetUpdateRequest
+{
+    /// <summary>
+    /// Full replacement of the semantic dictionary.
+    /// </summary>
+    [JsonPropertyName("entities")]
+    public SemanticEntity[] Entities { get; set; }
+
+    /// <summary>
+    /// Full replacement of the rule set. Every rule must reference an entity in the same
+    /// request; server-managed versions are assigned by the response, so input rules carry no
+    /// version fields.
+    /// </summary>
+    [JsonPropertyName("rules")]
+    public ClassificationRuleInput[] Rules { get; set; }
+}
+
 public partial class CorrectionField
 {
     /// <summary>
@@ -150,7 +356,7 @@ public partial class CorrectionField
     /// provenance, and free text are never correctable.
     /// </summary>
     [JsonPropertyName("path")]
-    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(IndigoMinMaxLengthCheckConverter))]
     public string Path { get; set; }
 
     /// <summary>
@@ -174,7 +380,7 @@ public partial class CorrectionImpact
     /// payment.transaction_totals.
     /// </summary>
     [JsonPropertyName("metric")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string Metric { get; set; }
 
     /// <summary>
@@ -223,7 +429,7 @@ public partial class CredentialCreateRequest
     /// Owner-chosen label, such as a collector or agent name.
     /// </summary>
     [JsonPropertyName("name")]
-    [JsonConverter(typeof(TentacledMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(StickyMinMaxLengthCheckConverter))]
     public string Name { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -232,8 +438,8 @@ public partial class CredentialCreateRequest
 
     /// <summary>
     /// Non-empty subset of the actor type's scopes: device tokens may hold events:write,
-    /// health:write, and payment:write; query tokens may hold events:read, health:read, and
-    /// payment:read.
+    /// health:write, payment:write, and rules:read; query tokens may hold events:read,
+    /// health:read, and payment:read.
     /// </summary>
     [JsonPropertyName("scopes")]
     public CredentialScope[] Scopes { get; set; }
@@ -248,7 +454,7 @@ public partial class CredentialCreated
     /// Plaintext token shown exactly once. It cannot be recovered from the server afterwards.
     /// </summary>
     [JsonPropertyName("token")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string Token { get; set; }
 }
 
@@ -264,7 +470,7 @@ public partial class CredentialView
     /// Public identifier used to revoke the credential.
     /// </summary>
     [JsonPropertyName("credential_id")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string CredentialId { get; set; }
 
     [JsonPropertyName("expires_at")]
@@ -296,7 +502,7 @@ public partial class CredentialView
     /// its digest.
     /// </summary>
     [JsonPropertyName("token_prefix")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string TokenPrefix { get; set; }
 }
 
@@ -329,7 +535,7 @@ public partial class DeviceStatus
     /// the heartbeat, matching the device lane of its historical events.
     /// </summary>
     [JsonPropertyName("device_id")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string DeviceId { get; set; }
 
     /// <summary>
@@ -361,7 +567,7 @@ public partial class HeartbeatActivity
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("application_id")]
-    [JsonConverter(typeof(StickyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(IndecentMinMaxLengthCheckConverter))]
     public string? ApplicationId { get; set; }
 
     /// <summary>
@@ -370,7 +576,7 @@ public partial class HeartbeatActivity
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("application_label")]
-    [JsonConverter(typeof(StickyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(IndecentMinMaxLengthCheckConverter))]
     public string? ApplicationLabel { get; set; }
 
     /// <summary>
@@ -405,7 +611,7 @@ public partial class Error
     public Dictionary<string, object> Details { get; set; }
 
     [JsonPropertyName("message")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string Message { get; set; }
 }
 
@@ -415,7 +621,7 @@ public partial class ErrorResponse
     public Error Error { get; set; }
 
     [JsonPropertyName("request_id")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string RequestId { get; set; }
 }
 
@@ -477,7 +683,7 @@ public partial class VersionedEvent
     /// IANA timezone observed at capture.
     /// </summary>
     [JsonPropertyName("capture_timezone")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string CaptureTimezone { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -511,7 +717,7 @@ public partial class VersionedEvent
     public bool Invalidated { get; set; }
 
     [JsonPropertyName("owner_id")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string OwnerId { get; set; }
 
     [JsonPropertyName("provenance")]
@@ -550,7 +756,7 @@ public partial class CorrectionProvenance
 public partial class Device
 {
     [JsonPropertyName("id")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string Id { get; set; }
 
     [JsonPropertyName("platform")]
@@ -564,12 +770,12 @@ public partial class Payload
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("application_id")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string? ApplicationId { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("application_label")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string? ApplicationLabel { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -589,7 +795,7 @@ public partial class Payload
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("subject_id")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string? SubjectId { get; set; }
 
     /// <summary>
@@ -611,7 +817,7 @@ public partial class Payload
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("data_origin")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string? DataOrigin { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -642,7 +848,7 @@ public partial class Payload
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("merchant")]
-    [JsonConverter(typeof(IndigoMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(HilariousMinMaxLengthCheckConverter))]
     public string? Merchant { get; set; }
 
     /// <summary>
@@ -679,7 +885,7 @@ public partial class Classification
     public double Confidence { get; set; }
 
     [JsonPropertyName("rule_id")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string RuleId { get; set; }
 
     [JsonPropertyName("rule_version")]
@@ -736,7 +942,7 @@ public partial class Source
     /// suspected duplicates carry pending_confirmation instead of being merged.
     /// </summary>
     [JsonPropertyName("record_id")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string RecordId { get; set; }
 }
 
@@ -793,7 +999,7 @@ public partial class EventCorrectionRequest
     /// Optional Owner-provided reason recorded in the audit trail; never device raw text.
     /// </summary>
     [JsonPropertyName("reason")]
-    [JsonConverter(typeof(IndecentMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(AmbitiousMinMaxLengthCheckConverter))]
     public string Reason { get; set; }
 }
 
@@ -933,7 +1139,7 @@ public partial class SourceConflict
     /// payment.transaction_totals.
     /// </summary>
     [JsonPropertyName("metric")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string Metric { get; set; }
 
     /// <summary>
@@ -954,7 +1160,7 @@ public partial class SourceConflict
     /// data origin for health metrics.
     /// </summary>
     [JsonPropertyName("selected_source")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string SelectedSource { get; set; }
 
     /// <summary>
@@ -995,7 +1201,7 @@ public partial class HeartbeatRequest
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("device_name")]
-    [JsonConverter(typeof(HilariousMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(CunningMinMaxLengthCheckConverter))]
     public string? DeviceName { get; set; }
 
     /// <summary>
@@ -1011,7 +1217,7 @@ public partial class OwnerPasswordRequest
     /// The Owner password. Never logged or stored in plaintext.
     /// </summary>
     [JsonPropertyName("password")]
-    [JsonConverter(typeof(AmbitiousMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(MagentaMinMaxLengthCheckConverter))]
     public string Password { get; set; }
 }
 
@@ -1031,7 +1237,7 @@ public partial class OwnerSettings
     /// until the Owner configures another timezone; browser timezones never change a report.
     /// </summary>
     [JsonPropertyName("report_timezone")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string ReportTimezone { get; set; }
 }
 
@@ -1041,7 +1247,7 @@ public partial class OwnerSettingsUpdate
     /// New report timezone as an IANA timezone name.
     /// </summary>
     [JsonPropertyName("report_timezone")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string ReportTimezone { get; set; }
 }
 
@@ -1088,7 +1294,7 @@ public partial class SourcePolicyEntry
     /// health metrics prioritize Health Connect data origins.
     /// </summary>
     [JsonPropertyName("metric")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string Metric { get; set; }
 
     /// <summary>
@@ -1117,7 +1323,7 @@ public partial class SourcePolicyImpact
     /// Metric key whose priority changed.
     /// </summary>
     [JsonPropertyName("metric")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string Metric { get; set; }
 
     /// <summary>
@@ -1211,7 +1417,7 @@ public partial class UsageDeviceMetrics
     /// Device lane identifier as reported in the event envelope.
     /// </summary>
     [JsonPropertyName("device_id")]
-    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
     public string DeviceId { get; set; }
 
     /// <summary>
@@ -1276,6 +1482,28 @@ public partial class UsageWeekReport
 }
 
 /// <summary>
+/// application matches the executable or package name exactly (the comparison is
+/// case-insensitive for Windows executables and exact for Android package names);
+/// title_keyword matches when the local window title contains the keyword
+/// case-insensitively; title_regex matches the local window title against a regular
+/// expression, which is the only way to extract a candidate project name.
+/// </summary>
+public enum ClassificationRuleKind { Application, TitleKeyword, TitleRegex };
+
+/// <summary>
+/// Collector platform the rule applies to; any applies everywhere. Title rules are only
+/// executable on platforms that observe window titles.
+/// </summary>
+public enum ClassificationRulePlatform { Android, Any, Windows };
+
+/// <summary>
+/// Service entities name a cross-platform service (a browser session and a native package
+/// can both map to one service subject); project entities name an Owner-approved project
+/// alias used to separate work time, for example per-project IDE activity.
+/// </summary>
+public enum SemanticEntityKind { Project, Service };
+
+/// <summary>
 /// Actor type the credential authenticates: a device collector uploads events, a query agent
 /// reads approved data domains.
 /// </summary>
@@ -1292,9 +1520,12 @@ public enum CredentialPrivacyCeiling { Normal, Private, Sensitive };
 /// health:write, and payment:write restrict which event domains a device token may upload
 /// (activity intervals, Health Connect observations, payment transactions), while
 /// events:read, health:read, and payment:read restrict which domains a query token may read.
-/// A credential never holds a scope outside its actor type.
+/// rules:read lets a device token download the classification rule set so it can classify
+/// locally; it is device-only, because rule distribution is a collector concern and the
+/// management plane stays with the Owner session. A credential never holds a scope outside
+/// its actor type.
 /// </summary>
-public enum CredentialScope { EventsRead, EventsWrite, HealthRead, HealthWrite, PaymentRead, PaymentWrite };
+public enum CredentialScope { EventsRead, EventsWrite, HealthRead, HealthWrite, PaymentRead, PaymentWrite, RulesRead };
 
 /// <summary>
 /// Collector platform the heartbeat originates from.
@@ -1372,6 +1603,9 @@ public static class ContractJson
     {
         Converters =
         {
+            ClassificationRuleKindConverter.Singleton,
+            ClassificationRulePlatformConverter.Singleton,
+            SemanticEntityKindConverter.Singleton,
             CredentialKindConverter.Singleton,
             CredentialPrivacyCeilingConverter.Singleton,
             CredentialScopeConverter.Singleton,
@@ -1394,6 +1628,72 @@ public static class ContractJson
     };
 }
 
+internal class MinMaxValueCheckConverter : JsonConverter<double>
+{
+    public override bool CanConvert(Type t) => t == typeof(double);
+
+    public override double Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetDouble();
+        if (value >= 0 && value <= 1)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type double");
+    }
+
+    public override void Write(Utf8JsonWriter writer, double value, JsonSerializerOptions options)
+    {
+        if (value >= 0 && value <= 1)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type double");
+    }
+
+    public static readonly MinMaxValueCheckConverter Singleton = new MinMaxValueCheckConverter();
+}
+
+internal class ClassificationRuleKindConverter : JsonConverter<ClassificationRuleKind>
+{
+    public override bool CanConvert(Type t) => t == typeof(ClassificationRuleKind);
+
+    public override ClassificationRuleKind Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        switch (value)
+        {
+            case "application":
+                return ClassificationRuleKind.Application;
+            case "title_keyword":
+                return ClassificationRuleKind.TitleKeyword;
+            case "title_regex":
+                return ClassificationRuleKind.TitleRegex;
+        }
+        throw new Exception("Cannot unmarshal type ClassificationRuleKind");
+    }
+
+    public override void Write(Utf8JsonWriter writer, ClassificationRuleKind value, JsonSerializerOptions options)
+    {
+        switch (value)
+        {
+            case ClassificationRuleKind.Application:
+                JsonSerializer.Serialize(writer, "application", options);
+                return;
+            case ClassificationRuleKind.TitleKeyword:
+                JsonSerializer.Serialize(writer, "title_keyword", options);
+                return;
+            case ClassificationRuleKind.TitleRegex:
+                JsonSerializer.Serialize(writer, "title_regex", options);
+                return;
+        }
+        throw new Exception("Cannot marshal type ClassificationRuleKind");
+    }
+
+    public static readonly ClassificationRuleKindConverter Singleton = new ClassificationRuleKindConverter();
+}
+
 internal class PurpleMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
@@ -1401,7 +1701,7 @@ internal class PurpleMinMaxLengthCheckConverter : JsonConverter<string>
     public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         var value = reader.GetString() ?? throw new JsonException("Expected a string.");
-        if (value.Length >= 1 && value.Length <= 100)
+        if (value.Length >= 1)
         {
             return value;
         }
@@ -1410,7 +1710,7 @@ internal class PurpleMinMaxLengthCheckConverter : JsonConverter<string>
 
     public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
     {
-        if (value.Length >= 1 && value.Length <= 100)
+        if (value.Length >= 1)
         {
             JsonSerializer.Serialize(writer, value, options);
             return;
@@ -1421,6 +1721,45 @@ internal class PurpleMinMaxLengthCheckConverter : JsonConverter<string>
     public static readonly PurpleMinMaxLengthCheckConverter Singleton = new PurpleMinMaxLengthCheckConverter();
 }
 
+internal class ClassificationRulePlatformConverter : JsonConverter<ClassificationRulePlatform>
+{
+    public override bool CanConvert(Type t) => t == typeof(ClassificationRulePlatform);
+
+    public override ClassificationRulePlatform Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        switch (value)
+        {
+            case "android":
+                return ClassificationRulePlatform.Android;
+            case "any":
+                return ClassificationRulePlatform.Any;
+            case "windows":
+                return ClassificationRulePlatform.Windows;
+        }
+        throw new Exception("Cannot unmarshal type ClassificationRulePlatform");
+    }
+
+    public override void Write(Utf8JsonWriter writer, ClassificationRulePlatform value, JsonSerializerOptions options)
+    {
+        switch (value)
+        {
+            case ClassificationRulePlatform.Android:
+                JsonSerializer.Serialize(writer, "android", options);
+                return;
+            case ClassificationRulePlatform.Any:
+                JsonSerializer.Serialize(writer, "any", options);
+                return;
+            case ClassificationRulePlatform.Windows:
+                JsonSerializer.Serialize(writer, "windows", options);
+                return;
+        }
+        throw new Exception("Cannot marshal type ClassificationRulePlatform");
+    }
+
+    public static readonly ClassificationRulePlatformConverter Singleton = new ClassificationRulePlatformConverter();
+}
+
 internal class FluffyMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
@@ -1428,7 +1767,7 @@ internal class FluffyMinMaxLengthCheckConverter : JsonConverter<string>
     public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         var value = reader.GetString() ?? throw new JsonException("Expected a string.");
-        if (value.Length >= 1)
+        if (value.Length >= 1 && value.Length <= 300)
         {
             return value;
         }
@@ -1437,7 +1776,7 @@ internal class FluffyMinMaxLengthCheckConverter : JsonConverter<string>
 
     public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
     {
-        if (value.Length >= 1)
+        if (value.Length >= 1 && value.Length <= 300)
         {
             JsonSerializer.Serialize(writer, value, options);
             return;
@@ -1446,6 +1785,121 @@ internal class FluffyMinMaxLengthCheckConverter : JsonConverter<string>
     }
 
     public static readonly FluffyMinMaxLengthCheckConverter Singleton = new FluffyMinMaxLengthCheckConverter();
+}
+
+internal class TentacledMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
+        if (value.Length >= 1 && value.Length <= 100)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length >= 1 && value.Length <= 100)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly TentacledMinMaxLengthCheckConverter Singleton = new TentacledMinMaxLengthCheckConverter();
+}
+
+internal class SemanticEntityKindConverter : JsonConverter<SemanticEntityKind>
+{
+    public override bool CanConvert(Type t) => t == typeof(SemanticEntityKind);
+
+    public override SemanticEntityKind Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        switch (value)
+        {
+            case "project":
+                return SemanticEntityKind.Project;
+            case "service":
+                return SemanticEntityKind.Service;
+        }
+        throw new Exception("Cannot unmarshal type SemanticEntityKind");
+    }
+
+    public override void Write(Utf8JsonWriter writer, SemanticEntityKind value, JsonSerializerOptions options)
+    {
+        switch (value)
+        {
+            case SemanticEntityKind.Project:
+                JsonSerializer.Serialize(writer, "project", options);
+                return;
+            case SemanticEntityKind.Service:
+                JsonSerializer.Serialize(writer, "service", options);
+                return;
+        }
+        throw new Exception("Cannot marshal type SemanticEntityKind");
+    }
+
+    public static readonly SemanticEntityKindConverter Singleton = new SemanticEntityKindConverter();
+}
+
+internal class StickyMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
+        if (value.Length >= 1 && value.Length <= 100)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length >= 1 && value.Length <= 100)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly StickyMinMaxLengthCheckConverter Singleton = new StickyMinMaxLengthCheckConverter();
+}
+
+internal class IndigoMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
+        if (value.Length >= 1 && value.Length <= 100)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length >= 1 && value.Length <= 100)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly IndigoMinMaxLengthCheckConverter Singleton = new IndigoMinMaxLengthCheckConverter();
 }
 
 internal class CredentialKindConverter : JsonConverter<CredentialKind>
@@ -1480,33 +1934,6 @@ internal class CredentialKindConverter : JsonConverter<CredentialKind>
     }
 
     public static readonly CredentialKindConverter Singleton = new CredentialKindConverter();
-}
-
-internal class TentacledMinMaxLengthCheckConverter : JsonConverter<string>
-{
-    public override bool CanConvert(Type t) => t == typeof(string);
-
-    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
-        if (value.Length >= 1 && value.Length <= 100)
-        {
-            return value;
-        }
-        throw new Exception("Cannot unmarshal type string");
-    }
-
-    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
-    {
-        if (value.Length >= 1 && value.Length <= 100)
-        {
-            JsonSerializer.Serialize(writer, value, options);
-            return;
-        }
-        throw new Exception("Cannot marshal type string");
-    }
-
-    public static readonly TentacledMinMaxLengthCheckConverter Singleton = new TentacledMinMaxLengthCheckConverter();
 }
 
 internal class CredentialPrivacyCeilingConverter : JsonConverter<CredentialPrivacyCeiling>
@@ -1569,6 +1996,8 @@ internal class CredentialScopeConverter : JsonConverter<CredentialScope>
                 return CredentialScope.PaymentRead;
             case "payment:write":
                 return CredentialScope.PaymentWrite;
+            case "rules:read":
+                return CredentialScope.RulesRead;
         }
         throw new Exception("Cannot unmarshal type CredentialScope");
     }
@@ -1595,6 +2024,9 @@ internal class CredentialScopeConverter : JsonConverter<CredentialScope>
             case CredentialScope.PaymentWrite:
                 JsonSerializer.Serialize(writer, "payment:write", options);
                 return;
+            case CredentialScope.RulesRead:
+                JsonSerializer.Serialize(writer, "rules:read", options);
+                return;
         }
         throw new Exception("Cannot marshal type CredentialScope");
     }
@@ -1602,7 +2034,7 @@ internal class CredentialScopeConverter : JsonConverter<CredentialScope>
     public static readonly CredentialScopeConverter Singleton = new CredentialScopeConverter();
 }
 
-internal class StickyMinMaxLengthCheckConverter : JsonConverter<string>
+internal class IndecentMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
 
@@ -1626,7 +2058,7 @@ internal class StickyMinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly StickyMinMaxLengthCheckConverter Singleton = new StickyMinMaxLengthCheckConverter();
+    public static readonly IndecentMinMaxLengthCheckConverter Singleton = new IndecentMinMaxLengthCheckConverter();
 }
 
 internal class PlatformConverter : JsonConverter<Platform>
@@ -1815,33 +2247,6 @@ internal class CategoryConverter : JsonConverter<Category>
     public static readonly CategoryConverter Singleton = new CategoryConverter();
 }
 
-internal class MinMaxValueCheckConverter : JsonConverter<double>
-{
-    public override bool CanConvert(Type t) => t == typeof(double);
-
-    public override double Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        var value = reader.GetDouble();
-        if (value >= 0 && value <= 1)
-        {
-            return value;
-        }
-        throw new Exception("Cannot unmarshal type double");
-    }
-
-    public override void Write(Utf8JsonWriter writer, double value, JsonSerializerOptions options)
-    {
-        if (value >= 0 && value <= 1)
-        {
-            JsonSerializer.Serialize(writer, value, options);
-            return;
-        }
-        throw new Exception("Cannot marshal type double");
-    }
-
-    public static readonly MinMaxValueCheckConverter Singleton = new MinMaxValueCheckConverter();
-}
-
 internal class StepUnitConverter : JsonConverter<StepUnit>
 {
     public override bool CanConvert(Type t) => t == typeof(StepUnit);
@@ -1930,7 +2335,7 @@ internal class DurationUnitConverter : JsonConverter<DurationUnit>
     public static readonly DurationUnitConverter Singleton = new DurationUnitConverter();
 }
 
-internal class IndigoMinMaxLengthCheckConverter : JsonConverter<string>
+internal class HilariousMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
 
@@ -1954,7 +2359,7 @@ internal class IndigoMinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly IndigoMinMaxLengthCheckConverter Singleton = new IndigoMinMaxLengthCheckConverter();
+    public static readonly HilariousMinMaxLengthCheckConverter Singleton = new HilariousMinMaxLengthCheckConverter();
 }
 
 internal class PrivacyLevelConverter : JsonConverter<PrivacyLevel>
@@ -2084,7 +2489,7 @@ internal class StatusConverter : JsonConverter<Status>
     public static readonly StatusConverter Singleton = new StatusConverter();
 }
 
-internal class IndecentMinMaxLengthCheckConverter : JsonConverter<string>
+internal class AmbitiousMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
 
@@ -2108,7 +2513,7 @@ internal class IndecentMinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly IndecentMinMaxLengthCheckConverter Singleton = new IndecentMinMaxLengthCheckConverter();
+    public static readonly AmbitiousMinMaxLengthCheckConverter Singleton = new AmbitiousMinMaxLengthCheckConverter();
 }
 
 internal class CompletenessConverter : JsonConverter<Completeness>
@@ -2189,7 +2594,7 @@ internal class DataStateConverter : JsonConverter<DataState>
     public static readonly DataStateConverter Singleton = new DataStateConverter();
 }
 
-internal class HilariousMinMaxLengthCheckConverter : JsonConverter<string>
+internal class CunningMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
 
@@ -2213,10 +2618,10 @@ internal class HilariousMinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly HilariousMinMaxLengthCheckConverter Singleton = new HilariousMinMaxLengthCheckConverter();
+    public static readonly CunningMinMaxLengthCheckConverter Singleton = new CunningMinMaxLengthCheckConverter();
 }
 
-internal class AmbitiousMinMaxLengthCheckConverter : JsonConverter<string>
+internal class MagentaMinMaxLengthCheckConverter : JsonConverter<string>
 {
     public override bool CanConvert(Type t) => t == typeof(string);
 
@@ -2240,7 +2645,7 @@ internal class AmbitiousMinMaxLengthCheckConverter : JsonConverter<string>
         throw new Exception("Cannot marshal type string");
     }
 
-    public static readonly AmbitiousMinMaxLengthCheckConverter Singleton = new AmbitiousMinMaxLengthCheckConverter();
+    public static readonly MagentaMinMaxLengthCheckConverter Singleton = new MagentaMinMaxLengthCheckConverter();
 }
 
 public class DateOnlyConverter : JsonConverter<DateOnly>

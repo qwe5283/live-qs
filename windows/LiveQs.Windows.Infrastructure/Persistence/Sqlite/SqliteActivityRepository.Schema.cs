@@ -65,6 +65,13 @@ public sealed partial class SqliteActivityRepository
                 install_guid TEXT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS classification_cache (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                rule_set_version INTEGER NOT NULL DEFAULT 0,
+                json TEXT NOT NULL,
+                fetched_utc TEXT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS ix_activity_segments_range
                 ON activity_segments(started_utc, ended_utc);
             CREATE INDEX IF NOT EXISTS ix_activity_segments_app
@@ -80,6 +87,7 @@ public sealed partial class SqliteActivityRepository
         await AddColumnIfMissingAsync(connection, "activity_segments", "finalized", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
         await AddColumnIfMissingAsync(connection, "sync_queue", "permanent", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
         await AddColumnIfMissingAsync(connection, "sync_state", "install_guid", "TEXT NULL", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "sync_state", "classification_secret", "TEXT NULL", cancellationToken);
 
         await using var seed = connection.CreateCommand();
         seed.CommandText = """
@@ -89,12 +97,35 @@ public sealed partial class SqliteActivityRepository
             INSERT INTO sync_state(id, last_success_utc)
             VALUES(1, NULL)
             ON CONFLICT(id) DO NOTHING;
+            INSERT INTO classification_cache(id, rule_set_version, json)
+            VALUES(1, 0, '{}')
+            ON CONFLICT(id) DO NOTHING;
             """;
         seed.Parameters.AddWithValue("$json", JsonSerializer.Serialize(new AppSettings(), JsonOptions));
         seed.Parameters.AddWithValue("$now", UtcText(_timeProvider.GetUtcNow()));
         await seed.ExecuteNonQueryAsync(cancellationToken);
 
         await EnsureInstallGuidAsync(connection, cancellationToken);
+        await EnsureClassificationSecretAsync(connection, cancellationToken);
+    }
+
+    /// <summary>
+    /// The classification secret is device-generated and stays local forever:
+    /// it keys the opaque HMAC identifiers of locally discovered project
+    /// names, so identical projects aggregate while no name (or unsalted
+    /// digest of it) can ever be reconstructed from uploads.
+    /// </summary>
+    private async Task EnsureClassificationSecretAsync(Microsoft.Data.Sqlite.SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await using var read = connection.CreateCommand();
+        read.CommandText = "SELECT classification_secret FROM sync_state WHERE id = 1;";
+        var existing = (await read.ExecuteScalarAsync(cancellationToken)) as string;
+        if (!string.IsNullOrWhiteSpace(existing)) return;
+
+        await using var write = connection.CreateCommand();
+        write.CommandText = "UPDATE sync_state SET classification_secret = $secret WHERE id = 1;";
+        write.Parameters.AddWithValue("$secret", Core.Classification.OpaqueSubjects.NewSecret());
+        await write.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>

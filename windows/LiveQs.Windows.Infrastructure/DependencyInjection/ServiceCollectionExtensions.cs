@@ -1,4 +1,5 @@
 using LiveQs.Windows.Core.Abstractions;
+using LiveQs.Windows.Infrastructure.Classification;
 using LiveQs.Windows.Infrastructure.Configuration;
 using LiveQs.Windows.Infrastructure.Maintenance;
 using LiveQs.Windows.Infrastructure.Persistence.Sqlite;
@@ -23,12 +24,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IActivityQueryService>(sp => sp.GetRequiredService<SqliteActivityRepository>());
         services.AddSingleton<ISettingsStore>(sp => sp.GetRequiredService<SqliteActivityRepository>());
         services.AddSingleton<ISyncQueueStore>(sp => sp.GetRequiredService<SqliteActivityRepository>());
+        services.AddSingleton<IClassificationRuleStore>(sp => sp.GetRequiredService<SqliteActivityRepository>());
         services.AddSingleton<IActivityMaintenance>(sp => sp.GetRequiredService<SqliteActivityRepository>());
         services.AddSingleton<IForegroundSampler, ForegroundSampler>();
         services.AddSingleton<IStartupManager, StartupManager>();
         services.AddSingleton<ISyncStatusService, SyncStatusService>();
         services.AddSingleton<ISyncClient, CloudSyncClient>();
         services.AddSingleton<IHeartbeatClient, HeartbeatClient>();
+        services.AddSingleton<IClassificationRuleSync, ClassificationRuleSync>();
         services.AddHttpClient("cloud-sync", client => client.Timeout = TimeSpan.FromSeconds(15));
         services.AddHostedService<SamplingWorker>();
         services.AddHostedService<SyncWorker>();

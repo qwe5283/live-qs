@@ -172,6 +172,19 @@ const sourcePolicySchema = new Schema({
   updated_at: { type: Date, required: true },
 }, commonOptions);
 
+/**
+ * Versioned Owner-managed classification rule set: semantic entities plus the
+ * rules devices execute locally. Absent rows mean rule set version 0 (empty
+ * dictionary); each Owner update stores the full new document.
+ */
+const classificationRuleSetSchema = new Schema({
+  user_id: { type: String, required: true, unique: true },
+  version: { type: Number, required: true },
+  entities: { type: Schema.Types.Mixed, default: [] },
+  rules: { type: Schema.Types.Mixed, default: [] },
+  updated_at: { type: Date, required: true },
+}, commonOptions);
+
 export const BucketModel = model("Bucket", bucketSchema);
 export const EventModel = model("Event", eventSchema);
 export const EventRevisionModel = model("EventRevision", eventRevisionSchema);
@@ -184,4 +197,5 @@ export const OwnerCredentialModel = model("OwnerCredential", ownerCredentialSche
 export const OwnerSessionModel = model("OwnerSession", ownerSessionSchema);
 export const OwnerSettingsModel = model("OwnerSettings", ownerSettingsSchema);
 export const SourcePolicyModel = model("SourcePolicy", sourcePolicySchema);
+export const ClassificationRuleSetModel = model("ClassificationRuleSet", classificationRuleSetSchema);
 export const CredentialModel = model("Credential", credentialSchema);

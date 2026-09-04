@@ -1,6 +1,7 @@
 package com.ailife.android.usage
 
 import com.ailife.android.generated.VersionedEvent
+import com.ailife.android.generated.Classification
 import com.ailife.android.generated.Device
 import com.ailife.android.generated.Duration
 import com.ailife.android.generated.DurationUnit
@@ -12,6 +13,7 @@ import com.ailife.android.generated.PrivacyLevel
 import com.ailife.android.generated.Provenance
 import com.ailife.android.generated.Source
 import com.ailife.android.generated.SourceKind
+import com.ailife.android.classification.SubjectTag
 import java.time.Instant
 import java.time.ZoneId
 
@@ -42,7 +44,9 @@ data class UsageEventPlan(
  * - revision 1 is the first checkpoint of an open session (end = observation
  *   instant), each extension and the final close increment the revision;
  * - an unchanged finalized session is skipped — redelivery is handled by the
- *   outbox, not by re-emitting every pass.
+ *   outbox, not by re-emitting every pass;
+ * - classification is applied locally through the cached Owner rule set: the
+ *   event carries only the subject, rule id, rule version, and confidence.
  *
  * The planner is pure: state in, plan out. Durability belongs to
  * [UsageStatsSyncState]; UsageStats queries belong to [UsageStatsEventSource].
@@ -58,6 +62,7 @@ object UsageStatsEventPlanner {
         zone: ZoneId,
         appNameOf: (String) -> String? = { null },
         privacyLevelOf: (String) -> String = { USAGE_PRIVACY_NORMAL },
+        subjectOf: (String) -> SubjectTag? = { null },
     ): UsageEventPlan {
         val events = mutableListOf<VersionedEvent>()
         val states = mutableMapOf<String, UsageIntervalState>()
@@ -86,12 +91,21 @@ object UsageStatsEventPlanner {
 
             val startInstant = Instant.ofEpochMilli(interval.startMillis)
             val endInstant = Instant.ofEpochMilli(endMillis)
+            val subject = subjectOf(interval.packageName)
             events.add(
                 VersionedEvent(
                     eventType = EventType.ACTIVITY_INTERVAL,
                     payload = Payload(
                         applicationId = interval.packageName,
                         applicationLabel = appNameOf(interval.packageName),
+                        subjectId = subject?.subjectId,
+                        classification = subject?.let {
+                            Classification(
+                                confidence = it.confidence,
+                                ruleId = it.ruleId,
+                                ruleVersion = it.ruleVersion,
+                            )
+                        },
                         duration = Duration(value = endMillis - interval.startMillis, unit = DurationUnit.MS),
                         isAfk = false, // UsageStats intervals are foreground usage by definition.
                     ),

@@ -11,6 +11,7 @@ public sealed class SyncWorker(
     ISyncQueueStore syncQueue,
     ISyncClient client,
     ISyncStatusService statusService,
+    IClassificationRuleSync classificationRuleSync,
     TimeProvider timeProvider,
     ILogger<SyncWorker> logger) : BackgroundService
 {
@@ -63,6 +64,10 @@ public sealed class SyncWorker(
         statusService.Update(new SyncStatus(true, true, pending, _lastSuccess, _lastError));
         try
         {
+            // Keep the cached rule set near the Owner's published version; a
+            // failed refresh is non-fatal and classification continues with
+            // the last successful version (also fully offline).
+            await classificationRuleSync.RefreshAsync(settings, cancellationToken);
             var outcomes = await client.UploadAsync(items, settings, cancellationToken);
             var acknowledged = outcomes
                 .Where(outcome => outcome.Kind == SyncOutcomeKind.Acknowledged)

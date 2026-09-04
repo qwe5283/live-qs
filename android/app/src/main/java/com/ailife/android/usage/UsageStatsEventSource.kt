@@ -3,9 +3,12 @@ package com.ailife.android.usage
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
+import com.ailife.android.classification.DeviceClassifier
+import com.ailife.android.classification.RuleSetCache
 import com.ailife.android.data.SettingsStore
 import com.ailife.android.generated.VersionedEvent
 import com.ailife.android.health.UsageStatsCollector
+import com.ailife.android.network.ReportClient
 import java.io.File
 import java.time.ZoneId
 
@@ -37,6 +40,19 @@ class UsageStatsEventSource(
         val transitions = queryTransitions(queryStartMillis, now)
         val intervals = UsageStatsIntervals.build(transitions)
 
+        // Classification uses the cached Owner rule set: refresh is bounded
+        // by the cache's interval and a failed refresh leaves the last
+        // successful version in place, so offline execution keeps working.
+        val cache = RuleSetCache(ruleSetCacheFile(context))
+        val ruleSet = cache.refresh(settings.serverUrl, settings.deviceToken) { url, token ->
+            val client = ReportClient(url, token)
+            try {
+                client.getRuleSet().getOrNull()
+            } finally {
+                client.close()
+            }
+        }
+
         val plan = UsageStatsEventPlanner.plan(
             intervals = intervals,
             state = UsageStatsSyncStateView(installGuid = state.installGuid, intervals = state.intervals),
@@ -46,6 +62,7 @@ class UsageStatsEventSource(
             collectorVersion = resolveCollectorVersion(),
             zone = ZoneId.systemDefault(),
             appNameOf = this::resolveAppName,
+            subjectOf = { packageName -> DeviceClassifier.classify(ruleSet, packageName) },
         )
 
         for ((eventId, intervalState) in plan.states) {
@@ -115,7 +132,10 @@ class UsageStatsEventSource(
         private const val WATERMARK_OVERLAP_MS = 60L * 60 * 1000
         private const val STATE_RETENTION_MS = 7L * 24 * 60 * 60 * 1000
         private const val STATE_FILE_NAME = "usage-sync-state.json"
+        private const val RULE_SET_CACHE_FILE_NAME = "classification-rules.json"
 
         fun stateFile(context: Context) = File(context.filesDir, STATE_FILE_NAME)
+
+        fun ruleSetCacheFile(context: Context) = File(context.filesDir, RULE_SET_CACHE_FILE_NAME)
     }
 }

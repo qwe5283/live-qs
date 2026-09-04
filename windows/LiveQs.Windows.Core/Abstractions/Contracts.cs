@@ -1,6 +1,7 @@
 using LiveQs.Windows.Core.Activity;
 using LiveQs.Windows.Core.Analytics;
 using LiveQs.Windows.Core.Common;
+using LiveQs.Windows.Core.Contracts;
 using LiveQs.Windows.Core.Settings;
 using LiveQs.Windows.Core.Sync;
 
@@ -79,6 +80,30 @@ public interface IStartupManager
 {
     bool IsEnabled();
     void SetEnabled(bool enabled);
+}
+
+/// <summary>
+/// Local persistence of the Owner's classification rule set: the cache of the
+/// last successfully fetched version survives outages so classification keeps
+/// working offline, plus the per-installation secret that keys opaque
+/// identifiers of locally discovered project names (the secret never leaves
+/// the device).
+/// </summary>
+public interface IClassificationRuleStore
+{
+    Task<ClassificationRuleSet?> GetCachedRuleSetAsync(CancellationToken cancellationToken = default);
+    Task SaveCachedRuleSetAsync(ClassificationRuleSet ruleSet, DateTimeOffset fetchedAt, CancellationToken cancellationToken = default);
+    Task<string> GetClassificationSecretAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Refreshes the cached rule set from the service at a bounded cadence. A
+/// failed refresh is never fatal: the last successful version stays cached
+/// and executable.
+/// </summary>
+public interface IClassificationRuleSync
+{
+    Task<ClassificationRuleSet?> RefreshAsync(AppSettings settings, CancellationToken cancellationToken = default);
 }
 
 public interface ISyncClient

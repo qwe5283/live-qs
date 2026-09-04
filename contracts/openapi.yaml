@@ -44,6 +44,17 @@ tags:
       titles, and other free text never leave the device. Transactions
       suspected to be duplicates stay flagged pending confirmation instead of
       being merged on amount and time alone.
+  - name: Classification
+    description: >-
+      Owner-managed semantic dictionary and versioned classification rules.
+      The Owner defines cross-platform service and project subjects in the
+      WebUI; devices download the active rule set, cache the last successful
+      version, and execute the rules locally so raw window titles never leave
+      the device. Uploaded classifications contain only the subject, the
+      category, the rule identifier, the rule version, and a confidence.
+      Every entity in this dictionary is Owner-approved; newly discovered
+      project names stay on the device and are represented by opaque
+      device-secret HMAC identifiers until the Owner approves an alias.
 paths:
   /api/v1/owner/status:
     get:
@@ -644,6 +655,70 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /api/v1/classification/ruleset:
+    get:
+      operationId: getClassificationRuleSet
+      summary: Read the active classification rule set
+      description: >-
+        Serves the active, versioned classification rule set to collectors and
+        shows it to the Owner. Owner sessions read it for management; Device
+        Tokens need the rules:read scope. Clients cache the last successful
+        version and keep executing it offline, so a rule fetch never blocks
+        local classification and raw titles are never sent anywhere to be
+        classified.
+      tags: [Classification]
+      security:
+        - OwnerSession: []
+        - DeviceToken: []
+      x-required-scopes: [rules:read]
+      responses:
+        "200":
+          description: The active rule set document with its version and per-rule versions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClassificationRuleSet"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    put:
+      operationId: updateClassificationRuleSet
+      summary: Replace the semantic entities and classification rules
+      description: >-
+        Owner-session-only full replacement of the semantic dictionary and the
+        rule set. Every successful update bumps the rule set version; each
+        created or changed rule receives its own incremented version so past
+        uploads stay explainable against the rule version that produced them.
+        Rules must reference entities included in the same request, so the
+        published document is always internally consistent. The change is
+        audited with the from/to versions and the added, updated, and removed
+        rule identifiers. Rule changes affect future observations; they never
+        rewrite already uploaded events.
+      tags: [Classification]
+      security:
+        - OwnerSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClassificationRuleSetUpdateRequest"
+      responses:
+        "200":
+          description: The published rule set with server-managed versions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClassificationRuleSet"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 components:
   securitySchemes:
     OwnerSession:
@@ -857,14 +932,17 @@ components:
     CredentialScope:
       title: Credential Scope
       type: string
-      enum: [events:write, events:read, health:write, health:read, payment:write, payment:read]
+      enum: [events:write, events:read, health:write, health:read, payment:write, payment:read, rules:read]
       description: >-
         Capability granted to the credential. Scopes are domain-scoped:
         events:write, health:write, and payment:write restrict which event
         domains a device token may upload (activity intervals, Health Connect
         observations, payment transactions), while events:read, health:read,
-        and payment:read restrict which domains a query token may read. A
-        credential never holds a scope outside its actor type.
+        and payment:read restrict which domains a query token may read.
+        rules:read lets a device token download the classification rule set so
+        it can classify locally; it is device-only, because rule distribution
+        is a collector concern and the management plane stays with the Owner
+        session. A credential never holds a scope outside its actor type.
     CredentialPrivacyCeiling:
       title: Credential Privacy Ceiling
       type: string
@@ -895,8 +973,8 @@ components:
             $ref: "#/components/schemas/CredentialScope"
           description: >-
             Non-empty subset of the actor type's scopes: device tokens may
-            hold events:write, health:write, and payment:write; query tokens
-            may hold events:read, health:read, and payment:read.
+            hold events:write, health:write, payment:write, and rules:read;
+            query tokens may hold events:read, health:read, and payment:read.
         allowed_event_types:
           type: array
           default: []
@@ -1394,6 +1472,201 @@ components:
             never modifies raw observations.
           items:
             $ref: "#/components/schemas/SourcePolicyEntry"
+    SemanticEntityKind:
+      title: Semantic Entity Kind
+      type: string
+      enum: [service, project]
+      description: >-
+        Service entities name a cross-platform service (a browser session and
+        a native package can both map to one service subject); project
+        entities name an Owner-approved project alias used to separate work
+        time, for example per-project IDE activity.
+    SemanticEntity:
+      title: Semantic Entity
+      type: object
+      additionalProperties: false
+      required: [entity_id, kind, name]
+      properties:
+        entity_id:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: "^[a-z][a-z0-9._-]*$"
+          description: >-
+            Owner-chosen stable subject identifier uploaded in event payloads,
+            such as svc.bilibili or project.liveqs. Renaming the display label
+            never changes this identifier, so history stays comparable.
+        kind:
+          $ref: "#/components/schemas/SemanticEntityKind"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: >-
+            Owner-approved display label, such as 哔哩哔哩 or LiveQs. This is the
+            only project name that ever exists on the service side; unapproved
+            names stay on the collecting device.
+    ClassificationRuleKind:
+      title: Classification Rule Kind
+      type: string
+      enum: [application, title_keyword, title_regex]
+      description: >-
+        application matches the executable or package name exactly (the
+        comparison is case-insensitive for Windows executables and exact for
+        Android package names); title_keyword matches when the local window
+        title contains the keyword case-insensitively; title_regex matches the
+        local window title against a regular expression, which is the only way
+        to extract a candidate project name.
+    ClassificationRulePlatform:
+      title: Classification Rule Platform
+      type: string
+      enum: [windows, android, any]
+      description: >-
+        Collector platform the rule applies to; any applies everywhere. Title
+        rules are only executable on platforms that observe window titles.
+    ClassificationRuleInput:
+      title: Classification Rule Input
+      type: object
+      additionalProperties: false
+      required: [rule_id, kind, pattern]
+      properties:
+        rule_id:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: "^[a-z][a-z0-9._-]*$"
+          description: >-
+            Owner-chosen stable rule identifier cited by uploaded
+            classifications, such as edge.bilibili.title.
+        platform:
+          $ref: "#/components/schemas/ClassificationRulePlatform"
+        kind:
+          $ref: "#/components/schemas/ClassificationRuleKind"
+        pattern:
+          type: string
+          minLength: 1
+          maxLength: 300
+          description: >-
+            The application or package name for application rules, the keyword
+            for title_keyword rules, or the regular expression source for
+            title_regex rules. It is a matching expression defined by the
+            Owner, never device raw text.
+        priority:
+          type: integer
+          minimum: -100000
+          maximum: 100000
+          description: >-
+            Rule precedence: when several rules match, the highest priority
+            wins, and equal priorities resolve deterministically by ascending
+            rule_id. Defaults to 0.
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: >-
+            Confidence echoed in uploaded classifications. Defaults to 1 for
+            application rules, 0.9 for title_regex, and 0.8 for title_keyword.
+        subject_entity_id:
+          type: string
+          minLength: 1
+          description: >-
+            Entity a match is mapped to. Exactly one of subject_entity_id and
+            dynamic must be set, and the entity must exist in the same update.
+        dynamic:
+          type: boolean
+          description: >-
+            Dynamic project discovery: the rule is a title_regex with at least
+            one capture group, and capture group 1 names a candidate project.
+            The device reports such projects as opaque identifiers derived with
+            a device-secret HMAC until the Owner approves an alias; the raw
+            name never leaves the device. Exactly one of subject_entity_id and
+            dynamic must be set.
+    ClassificationRule:
+      title: Classification Rule
+      type: object
+      additionalProperties: false
+      required: [rule_id, platform, kind, pattern, priority, confidence, version, updated_at]
+      properties:
+        rule_id:
+          type: string
+          minLength: 1
+        platform:
+          $ref: "#/components/schemas/ClassificationRulePlatform"
+        kind:
+          $ref: "#/components/schemas/ClassificationRuleKind"
+        pattern:
+          type: string
+          minLength: 1
+        priority:
+          type: integer
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        subject_entity_id:
+          type: [string, "null"]
+          description: Target entity identifier, or null for dynamic discovery rules.
+        dynamic:
+          type: boolean
+          description: True for dynamic project discovery rules.
+        version:
+          type: integer
+          minimum: 1
+          description: >-
+            Server-managed per-rule version, incremented every time the rule
+            is created or changed so uploaded classifications stay explainable
+            against the exact rule that produced them.
+        updated_at:
+          type: [string, "null"]
+          format: date-time
+          description: When this rule version was published; null only inside an update request.
+    ClassificationRuleSet:
+      title: Classification Rule Set
+      type: object
+      additionalProperties: false
+      required: [rule_set_version, entities, rules]
+      properties:
+        rule_set_version:
+          type: integer
+          minimum: 0
+          description: >-
+            Distribution version of the whole document. Version 0 with empty
+            entities and rules applies until the Owner publishes the first
+            rule set; every Owner update increments it by one, so devices can
+            tell whether their cached copy is current.
+        updated_at:
+          type: [string, "null"]
+          format: date-time
+          description: When this version was published; null for the untouched default.
+        entities:
+          type: array
+          description: Owner-approved semantic subjects. Unapproved project names never appear here.
+          items:
+            $ref: "#/components/schemas/SemanticEntity"
+        rules:
+          type: array
+          description: Versioned rules devices execute locally, ordered by descending priority.
+          items:
+            $ref: "#/components/schemas/ClassificationRule"
+    ClassificationRuleSetUpdateRequest:
+      title: Classification Rule Set Update Request
+      type: object
+      additionalProperties: false
+      required: [entities, rules]
+      properties:
+        entities:
+          type: array
+          description: Full replacement of the semantic dictionary.
+          items:
+            $ref: "#/components/schemas/SemanticEntity"
+        rules:
+          type: array
+          description: >-
+            Full replacement of the rule set. Every rule must reference an
+            entity in the same request; server-managed versions are assigned
+            by the response, so input rules carry no version fields.
+          items:
+            $ref: "#/components/schemas/ClassificationRuleInput"
     CorrectionField:
       title: Correction Field
       type: object
