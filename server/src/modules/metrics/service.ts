@@ -1,6 +1,8 @@
 import type {
   CredentialPrivacyCeiling,
+  DataState,
   QueryContext,
+  SourceConflict,
   UsageDayReport,
   UsageDeviceMetrics,
   UsageMetrics,
@@ -11,6 +13,8 @@ import type { EventRow } from "../../types/contracts.js";
 import { zonedDayRange, zonedWeekRange } from "../../shared/date-utils.js";
 import { privacyLevelsForRead, readableEventTypes } from "../events/service.js";
 import { ACTIVITY_EVENT_TYPES } from "../events/payload-registry.js";
+import { effectivePolicyState } from "../source-policy/service.js";
+import { USAGE_APP_MINUTES, priorityFor, selectActivityObservations } from "../source-policy/policy.js";
 import { clipInterval, minutesFromMs, summedDurationMs, unionedDurationMs } from "./interval-metrics.js";
 import type { ClippedInterval } from "./interval-metrics.js";
 
@@ -31,6 +35,7 @@ export interface MetricsReadOptions {
 const METRIC_EVENT_TYPES = ACTIVITY_EVENT_TYPES;
 
 interface IntervalRow {
+  id: string;
   deviceId: string;
   platform: "windows" | "android";
   isAfk: boolean;
@@ -55,6 +60,7 @@ async function fetchIntervalRows(userId: string, from: Date, to: Date, options: 
   };
   const rows = await EventModel.find(filter).lean<EventRow[]>();
   return rows.map((row) => ({
+    id: row.id,
     deviceId: row.device_id,
     platform: row.device_platform === "android" ? "android" : "windows",
     isAfk: (row.data as { is_afk?: unknown } | null)?.is_afk === true,
@@ -107,7 +113,9 @@ function provenanceOf(rows: IntervalRow[]): string[] {
 /**
  * Builds the report context. When a credential's ceiling or event-type
  * restriction withheld in-range data, completeness reports `partial` instead
- * of `complete`.
+ * of `complete`. The context also self-describes presence (`data_state`
+ * distinguishes an explicit zero from no-data), the applied source policy
+ * version, and any source conflicts the policy resolved.
  */
 async function buildContext(
   userId: string,
@@ -116,6 +124,7 @@ async function buildContext(
   timezone: string,
   options: MetricsReadOptions,
   provenance: string[],
+  extras: { policyVersion: number; conflicts: SourceConflict[]; hasObservations: boolean; hasPositiveContribution: boolean },
 ): Promise<QueryContext> {
   const credentialRestricted = options.privacyCeiling !== undefined
     || (options.allowedEventTypes !== undefined && options.allowedEventTypes.length > 0);
@@ -135,33 +144,81 @@ async function buildContext(
     });
     if (unrestricted > restricted) completeness = "partial";
   }
-  return { from: from.toISOString(), to: to.toISOString(), timezone, provenance, completeness };
+  const dataState: DataState = !extras.hasObservations
+    ? "no_data"
+    : extras.hasPositiveContribution ? "observed" : "zero";
+  return {
+    from: from.toISOString(),
+    to: to.toISOString(),
+    timezone,
+    provenance,
+    completeness,
+    source_policy_version: extras.policyVersion,
+    data_state: dataState,
+    ...(extras.conflicts.length > 0 ? { source_conflicts: extras.conflicts } : {}),
+  };
+}
+
+/**
+ * Applies the versioned source policy to the fetched rows: per device, only
+ * the highest-ranked source kind contributes to the normalized totals, and
+ * competing kinds surface as conflicts that reference their event identifiers.
+ */
+function applySourcePolicy(rows: IntervalRow[], priority: string[], policyVersion: number, range: { from: Date; to: Date }): { selectedRows: IntervalRow[]; conflicts: SourceConflict[] } {
+  const { selected, conflicts } = selectActivityObservations(
+    rows.map((row) => ({
+      id: row.id,
+      deviceId: row.deviceId,
+      sourceKind: row.sourceKind ?? "unknown",
+      startMs: row.startAt.getTime(),
+      endMs: row.endAt ? row.endAt.getTime() : null,
+    })),
+    priority,
+    policyVersion,
+    { fromMs: range.from.getTime(), toMs: range.to.getTime() },
+  );
+  const selectedIds = new Set(selected.map((observation) => observation.id));
+  return { selectedRows: rows.filter((row) => selectedIds.has(row.id)), conflicts };
 }
 
 export async function usageDayReport(userId: string, date: string, timezone: string, options: MetricsReadOptions = {}): Promise<UsageDayReport | null> {
   const range = zonedDayRange(date, timezone);
   if (!range) return null;
+  const policy = await effectivePolicyState(userId);
   const rows = await fetchIntervalRows(userId, range.start, range.end, options);
-  const clipped = clippedIntervals(rows, range.start.getTime(), range.end.getTime());
-  const context = await buildContext(userId, range.start, range.end, timezone, options, provenanceOf(rows));
+  const { selectedRows, conflicts } = applySourcePolicy(rows, priorityFor(policy, USAGE_APP_MINUTES), policy.version, { from: range.start, to: range.end });
+  const clipped = clippedIntervals(selectedRows, range.start.getTime(), range.end.getTime());
+  const context = await buildContext(userId, range.start, range.end, timezone, options, provenanceOf(rows), {
+    policyVersion: policy.version,
+    conflicts,
+    hasObservations: rows.length > 0,
+    hasPositiveContribution: clipped.length > 0,
+  });
   return { date, timezone, metrics: summarizeUsage(clipped), devices: deviceMetrics(clipped), context };
 }
 
 export async function usageWeekReport(userId: string, date: string, timezone: string, options: MetricsReadOptions = {}): Promise<UsageWeekReport | null> {
   const week = zonedWeekRange(date, timezone);
   if (!week) return null;
+  const policy = await effectivePolicyState(userId);
   const rows = await fetchIntervalRows(userId, week.start, week.end, options);
-  const weekIntervals = clippedIntervals(rows, week.start.getTime(), week.end.getTime());
+  const { selectedRows, conflicts } = applySourcePolicy(rows, priorityFor(policy, USAGE_APP_MINUTES), policy.version, { from: week.start, to: week.end });
+  const weekIntervals = clippedIntervals(selectedRows, week.start.getTime(), week.end.getTime());
 
   // Per-day attribution re-clips each interval against every local day so a
   // midnight crossover appears on both sides with its in-day portion.
   const days = week.dates.map((date) => {
     const dayRange = zonedDayRange(date, timezone);
-    const dayIntervals = dayRange ? clippedIntervals(rows, dayRange.start.getTime(), dayRange.end.getTime()) : [];
+    const dayIntervals = dayRange ? clippedIntervals(selectedRows, dayRange.start.getTime(), dayRange.end.getTime()) : [];
     return { date, ...summarizeUsage(dayIntervals) };
   });
 
-  const context = await buildContext(userId, week.start, week.end, timezone, options, provenanceOf(rows));
+  const context = await buildContext(userId, week.start, week.end, timezone, options, provenanceOf(rows), {
+    policyVersion: policy.version,
+    conflicts,
+    hasObservations: rows.length > 0,
+    hasPositiveContribution: weekIntervals.length > 0,
+  });
   return {
     week_start_date: week.dates[0]!,
     week_end_date: week.dates[week.dates.length - 1]!,

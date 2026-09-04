@@ -90,6 +90,21 @@ data class ProtocolModels(
     @SerialName("QueryContext")
     val queryContext: QueryContext,
 
+    @SerialName("SourceConflict")
+    val sourceConflict: SourceConflict,
+
+    @SerialName("SourcePolicyDocument")
+    val sourcePolicyDocument: SourcePolicyDocument,
+
+    @SerialName("SourcePolicyEntry")
+    val sourcePolicyEntry: SourcePolicyEntry,
+
+    @SerialName("SourcePolicyImpact")
+    val sourcePolicyImpact: SourcePolicyImpact,
+
+    @SerialName("SourcePolicyUpdateRequest")
+    val sourcePolicyUpdateRequest: SourcePolicyUpdateRequest,
+
     @SerialName("UsageDayMetrics")
     val usageDayMetrics: UsageDayMetrics,
 
@@ -711,8 +726,45 @@ data class EventPage(
 @Serializable
 data class QueryContext(
     val completeness: Completeness,
+
+    /**
+     * Presence semantics for the queried range, so a report never reads as a bare number:
+     * observed means in-range observations produced the reported values; zero means
+     * observations exist but the normalized value is explicitly 0; no_data means the range
+     * holds no observations at all. Partial coverage is reported by completeness and competing
+     * sources by source_conflicts.
+     */
+    @SerialName("data_state")
+    val dataState: DataState? = null,
+
     val from: String,
+
+    /**
+     * Number of in-range observations flagged pending confirmation and awaiting Owner review.
+     * Present on payment-domain reads; the transaction totals cover every observation including
+     * these.
+     */
+    @SerialName("pending_confirmation_count")
+    val pendingConfirmationCount: Long? = null,
+
     val provenance: List<String>,
+
+    /**
+     * Competing observations the source policy resolved (or, for payment candidates, deferred
+     * to the Owner). Competing observations stay retained and are referenced by their event
+     * identifiers.
+     */
+    @SerialName("source_conflicts")
+    val sourceConflicts: List<SourceConflict>? = null,
+
+    /**
+     * Version of the source policy that produced this response's normalized results. Present on
+     * single-domain reads (metrics, health, payment); absent for cross-domain event reads where
+     * one version cannot describe every domain.
+     */
+    @SerialName("source_policy_version")
+    val sourcePolicyVersion: Long? = null,
+
     val timezone: String,
     val to: String
 )
@@ -723,6 +775,72 @@ enum class Completeness(val value: String) {
     @SerialName("partial") PARTIAL("partial"),
     @SerialName("unknown") UNKNOWN("unknown");
 }
+
+/**
+ * Presence semantics for the queried range, so a report never reads as a bare number:
+ * observed means in-range observations produced the reported values; zero means
+ * observations exist but the normalized value is explicitly 0; no_data means the range
+ * holds no observations at all. Partial coverage is reported by completeness and competing
+ * sources by source_conflicts.
+ */
+@Serializable
+enum class DataState(val value: String) {
+    @SerialName("no_data") NO_DATA("no_data"),
+    @SerialName("observed") OBSERVED("observed"),
+    @SerialName("zero") ZERO("zero");
+}
+
+@Serializable
+data class SourceConflict(
+    /**
+     * Stable identifiers of the competing observations. They stay retained and individually
+     * readable; the policy withholds them from the normalized result without deleting anything.
+     */
+    @SerialName("competing_event_ids")
+    val competingEventIds: List<String>,
+
+    /**
+     * Sources with retained observations the policy did not select.
+     */
+    @SerialName("competing_sources")
+    val competingSources: List<String>,
+
+    /**
+     * Start of the conflict window (UTC).
+     */
+    val from: String,
+
+    /**
+     * Metric key the conflict belongs to, such as usage.app_minutes, health.sleep_minutes, or
+     * payment.transaction_totals.
+     */
+    val metric: String,
+
+    /**
+     * Source policy version that made the selection.
+     */
+    @SerialName("policy_version")
+    val policyVersion: Long,
+
+    /**
+     * Stable identifiers of the selected observations inside the conflict window. Normalized
+     * results reference these source event identifiers.
+     */
+    @SerialName("selected_event_ids")
+    val selectedEventIds: List<String>,
+
+    /**
+     * Source the policy selected: a source kind for usage and payment metrics, a Health Connect
+     * data origin for health metrics.
+     */
+    @SerialName("selected_source")
+    val selectedSource: String,
+
+    /**
+     * End of the conflict window (UTC).
+     */
+    val to: String
+)
 
 @Serializable
 data class PageMetadata(
@@ -802,6 +920,94 @@ data class OwnerStatus(
      * True once the single implicit Owner password has been created.
      */
     val initialized: Boolean
+)
+
+@Serializable
+data class SourcePolicyDocument(
+    val entries: List<SourcePolicyEntry>,
+
+    /**
+     * Set on update responses: for each changed metric, the report-day ranges and normalized
+     * result count the change affected. The same statement is appended to the audit log.
+     */
+    val impact: List<SourcePolicyImpact>? = null,
+
+    /**
+     * When this version was written; null for the untouched default.
+     */
+    @SerialName("updated_at")
+    val updatedAt: String? = null,
+
+    /**
+     * Monotonic policy version. Version 1 with the documented default priorities applies until
+     * the Owner changes the policy.
+     */
+    val version: Long
+)
+
+@Serializable
+data class SourcePolicyEntry(
+    /**
+     * Metric key with an explicit priority. Usage and payment metrics prioritize source kinds;
+     * health metrics prioritize Health Connect data origins.
+     */
+    val metric: String,
+
+    /**
+     * Source kinds or data origins from highest to lowest priority. The highest-priority source
+     * with observations in a conflict window wins; an empty list means no explicit preference,
+     * with all sources ranking deterministically by name. Competing observations are never
+     * deleted.
+     */
+    val priority: List<String>
+)
+
+@Serializable
+data class SourcePolicyImpact(
+    /**
+     * Report-day ranges whose normalized selection differs between the old and new policy.
+     * Empty when no stored observation competes differently.
+     */
+    @SerialName("affected_ranges")
+    val affectedRanges: List<AffectedRange>,
+
+    @SerialName("from_version")
+    val fromVersion: Long,
+
+    /**
+     * Metric key whose priority changed.
+     */
+    val metric: String,
+
+    /**
+     * Number of normalized day results the change affected.
+     */
+    @SerialName("result_count")
+    val resultCount: Long,
+
+    /**
+     * IANA report timezone the affected ranges resolve in, so the audit statement is
+     * reproducible.
+     */
+    val timezone: String,
+
+    @SerialName("to_version")
+    val toVersion: Long
+)
+
+@Serializable
+data class AffectedRange(
+    val from: String,
+    val to: String
+)
+
+@Serializable
+data class SourcePolicyUpdateRequest(
+    /**
+     * Full replacement of the policy entries. Omitted metrics keep the default priority; a
+     * policy change only rebuilds derived results and never modifies raw observations.
+     */
+    val entries: List<SourcePolicyEntry>
 )
 
 @Serializable

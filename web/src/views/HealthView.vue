@@ -18,17 +18,19 @@
       message="查询范围内存在被凭据隐私上限或事件类型限制隐藏的健康数据，当前结果不完整（partial）。"
     />
 
+    <SourcePolicyPanel :context="context" />
+
     <div class="metric-grid">
       <MetricCard
         title="步数"
         :value="stepsAvailable ? steps.toLocaleString() : '无数据'"
-        :note="stepsAvailable ? undefined : '范围内没有步数观测；缺失不会显示为 0'"
+        :note="stepsNote"
         :icon="RiseOutlined"
       />
       <MetricCard
         title="睡眠（来源提供的区间）"
         :value="sleepAvailable ? formatMinutes(sleepMinutesInRange) : '无数据'"
-        :note="sleepAvailable ? undefined : '范围内没有来源睡眠区间；系统从不推断睡眠'"
+        :note="sleepNote"
         :icon="ClockCircleOutlined"
       />
       <MetricCard
@@ -110,7 +112,16 @@
         :pagination="false"
         size="small"
         row-key="key"
-      />
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'eventId'">
+            <a-tooltip :title="record.fullEventId">
+              <span>{{ record.eventId }}</span>
+            </a-tooltip>
+          </template>
+          <template v-else>{{ record[column.key] }}</template>
+        </template>
+      </a-table>
       <a-button
         v-if="nextCursor"
         class="load-more"
@@ -133,10 +144,11 @@ import { ClockCircleOutlined, DatabaseOutlined, HeartOutlined, RiseOutlined } fr
 import dayjs, { type Dayjs } from "dayjs";
 import { fetchHealthEvents } from "../api/health";
 import { fetchOwnerSettings } from "../api/settings";
-import type { VersionedEvent } from "../generated/contract-models";
+import type { QueryContext, VersionedEvent } from "../generated/contract-models";
 import BaseChart from "../components/charts/BaseChart.vue";
 import EmptyState from "../components/common/EmptyState.vue";
 import MetricCard from "../components/common/MetricCard.vue";
+import SourcePolicyPanel from "../components/common/SourcePolicyPanel.vue";
 import {
   addDaysIso,
   dateInTimezone,
@@ -151,20 +163,28 @@ const reportTimezone = ref("UTC");
 const startDate = ref<Dayjs | null>(null);
 const endDate = ref<Dayjs | null>(null);
 const events = ref<VersionedEvent[]>([]);
-const completeness = ref("");
-const provenance = ref<string[]>([]);
+const context = ref<QueryContext | null>(null);
 const nextCursor = ref<string | null>(null);
 const loading = ref(false);
 const error = ref("");
+
+const completeness = computed(() => context.value?.completeness ?? "");
+const provenance = computed(() => context.value?.provenance ?? []);
 
 const rangeText = computed(() => ({
   start: startDate.value ? startDate.value.format("YYYY-MM-DD") : "",
   end: endDate.value ? endDate.value.format("YYYY-MM-DD") : "",
 }));
 
-const stepSamples = computed(() => events.value.filter(isStep));
+const stepSamples = computed(() => events.value.filter((event) => isStep(event) && !withheldIds.value.has(event.event_id)));
 const heartRateSamples = computed(() => events.value.filter(isHeartRate));
-const sleepSessions = computed(() => events.value.filter(isSleep));
+const sleepSessions = computed(() => events.value.filter((event) => isSleep(event) && !withheldIds.value.has(event.event_id)));
+
+/** Observations the source policy withheld from normalized totals; they stay retained and listed. */
+const withheldIds = computed(() => new Set(
+  (context.value?.source_conflicts ?? []).flatMap((conflict) => conflict.competing_event_ids),
+));
+const withheldCount = computed(() => withheldIds.value.size);
 
 const steps = computed(() => stepSamples.value.reduce((total, event) => total + (event.payload.count?.value ?? 0), 0));
 const stepsAvailable = computed(() => stepSamples.value.length > 0);
@@ -192,6 +212,17 @@ const sleepMinutesInRange = computed(() => {
   return totalMs / 60_000;
 });
 const sleepAvailable = computed(() => sleepSessions.value.length > 0);
+
+const stepsNote = computed(() => {
+  if (!stepsAvailable.value) return "范围内没有步数观测；缺失不会显示为 0";
+  if (withheldCount.value > 0) return `已按来源策略排除 ${withheldCount.value} 条竞争观测（保留未计入）`;
+  return undefined;
+});
+const sleepNote = computed(() => {
+  if (!sleepAvailable.value) return "范围内没有来源睡眠区间；系统从不推断睡眠";
+  if (withheldCount.value > 0) return `已按来源策略排除 ${withheldCount.value} 条竞争观测（保留未计入）`;
+  return undefined;
+});
 
 function isStep(event: VersionedEvent): boolean {
   return event.event_type === "health.step.sample";
@@ -328,11 +359,13 @@ const sleepColumns = [
   { title: "时长", dataIndex: "duration" },
   { title: "来源应用", dataIndex: "origin" },
   { title: "采集时区", dataIndex: "captureZone" },
+  { title: "策略状态", dataIndex: "policyState" },
 ];
 
-const sleepRows = computed(() => sleepSessions.value.map((event, index) => {
+const sleepRows = computed(() => events.value.filter(isSleep).map((event, index) => {
   const startMs = Date.parse(event.start_at);
   const endMs = event.end_at ? Date.parse(event.end_at) : startMs;
+  const withheld = withheldIds.value.has(event.event_id);
   return {
     key: `${event.event_id}-${event.revision}-${index}`,
     start: formatUtcText(event.start_at),
@@ -340,6 +373,7 @@ const sleepRows = computed(() => sleepSessions.value.map((event, index) => {
     duration: formatMinutes(Math.max(0, endMs - startMs) / 60_000),
     origin: event.payload.data_origin,
     captureZone: formatCaptureZone(event.capture_timezone, event.capture_offset_minutes),
+    policyState: withheld ? `未计入（策略 v${context.value?.source_policy_version ?? 1}）` : "已计入",
   };
 }));
 
@@ -350,6 +384,7 @@ const timelineColumns = [
   { title: "观测值", dataIndex: "value" },
   { title: "来源应用（origin）", dataIndex: "origin" },
   { title: "设备", dataIndex: "device" },
+  { title: "事件", dataIndex: "eventId", key: "eventId" },
   { title: "采集时区", dataIndex: "captureZone" },
   { title: "修订", dataIndex: "revision" },
   { title: "同步时间（UTC）", dataIndex: "synced" },
@@ -363,6 +398,8 @@ const timelineRows = computed(() => events.value.map((event, index) => ({
   value: observationValue(event),
   origin: event.payload.data_origin,
   device: `${event.device.platform} · ${event.device.id}`,
+  eventId: event.event_id.slice(0, 8),
+  fullEventId: event.event_id,
   captureZone: formatCaptureZone(event.capture_timezone, event.capture_offset_minutes),
   revision: `修订 ${event.revision}`,
   synced: formatUtcText(event.provenance.observed_at),
@@ -399,8 +436,7 @@ async function load(cursor?: string) {
   try {
     const page = await fetchHealthEvents(range.start, range.end, reportTimezone.value, cursor ? { cursor } : undefined);
     events.value = cursor ? [...events.value, ...page.data] : page.data;
-    completeness.value = page.context.completeness;
-    provenance.value = page.context.provenance;
+    context.value = page.context;
     nextCursor.value = page.page.next_cursor;
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);

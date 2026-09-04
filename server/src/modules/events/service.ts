@@ -1,17 +1,29 @@
 import type {
   VersionedEvent,
   CredentialPrivacyCeiling,
+  DataState,
   EventAcknowledgement,
   EventBatchResponse,
   EventPage,
   PageMetadata,
   QueryContext,
+  SourceConflict,
 } from "../../generated/contract-models.js";
 import type { Env } from "../../config/env.js";
 import { BucketModel, EventModel, EventRevisionModel } from "../../db/models.js";
 import type { CredentialAuthContext } from "../credentials/service.js";
 import { hmacText } from "../../shared/privacy.js";
 import { AppError } from "../../shared/errors.js";
+import { effectivePolicyState } from "../source-policy/service.js";
+import {
+  HEALTH_HEARTRATE_AVERAGE,
+  HEALTH_METRIC_FOR_EVENT_TYPE,
+  HEALTH_SLEEP_MINUTES,
+  HEALTH_STEP_TOTAL,
+  priorityFor,
+  selectHealthObservations,
+} from "../source-policy/policy.js";
+import type { SourcePolicyState } from "../source-policy/policy.js";
 import {
   ACTIVITY_EVENT_TYPES,
   HEALTH_EVENT_TYPES,
@@ -182,6 +194,11 @@ export async function listEvents(query: EventRangeQuery): Promise<EventPage> {
     completeness = "partial";
   }
 
+  // Presence semantics: ascending pagination means an empty first page is an
+  // empty range (no_data); any returned row, or a continuing cursor, means the
+  // range holds observations.
+  const dataState: DataState = pageRows.length > 0 || query.cursor !== undefined ? "observed" : "no_data";
+
   const provenance = (await EventModel.distinct("source_kind", filter)).filter(
     (kind): kind is string => typeof kind === "string" && kind.length > 0,
   ).sort();
@@ -191,12 +208,72 @@ export async function listEvents(query: EventRangeQuery): Promise<EventPage> {
     timezone: query.timezone,
     provenance,
     completeness,
+    data_state: dataState,
   };
   const page: PageMetadata = {
     page_size: query.pageSize,
     next_cursor: hasMore && last ? encodeCursor(last) : null,
   };
   return { data: pageRows.map(toEnvelopeEvent), page, context };
+}
+
+/** The domain a single-domain read endpoint serves. */
+export type EventDomain = "health" | "payment";
+
+/** The in-range filter under the credential's read bounds, used by domain enrichment. */
+function restrictedRangeFilter(query: EventRangeQuery): Record<string, unknown> {
+  const domainTypes = query.scopeGrantedEventTypes ?? REGISTERED_EVENT_TYPES;
+  return {
+    user_id: query.userId,
+    start_at: { $gte: query.from, $lt: query.to },
+    privacy_level: { $in: privacyLevelsForRead(query.privacyCeiling) },
+    type: { $in: readableEventTypes(query.allowedEventTypes, domainTypes) },
+  };
+}
+
+/**
+ * Enriches a single-domain page with source-policy transparency: the applied
+ * policy version, plus per-domain conflict surfaces. Health reads report
+ * multi-origin conflicts referencing the retained observations' event
+ * identifiers; payment reads report how many ambiguous candidates are pending
+ * Owner confirmation. Cross-domain reads stay unenriched because one policy
+ * version cannot describe every domain.
+ */
+export async function enrichDomainPage(query: EventRangeQuery, page: EventPage, domain: EventDomain): Promise<EventPage> {
+  const policy = await effectivePolicyState(query.userId);
+  page.context.source_policy_version = policy.version;
+  if (domain === "health") {
+    const conflicts = await healthSourceConflicts(query, policy);
+    if (conflicts.length > 0) page.context.source_conflicts = conflicts;
+  } else {
+    page.context.pending_confirmation_count = await EventModel.countDocuments({
+      ...restrictedRangeFilter(query),
+      "data.pending_confirmation": true,
+    });
+  }
+  return page;
+}
+
+/** Detects multi-origin conflicts over the whole query range, not just the current page. */
+async function healthSourceConflicts(query: EventRangeQuery, policy: SourcePolicyState): Promise<SourceConflict[]> {
+  const rows = await EventModel.find(restrictedRangeFilter(query)).lean<EventRow[]>();
+  const observations = rows
+    .map((row) => ({
+      id: row.id,
+      metric: HEALTH_METRIC_FOR_EVENT_TYPE[row.type ?? ""],
+      origin: typeof (row.data as { data_origin?: unknown } | null)?.data_origin === "string"
+        ? (row.data as { data_origin: string }).data_origin
+        : "unknown",
+      startMs: row.start_at.getTime(),
+      endMs: (row.end_at ?? row.start_at).getTime(),
+    }))
+    .filter((observation): observation is { id: string; metric: string; origin: string; startMs: number; endMs: number } => Boolean(observation.metric));
+  const { conflicts } = selectHealthObservations(observations, {
+    [HEALTH_STEP_TOTAL]: priorityFor(policy, HEALTH_STEP_TOTAL),
+    [HEALTH_SLEEP_MINUTES]: priorityFor(policy, HEALTH_SLEEP_MINUTES),
+    [HEALTH_HEARTRATE_AVERAGE]: priorityFor(policy, HEALTH_HEARTRATE_AVERAGE),
+  }, policy.version);
+  return conflicts;
 }
 
 const EVENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

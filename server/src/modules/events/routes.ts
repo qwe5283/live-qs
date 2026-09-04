@@ -6,8 +6,8 @@ import type { CredentialScope } from "../../generated/contract-models.js";
 import { credentialBearerAuth, sessionOrCredentialAuth } from "../../middleware/auth.js";
 import type { CredentialAuthContext } from "../credentials/service.js";
 import { AppError } from "../../shared/errors.js";
-import { batchUpsertEvents, eventTypesForReadScopes, listEvents } from "./service.js";
-import type { EventRangeQuery } from "./service.js";
+import { batchUpsertEvents, enrichDomainPage, eventTypesForReadScopes, listEvents } from "./service.js";
+import type { EventDomain, EventRangeQuery } from "./service.js";
 import { HEALTH_EVENT_TYPES, PAYMENT_EVENT_TYPES } from "./payload-registry.js";
 import type { RegisteredEventType } from "./payload-registry.js";
 
@@ -105,7 +105,7 @@ export function eventsRouter(env: Env): Router {
  * allowed-event-type list. Sleep appears only as source-provided intervals;
  * payments only as extracted transaction facts.
  */
-function domainEventsRouter(env: Env, domainTypes: RegisteredEventType[], readScope: CredentialScope): Router {
+function domainEventsRouter(env: Env, domainTypes: RegisteredEventType[], readScope: CredentialScope, domain: EventDomain): Router {
   const router = Router();
   const domainTypeStrings: string[] = [...domainTypes];
 
@@ -121,7 +121,7 @@ function domainEventsRouter(env: Env, domainTypes: RegisteredEventType[], readSc
       );
       if (credential.allowed_event_types.length > 0) query.allowedEventTypes = credential.allowed_event_types;
     }
-    res.json(await listEvents(query));
+    res.json(await enrichDomainPage(query, await listEvents(query), domain));
   });
 
   return router;
@@ -129,17 +129,19 @@ function domainEventsRouter(env: Env, domainTypes: RegisteredEventType[], readSc
 
 /**
  * Health-domain read: every registered health event type, guarded by the
- * health:read scope for credentials.
+ * health:read scope for credentials. The context carries the applied source
+ * policy version and multi-origin conflict entries.
  */
 export function healthEventsRouter(env: Env): Router {
-  return domainEventsRouter(env, HEALTH_EVENT_TYPES, "health:read");
+  return domainEventsRouter(env, HEALTH_EVENT_TYPES, "health:read", "health");
 }
 
 /**
  * Payment-domain read: extracted transaction facts, guarded by the
  * payment:read scope for credentials. Payment facts are sensitive by default,
- * so a credential also needs an adequate privacy ceiling to see them.
+ * so a credential also needs an adequate privacy ceiling to see them. The
+ * context carries the policy version and the pending-confirmation count.
  */
 export function paymentEventsRouter(env: Env): Router {
-  return domainEventsRouter(env, PAYMENT_EVENT_TYPES, "payment:read");
+  return domainEventsRouter(env, PAYMENT_EVENT_TYPES, "payment:read", "payment");
 }

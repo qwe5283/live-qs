@@ -163,6 +163,7 @@ describe("listing events with an Owner session", () => {
       timezone: "Asia/Shanghai",
       provenance: ["windows.foreground"],
       completeness: "complete",
+      data_state: "observed",
     });
   });
 

@@ -59,6 +59,17 @@ export function zonedDayRange(date: string, timezone: string): { start: Date; en
   return start && end && end > start ? { start, end } : null;
 }
 
+/**
+ * The local calendar date (YYYY-MM-DD) an instant falls on in the timezone.
+ * Used to attribute observations to report days, e.g. when a policy change
+ * states which report ranges it affected.
+ */
+export function localDateInTimezone(instant: Date, timezone: string): string | null {
+  const offset = offsetMs(instant, timezone);
+  if (offset === null) return null;
+  return new Date(instant.getTime() + offset).toISOString().slice(0, 10);
+}
+
 /** Validates an IANA timezone name by asking Intl to resolve it. */
 export function isValidTimezone(timezone: string): boolean {
   if (!timezone) return false;

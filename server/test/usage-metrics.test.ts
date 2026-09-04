@@ -159,6 +159,8 @@ describe("usage day metrics", () => {
         timezone: "Asia/Shanghai",
         provenance: [],
         completeness: "complete",
+        source_policy_version: 1,
+        data_state: "no_data",
       },
     });
   });
@@ -250,6 +252,8 @@ describe("usage day metrics", () => {
       timezone: "America/New_York",
       provenance: ["windows.foreground"],
       completeness: "complete",
+      source_policy_version: 1,
+      data_state: "observed",
     });
     expect(springDay.body.metrics).toEqual({ device_minutes: 60, active_minutes: 60 });
 

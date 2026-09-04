@@ -98,6 +98,21 @@ public partial class ProtocolModels
     [JsonPropertyName("QueryContext")]
     public QueryContext QueryContext { get; set; }
 
+    [JsonPropertyName("SourceConflict")]
+    public SourceConflict SourceConflict { get; set; }
+
+    [JsonPropertyName("SourcePolicyDocument")]
+    public SourcePolicyDocument SourcePolicyDocument { get; set; }
+
+    [JsonPropertyName("SourcePolicyEntry")]
+    public SourcePolicyEntry SourcePolicyEntry { get; set; }
+
+    [JsonPropertyName("SourcePolicyImpact")]
+    public SourcePolicyImpact SourcePolicyImpact { get; set; }
+
+    [JsonPropertyName("SourcePolicyUpdateRequest")]
+    public SourcePolicyUpdateRequest SourcePolicyUpdateRequest { get; set; }
+
     [JsonPropertyName("UsageDayMetrics")]
     public UsageDayMetrics UsageDayMetrics { get; set; }
 
@@ -678,15 +693,110 @@ public partial class QueryContext
     [JsonPropertyName("completeness")]
     public Completeness Completeness { get; set; }
 
+    /// <summary>
+    /// Presence semantics for the queried range, so a report never reads as a bare number:
+    /// observed means in-range observations produced the reported values; zero means
+    /// observations exist but the normalized value is explicitly 0; no_data means the range
+    /// holds no observations at all. Partial coverage is reported by completeness and competing
+    /// sources by source_conflicts.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("data_state")]
+    public DataState? DataState { get; set; }
+
     [JsonPropertyName("from")]
     public string From { get; set; }
+
+    /// <summary>
+    /// Number of in-range observations flagged pending confirmation and awaiting Owner review.
+    /// Present on payment-domain reads; the transaction totals cover every observation including
+    /// these.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("pending_confirmation_count")]
+    public long? PendingConfirmationCount { get; set; }
 
     [JsonPropertyName("provenance")]
     public string[] Provenance { get; set; }
 
+    /// <summary>
+    /// Competing observations the source policy resolved (or, for payment candidates, deferred
+    /// to the Owner). Competing observations stay retained and are referenced by their event
+    /// identifiers.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("source_conflicts")]
+    public SourceConflict[] SourceConflicts { get; set; }
+
+    /// <summary>
+    /// Version of the source policy that produced this response's normalized results. Present on
+    /// single-domain reads (metrics, health, payment); absent for cross-domain event reads where
+    /// one version cannot describe every domain.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("source_policy_version")]
+    public long? SourcePolicyVersion { get; set; }
+
     [JsonPropertyName("timezone")]
     public string Timezone { get; set; }
 
+    [JsonPropertyName("to")]
+    public string To { get; set; }
+}
+
+public partial class SourceConflict
+{
+    /// <summary>
+    /// Stable identifiers of the competing observations. They stay retained and individually
+    /// readable; the policy withholds them from the normalized result without deleting anything.
+    /// </summary>
+    [JsonPropertyName("competing_event_ids")]
+    public string[] CompetingEventIds { get; set; }
+
+    /// <summary>
+    /// Sources with retained observations the policy did not select.
+    /// </summary>
+    [JsonPropertyName("competing_sources")]
+    public string[] CompetingSources { get; set; }
+
+    /// <summary>
+    /// Start of the conflict window (UTC).
+    /// </summary>
+    [JsonPropertyName("from")]
+    public string From { get; set; }
+
+    /// <summary>
+    /// Metric key the conflict belongs to, such as usage.app_minutes, health.sleep_minutes, or
+    /// payment.transaction_totals.
+    /// </summary>
+    [JsonPropertyName("metric")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string Metric { get; set; }
+
+    /// <summary>
+    /// Source policy version that made the selection.
+    /// </summary>
+    [JsonPropertyName("policy_version")]
+    public long PolicyVersion { get; set; }
+
+    /// <summary>
+    /// Stable identifiers of the selected observations inside the conflict window. Normalized
+    /// results reference these source event identifiers.
+    /// </summary>
+    [JsonPropertyName("selected_event_ids")]
+    public string[] SelectedEventIds { get; set; }
+
+    /// <summary>
+    /// Source the policy selected: a source kind for usage and payment metrics, a Health Connect
+    /// data origin for health metrics.
+    /// </summary>
+    [JsonPropertyName("selected_source")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string SelectedSource { get; set; }
+
+    /// <summary>
+    /// End of the conflict window (UTC).
+    /// </summary>
     [JsonPropertyName("to")]
     public string To { get; set; }
 }
@@ -779,6 +889,108 @@ public partial class OwnerStatus
     /// </summary>
     [JsonPropertyName("initialized")]
     public bool Initialized { get; set; }
+}
+
+public partial class SourcePolicyDocument
+{
+    [JsonPropertyName("entries")]
+    public SourcePolicyEntry[] Entries { get; set; }
+
+    /// <summary>
+    /// Set on update responses: for each changed metric, the report-day ranges and normalized
+    /// result count the change affected. The same statement is appended to the audit log.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("impact")]
+    public SourcePolicyImpact[] Impact { get; set; }
+
+    /// <summary>
+    /// When this version was written; null for the untouched default.
+    /// </summary>
+    [JsonPropertyName("updated_at")]
+    public string UpdatedAt { get; set; }
+
+    /// <summary>
+    /// Monotonic policy version. Version 1 with the documented default priorities applies until
+    /// the Owner changes the policy.
+    /// </summary>
+    [JsonPropertyName("version")]
+    public long Version { get; set; }
+}
+
+public partial class SourcePolicyEntry
+{
+    /// <summary>
+    /// Metric key with an explicit priority. Usage and payment metrics prioritize source kinds;
+    /// health metrics prioritize Health Connect data origins.
+    /// </summary>
+    [JsonPropertyName("metric")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string Metric { get; set; }
+
+    /// <summary>
+    /// Source kinds or data origins from highest to lowest priority. The highest-priority source
+    /// with observations in a conflict window wins; an empty list means no explicit preference,
+    /// with all sources ranking deterministically by name. Competing observations are never
+    /// deleted.
+    /// </summary>
+    [JsonPropertyName("priority")]
+    public string[] Priority { get; set; }
+}
+
+public partial class SourcePolicyImpact
+{
+    /// <summary>
+    /// Report-day ranges whose normalized selection differs between the old and new policy.
+    /// Empty when no stored observation competes differently.
+    /// </summary>
+    [JsonPropertyName("affected_ranges")]
+    public AffectedRange[] AffectedRanges { get; set; }
+
+    [JsonPropertyName("from_version")]
+    public long FromVersion { get; set; }
+
+    /// <summary>
+    /// Metric key whose priority changed.
+    /// </summary>
+    [JsonPropertyName("metric")]
+    [JsonConverter(typeof(FluffyMinMaxLengthCheckConverter))]
+    public string Metric { get; set; }
+
+    /// <summary>
+    /// Number of normalized day results the change affected.
+    /// </summary>
+    [JsonPropertyName("result_count")]
+    public long ResultCount { get; set; }
+
+    /// <summary>
+    /// IANA report timezone the affected ranges resolve in, so the audit statement is
+    /// reproducible.
+    /// </summary>
+    [JsonPropertyName("timezone")]
+    public string Timezone { get; set; }
+
+    [JsonPropertyName("to_version")]
+    public long ToVersion { get; set; }
+}
+
+public partial class AffectedRange
+{
+    [JsonPropertyName("from")]
+    public string From { get; set; }
+
+    [JsonPropertyName("to")]
+    public string To { get; set; }
+}
+
+public partial class SourcePolicyUpdateRequest
+{
+    /// <summary>
+    /// Full replacement of the policy entries. Omitted metrics keep the default priority; a
+    /// policy change only rebuilds derived results and never modifies raw observations.
+    /// </summary>
+    [JsonPropertyName("entries")]
+    public SourcePolicyEntry[] Entries { get; set; }
 }
 
 public partial class UsageDayMetrics
@@ -972,6 +1184,15 @@ public enum Status { Accepted, Duplicate, Rejected, StaleRevision };
 
 public enum Completeness { Complete, Partial, Unknown };
 
+/// <summary>
+/// Presence semantics for the queried range, so a report never reads as a bare number:
+/// observed means in-range observations produced the reported values; zero means
+/// observations exist but the normalized value is explicitly 0; no_data means the range
+/// holds no observations at all. Partial coverage is reported by completeness and competing
+/// sources by source_conflicts.
+/// </summary>
+public enum DataState { NoData, Observed, Zero };
+
 public partial class ProtocolModels
 {
     public static ProtocolModels FromJson(string json) => JsonSerializer.Deserialize<ProtocolModels>(json, LiveQs.Windows.Core.Contracts.ContractJson.Options);
@@ -1002,6 +1223,7 @@ public static class ContractJson
             SourceKindConverter.Singleton,
             StatusConverter.Singleton,
             CompletenessConverter.Singleton,
+            DataStateConverter.Singleton,
             new DateOnlyConverter(),
             new TimeOnlyConverter(),
             IsoDateTimeOffsetConverter.Singleton
@@ -1709,6 +1931,45 @@ internal class CompletenessConverter : JsonConverter<Completeness>
     }
 
     public static readonly CompletenessConverter Singleton = new CompletenessConverter();
+}
+
+internal class DataStateConverter : JsonConverter<DataState>
+{
+    public override bool CanConvert(Type t) => t == typeof(DataState);
+
+    public override DataState Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        switch (value)
+        {
+            case "no_data":
+                return DataState.NoData;
+            case "observed":
+                return DataState.Observed;
+            case "zero":
+                return DataState.Zero;
+        }
+        throw new Exception("Cannot unmarshal type DataState");
+    }
+
+    public override void Write(Utf8JsonWriter writer, DataState value, JsonSerializerOptions options)
+    {
+        switch (value)
+        {
+            case DataState.NoData:
+                JsonSerializer.Serialize(writer, "no_data", options);
+                return;
+            case DataState.Observed:
+                JsonSerializer.Serialize(writer, "observed", options);
+                return;
+            case DataState.Zero:
+                JsonSerializer.Serialize(writer, "zero", options);
+                return;
+        }
+        throw new Exception("Cannot marshal type DataState");
+    }
+
+    public static readonly DataStateConverter Singleton = new DataStateConverter();
 }
 
 internal class IndigoMinMaxLengthCheckConverter : JsonConverter<string>

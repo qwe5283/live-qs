@@ -546,6 +546,61 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /api/v1/source-policy:
+    get:
+      operationId: getSourcePolicy
+      summary: Show the versioned source-priority policy
+      description: >-
+        Returns the explicit, versioned source policy that chooses normalized
+        results from retained observations. Until the Owner changes it,
+        version 1 applies with the documented default priorities (Android
+        UsageStats authoritative for daily application totals; payment totals
+        prefer stable source identifiers). Retained observations are never
+        deleted or rewritten by this policy.
+      tags: [Metrics]
+      security:
+        - OwnerSession: []
+      responses:
+        "200":
+          description: Current source policy document.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourcePolicyDocument"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    put:
+      operationId: updateSourcePolicy
+      summary: Replace the source policy entries and record the impact
+      description: >-
+        Replaces the priority entries, bumps the policy version, and appends an
+        audit record stating which report-day ranges and how many normalized
+        results the change affected. Derived results rebuild on read; raw
+        observations are never modified.
+      tags: [Metrics]
+      security:
+        - OwnerSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SourcePolicyUpdateRequest"
+      responses:
+        "200":
+          description: Updated policy document with the change impact.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourcePolicyDocument"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 components:
   securitySchemes:
     OwnerSession:
@@ -1097,6 +1152,197 @@ components:
         completeness:
           type: string
           enum: [complete, partial, unknown]
+        source_policy_version:
+          type: integer
+          minimum: 1
+          description: >-
+            Version of the source policy that produced this response's
+            normalized results. Present on single-domain reads (metrics,
+            health, payment); absent for cross-domain event reads where one
+            version cannot describe every domain.
+        data_state:
+          type: string
+          enum: [observed, zero, no_data]
+          description: >-
+            Presence semantics for the queried range, so a report never reads
+            as a bare number: observed means in-range observations produced the
+            reported values; zero means observations exist but the normalized
+            value is explicitly 0; no_data means the range holds no
+            observations at all. Partial coverage is reported by completeness
+            and competing sources by source_conflicts.
+        source_conflicts:
+          type: array
+          description: >-
+            Competing observations the source policy resolved (or, for payment
+            candidates, deferred to the Owner). Competing observations stay
+            retained and are referenced by their event identifiers.
+          items:
+            $ref: "#/components/schemas/SourceConflict"
+        pending_confirmation_count:
+          type: integer
+          minimum: 0
+          description: >-
+            Number of in-range observations flagged pending confirmation and
+            awaiting Owner review. Present on payment-domain reads; the
+            transaction totals cover every observation including these.
+    SourceConflict:
+      title: Source Conflict
+      type: object
+      additionalProperties: false
+      required: [metric, policy_version, selected_source, selected_event_ids, competing_sources, competing_event_ids, from, to]
+      properties:
+        metric:
+          type: string
+          minLength: 1
+          description: >-
+            Metric key the conflict belongs to, such as usage.app_minutes,
+            health.sleep_minutes, or payment.transaction_totals.
+        policy_version:
+          type: integer
+          minimum: 1
+          description: Source policy version that made the selection.
+        selected_source:
+          type: string
+          minLength: 1
+          description: >-
+            Source the policy selected: a source kind for usage and payment
+            metrics, a Health Connect data origin for health metrics.
+        selected_event_ids:
+          type: array
+          description: >-
+            Stable identifiers of the selected observations inside the conflict
+            window. Normalized results reference these source event
+            identifiers.
+          items:
+            type: string
+        competing_sources:
+          type: array
+          description: Sources with retained observations the policy did not select.
+          items:
+            type: string
+        competing_event_ids:
+          type: array
+          description: >-
+            Stable identifiers of the competing observations. They stay
+            retained and individually readable; the policy withholds them from
+            the normalized result without deleting anything.
+          items:
+            type: string
+        from:
+          type: string
+          format: date-time
+          description: Start of the conflict window (UTC).
+        to:
+          type: string
+          format: date-time
+          description: End of the conflict window (UTC).
+    SourcePolicyEntry:
+      title: Source Policy Entry
+      type: object
+      additionalProperties: false
+      required: [metric, priority]
+      properties:
+        metric:
+          type: string
+          minLength: 1
+          description: >-
+            Metric key with an explicit priority. Usage and payment metrics
+            prioritize source kinds; health metrics prioritize Health Connect
+            data origins.
+        priority:
+          type: array
+          description: >-
+            Source kinds or data origins from highest to lowest priority. The
+            highest-priority source with observations in a conflict window
+            wins; an empty list means no explicit preference, with all sources
+            ranking deterministically by name. Competing observations are never
+            deleted.
+          items:
+            type: string
+    SourcePolicyImpact:
+      title: Source Policy Impact
+      type: object
+      additionalProperties: false
+      required: [metric, from_version, to_version, timezone, affected_ranges, result_count]
+      properties:
+        metric:
+          type: string
+          minLength: 1
+          description: Metric key whose priority changed.
+        from_version:
+          type: integer
+          minimum: 1
+        to_version:
+          type: integer
+          minimum: 1
+        timezone:
+          type: string
+          description: >-
+            IANA report timezone the affected ranges resolve in, so the audit
+            statement is reproducible.
+        affected_ranges:
+          type: array
+          description: >-
+            Report-day ranges whose normalized selection differs between the
+            old and new policy. Empty when no stored observation competes
+            differently.
+          items:
+            type: object
+            additionalProperties: false
+            required: [from, to]
+            properties:
+              from:
+                type: string
+                format: date
+              to:
+                type: string
+                format: date
+        result_count:
+          type: integer
+          minimum: 0
+          description: Number of normalized day results the change affected.
+    SourcePolicyDocument:
+      title: Source Policy Document
+      type: object
+      additionalProperties: false
+      required: [version, entries, updated_at]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: >-
+            Monotonic policy version. Version 1 with the documented default
+            priorities applies until the Owner changes the policy.
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourcePolicyEntry"
+        updated_at:
+          type: [string, "null"]
+          format: date-time
+          description: When this version was written; null for the untouched default.
+        impact:
+          type: array
+          description: >-
+            Set on update responses: for each changed metric, the report-day
+            ranges and normalized result count the change affected. The same
+            statement is appended to the audit log.
+          items:
+            $ref: "#/components/schemas/SourcePolicyImpact"
+    SourcePolicyUpdateRequest:
+      title: Source Policy Update Request
+      type: object
+      additionalProperties: false
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          description: >-
+            Full replacement of the policy entries. Omitted metrics keep the
+            default priority; a policy change only rebuilds derived results and
+            never modifies raw observations.
+          items:
+            $ref: "#/components/schemas/SourcePolicyEntry"
     UsageMetrics:
       title: Usage Metrics
       type: object

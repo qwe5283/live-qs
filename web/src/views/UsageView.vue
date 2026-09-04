@@ -11,6 +11,8 @@
       </a-space>
     </section>
 
+    <SourcePolicyPanel :context="dayReport?.context ?? null" />
+
     <div class="metric-grid">
       <MetricCard
         title="设备时间（日）"
@@ -98,7 +100,16 @@
         :columns="eventColumns"
         :data-source="eventRows"
         row-key="key"
-      />
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'eventId'">
+            <a-tooltip :title="record.fullEventId">
+              <span>{{ record.eventId }}</span>
+            </a-tooltip>
+          </template>
+          <template v-else>{{ record[column.key] }}</template>
+        </template>
+      </a-table>
       <a-button
         v-if="nextEventCursor"
         size="small"
@@ -122,6 +133,7 @@ import type { UsageAppsResponse, UsageTimelineResponse } from "../api/types";
 import BaseChart from "../components/charts/BaseChart.vue";
 import EmptyState from "../components/common/EmptyState.vue";
 import MetricCard from "../components/common/MetricCard.vue";
+import SourcePolicyPanel from "../components/common/SourcePolicyPanel.vue";
 import { formatCaptureZone, formatMinutes, formatUtcText, todayInTimezone } from "../utils/date";
 
 const reportTimezone = ref("UTC");
@@ -147,6 +159,7 @@ const eventColumns = [
   { title: "结束（UTC）", dataIndex: "end" },
   { title: "应用", dataIndex: "app" },
   { title: "设备", dataIndex: "device" },
+  { title: "事件", dataIndex: "eventId", key: "eventId" },
   { title: "采集时区", dataIndex: "captureZone" },
   { title: "时长", dataIndex: "duration" },
   { title: "状态", dataIndex: "state" },
@@ -224,19 +237,27 @@ const lanes = computed(() => {
   }));
 });
 
+/** Observations the source policy withheld from normalized totals; they stay listed for traceability. */
+const withheldEventIds = computed(() => new Set(
+  (dayReport.value?.context.source_conflicts ?? []).flatMap((conflict) => conflict.competing_event_ids),
+));
+
 const eventRows = computed(() => events.value.map((event) => ({
   key: `${event.event_id}-${event.revision}`,
   start: formatUtcText(event.start_at),
   end: event.end_at ? formatUtcText(event.end_at) : "进行中",
   app: event.payload.application_label ?? event.payload.application_id,
   device: `${event.device.platform} · ${event.device.id}`,
+  eventId: event.event_id.slice(0, 8),
+  fullEventId: event.event_id,
   captureZone: formatCaptureZone(event.capture_timezone, event.capture_offset_minutes),
   duration: formatMinutes((event.payload.duration?.value ?? 0) / 60_000),
   state: [
     event.payload.is_afk ? "AFK" : "活跃",
     event.finalization_state === "final" ? "已结束" : "检查点",
     `修订 ${event.revision}`,
-  ].join(" · "),
+    withheldEventIds.value.has(event.event_id) ? "未计入（来源策略）" : null,
+  ].filter(Boolean).join(" · "),
   synced: formatUtcText(event.provenance.observed_at),
 })));
 

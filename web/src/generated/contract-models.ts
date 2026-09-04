@@ -28,6 +28,11 @@ export interface ProtocolModels {
   OwnerStatus: OwnerStatus;
   PageMetadata: PageMetadata;
   QueryContext: QueryContext;
+  SourceConflict: SourceConflict;
+  SourcePolicyDocument: SourcePolicyDocument;
+  SourcePolicyEntry: SourcePolicyEntry;
+  SourcePolicyImpact: SourcePolicyImpact;
+  SourcePolicyUpdateRequest: SourcePolicyUpdateRequest;
   UsageDayMetrics: UsageDayMetrics;
   UsageDayReport: UsageDayReport;
   UsageDeviceMetrics: UsageDeviceMetrics;
@@ -469,13 +474,87 @@ export interface EventPage {
 
 export interface QueryContext {
   completeness: Completeness;
+  /**
+   * Presence semantics for the queried range, so a report never reads as a bare number:
+   * observed means in-range observations produced the reported values; zero means
+   * observations exist but the normalized value is explicitly 0; no_data means the range
+   * holds no observations at all. Partial coverage is reported by completeness and competing
+   * sources by source_conflicts.
+   */
+  data_state?: DataState;
   from: string;
+  /**
+   * Number of in-range observations flagged pending confirmation and awaiting Owner review.
+   * Present on payment-domain reads; the transaction totals cover every observation including
+   * these.
+   */
+  pending_confirmation_count?: number;
   provenance: string[];
+  /**
+   * Competing observations the source policy resolved (or, for payment candidates, deferred
+   * to the Owner). Competing observations stay retained and are referenced by their event
+   * identifiers.
+   */
+  source_conflicts?: SourceConflict[];
+  /**
+   * Version of the source policy that produced this response's normalized results. Present on
+   * single-domain reads (metrics, health, payment); absent for cross-domain event reads where
+   * one version cannot describe every domain.
+   */
+  source_policy_version?: number;
   timezone: string;
   to: string;
 }
 
 export type Completeness = "complete" | "partial" | "unknown";
+
+/**
+ * Presence semantics for the queried range, so a report never reads as a bare number:
+ * observed means in-range observations produced the reported values; zero means
+ * observations exist but the normalized value is explicitly 0; no_data means the range
+ * holds no observations at all. Partial coverage is reported by completeness and competing
+ * sources by source_conflicts.
+ */
+export type DataState = "observed" | "zero" | "no_data";
+
+export interface SourceConflict {
+  /**
+   * Stable identifiers of the competing observations. They stay retained and individually
+   * readable; the policy withholds them from the normalized result without deleting anything.
+   */
+  competing_event_ids: string[];
+  /**
+   * Sources with retained observations the policy did not select.
+   */
+  competing_sources: string[];
+  /**
+   * Start of the conflict window (UTC).
+   */
+  from: string;
+  /**
+   * Metric key the conflict belongs to, such as usage.app_minutes, health.sleep_minutes, or
+   * payment.transaction_totals.
+   */
+  metric: string;
+  /**
+   * Source policy version that made the selection.
+   */
+  policy_version: number;
+  /**
+   * Stable identifiers of the selected observations inside the conflict window. Normalized
+   * results reference these source event identifiers.
+   */
+  selected_event_ids: string[];
+  /**
+   * Source the policy selected: a source kind for usage and payment metrics, a Health Connect
+   * data origin for health metrics.
+   */
+  selected_source: string;
+  /**
+   * End of the conflict window (UTC).
+   */
+  to: string;
+}
 
 export interface PageMetadata {
   /**
@@ -538,6 +617,75 @@ export interface OwnerStatus {
    * True once the single implicit Owner password has been created.
    */
   initialized: boolean;
+}
+
+export interface SourcePolicyDocument {
+  entries: SourcePolicyEntry[];
+  /**
+   * Set on update responses: for each changed metric, the report-day ranges and normalized
+   * result count the change affected. The same statement is appended to the audit log.
+   */
+  impact?: SourcePolicyImpact[];
+  /**
+   * When this version was written; null for the untouched default.
+   */
+  updated_at: null | string;
+  /**
+   * Monotonic policy version. Version 1 with the documented default priorities applies until
+   * the Owner changes the policy.
+   */
+  version: number;
+}
+
+export interface SourcePolicyEntry {
+  /**
+   * Metric key with an explicit priority. Usage and payment metrics prioritize source kinds;
+   * health metrics prioritize Health Connect data origins.
+   */
+  metric: string;
+  /**
+   * Source kinds or data origins from highest to lowest priority. The highest-priority source
+   * with observations in a conflict window wins; an empty list means no explicit preference,
+   * with all sources ranking deterministically by name. Competing observations are never
+   * deleted.
+   */
+  priority: string[];
+}
+
+export interface SourcePolicyImpact {
+  /**
+   * Report-day ranges whose normalized selection differs between the old and new policy.
+   * Empty when no stored observation competes differently.
+   */
+  affected_ranges: AffectedRange[];
+  from_version: number;
+  /**
+   * Metric key whose priority changed.
+   */
+  metric: string;
+  /**
+   * Number of normalized day results the change affected.
+   */
+  result_count: number;
+  /**
+   * IANA report timezone the affected ranges resolve in, so the audit statement is
+   * reproducible.
+   */
+  timezone: string;
+  to_version: number;
+}
+
+export interface AffectedRange {
+  from: string;
+  to: string;
+}
+
+export interface SourcePolicyUpdateRequest {
+  /**
+   * Full replacement of the policy entries. Omitted metrics keep the default priority; a
+   * policy change only rebuilds derived results and never modifies raw observations.
+   */
+  entries: SourcePolicyEntry[];
 }
 
 export interface UsageDayMetrics {

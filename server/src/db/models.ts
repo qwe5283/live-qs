@@ -160,6 +160,14 @@ const ownerSettingsSchema = new Schema({
   updated_at: { type: Date, required: true },
 }, commonOptions);
 
+/** Versioned source-priority policy; absent rows mean the documented default version applies. */
+const sourcePolicySchema = new Schema({
+  user_id: { type: String, required: true, unique: true },
+  version: { type: Number, required: true },
+  entries: { type: Schema.Types.Mixed, default: [] },
+  updated_at: { type: Date, required: true },
+}, commonOptions);
+
 export const BucketModel = model("Bucket", bucketSchema);
 export const EventModel = model("Event", eventSchema);
 export const EventRevisionModel = model("EventRevision", eventRevisionSchema);
@@ -171,4 +179,5 @@ export const PrivacyRuleModel = model("PrivacyRule", privacyRuleSchema);
 export const OwnerCredentialModel = model("OwnerCredential", ownerCredentialSchema);
 export const OwnerSessionModel = model("OwnerSession", ownerSessionSchema);
 export const OwnerSettingsModel = model("OwnerSettings", ownerSettingsSchema);
+export const SourcePolicyModel = model("SourcePolicy", sourcePolicySchema);
 export const CredentialModel = model("Credential", credentialSchema);

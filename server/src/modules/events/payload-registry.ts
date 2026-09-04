@@ -42,7 +42,7 @@ export const LEGAL_SOURCE_KINDS = [
  * application or origin; they must stay opaque package or executable names.
  * Path separators and drive-letter prefixes are the rejected shapes.
  */
-function isOpaqueApplicationId(value: string): boolean {
+export function isOpaqueApplicationId(value: string): boolean {
   return !value.includes("/") && !value.includes("\\") && !/^[a-zA-Z]:/.test(value);
 }
 

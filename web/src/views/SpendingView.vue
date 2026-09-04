@@ -11,6 +11,8 @@
       </a-space>
     </section>
 
+    <SourcePolicyPanel :context="context" />
+
     <a-alert
       v-if="completeness === 'partial'"
       type="warning"
@@ -104,6 +106,11 @@
             <a-tag v-if="record.pending" color="orange">待确认</a-tag>
             <a-tag v-else color="green">已确认来源</a-tag>
           </template>
+          <template v-else-if="column.key === 'eventId'">
+            <a-tooltip :title="record.fullEventId">
+              <span>{{ record.eventId }}</span>
+            </a-tooltip>
+          </template>
           <template v-else>{{ record[column.key] }}</template>
         </template>
       </a-table>
@@ -129,10 +136,11 @@ import { DownCircleOutlined, FileDoneOutlined, PayCircleOutlined, ShopOutlined }
 import dayjs, { type Dayjs } from "dayjs";
 import { fetchPaymentEvents } from "../api/payment";
 import { fetchOwnerSettings } from "../api/settings";
-import type { VersionedEvent } from "../generated/contract-models";
+import type { QueryContext, VersionedEvent } from "../generated/contract-models";
 import BaseChart from "../components/charts/BaseChart.vue";
 import EmptyState from "../components/common/EmptyState.vue";
 import MetricCard from "../components/common/MetricCard.vue";
+import SourcePolicyPanel from "../components/common/SourcePolicyPanel.vue";
 import {
   addDaysIso,
   dateInTimezone,
@@ -146,11 +154,13 @@ const reportTimezone = ref("UTC");
 const startDate = ref<Dayjs | null>(null);
 const endDate = ref<Dayjs | null>(null);
 const events = ref<VersionedEvent[]>([]);
-const completeness = ref("");
-const provenance = ref<string[]>([]);
+const context = ref<QueryContext | null>(null);
 const nextCursor = ref<string | null>(null);
 const loading = ref(false);
 const error = ref("");
+
+const completeness = computed(() => context.value?.completeness ?? "");
+const provenance = computed(() => context.value?.provenance ?? []);
 
 const rangeText = computed(() => ({
   start: startDate.value ? startDate.value.format("YYYY-MM-DD") : "",
@@ -329,6 +339,7 @@ const timelineColumns = [
   { title: "分类", dataIndex: "category" },
   { title: "状态", key: "status" },
   { title: "设备", dataIndex: "device" },
+  { title: "事件", dataIndex: "eventId", key: "eventId" },
   { title: "采集时区", dataIndex: "captureZone" },
   { title: "修订", dataIndex: "revision" },
   { title: "同步时间（UTC）", dataIndex: "synced" },
@@ -343,6 +354,8 @@ const timelineRows = computed(() => transactions.value.map((event, index) => ({
   category: categoryLabels[event.payload.category ?? "uncategorized"] ?? event.payload.category,
   pending: event.payload.pending_confirmation === true,
   device: `${event.device.platform} · ${event.device.id}`,
+  eventId: event.event_id.slice(0, 8),
+  fullEventId: event.event_id,
   captureZone: formatCaptureZone(event.capture_timezone, event.capture_offset_minutes),
   revision: `修订 ${event.revision}`,
   synced: formatUtcText(event.provenance.observed_at),
@@ -361,8 +374,7 @@ async function load(cursor?: string) {
   try {
     const page = await fetchPaymentEvents(range.start, range.end, reportTimezone.value, cursor ? { cursor } : undefined);
     events.value = cursor ? [...events.value, ...page.data] : page.data;
-    completeness.value = page.context.completeness;
-    provenance.value = page.context.provenance;
+    context.value = page.context;
     nextCursor.value = page.page.next_cursor;
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
