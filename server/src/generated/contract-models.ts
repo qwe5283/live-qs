@@ -281,7 +281,15 @@ export interface Source {
   record_id: string;
 }
 
-export type SourceKind = "windows.foreground" | "android.accessibility";
+/**
+ * Collector mechanism that observed the interval. UsageStats is the authoritative source
+ * for Android daily application totals; accessibility observations only support current and
+ * contextual activity.
+ */
+export type SourceKind =
+  | "windows.foreground"
+  | "android.accessibility"
+  | "android.usagestats";
 
 export interface EventAcknowledgement {
   error?: Error | null;

@@ -486,9 +486,15 @@ data class Source(
     val recordId: String
 )
 
+/**
+ * Collector mechanism that observed the interval. UsageStats is the authoritative source
+ * for Android daily application totals; accessibility observations only support current and
+ * contextual activity.
+ */
 @Serializable
 enum class SourceKind(val value: String) {
     @SerialName("android.accessibility") ANDROID_ACCESSIBILITY("android.accessibility"),
+    @SerialName("android.usagestats") ANDROID_USAGESTATS("android.usagestats"),
     @SerialName("windows.foreground") WINDOWS_FOREGROUND("windows.foreground");
 }
 

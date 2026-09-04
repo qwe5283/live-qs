@@ -229,7 +229,7 @@ const eventRows = computed(() => events.value.map((event) => ({
   start: formatUtcText(event.start_at),
   end: event.end_at ? formatUtcText(event.end_at) : "进行中",
   app: event.payload.application_label ?? event.payload.application_id,
-  device: event.device.id,
+  device: `${event.device.platform} · ${event.device.id}`,
   captureZone: formatCaptureZone(event.capture_timezone, event.capture_offset_minutes),
   duration: formatMinutes(event.payload.duration.value / 60_000),
   state: [

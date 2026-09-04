@@ -796,7 +796,12 @@ public enum DurationUnit { Ms };
 /// </summary>
 public enum PrivacyLevel { Normal, Sensitive };
 
-public enum SourceKind { AndroidAccessibility, WindowsForeground };
+/// <summary>
+/// Collector mechanism that observed the interval. UsageStats is the authoritative source
+/// for Android daily application totals; accessibility observations only support current and
+/// contextual activity.
+/// </summary>
+public enum SourceKind { AndroidAccessibility, AndroidUsagestats, WindowsForeground };
 
 public enum Status { Accepted, Duplicate, Rejected, StaleRevision };
 
@@ -1218,6 +1223,8 @@ internal class SourceKindConverter : JsonConverter<SourceKind>
         {
             case "android.accessibility":
                 return SourceKind.AndroidAccessibility;
+            case "android.usagestats":
+                return SourceKind.AndroidUsagestats;
             case "windows.foreground":
                 return SourceKind.WindowsForeground;
         }
@@ -1230,6 +1237,9 @@ internal class SourceKindConverter : JsonConverter<SourceKind>
         {
             case SourceKind.AndroidAccessibility:
                 JsonSerializer.Serialize(writer, "android.accessibility", options);
+                return;
+            case SourceKind.AndroidUsagestats:
+                JsonSerializer.Serialize(writer, "android.usagestats", options);
                 return;
             case SourceKind.WindowsForeground:
                 JsonSerializer.Serialize(writer, "windows.foreground", options);

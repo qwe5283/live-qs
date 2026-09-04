@@ -13,11 +13,12 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+/**
+ * Legacy local daily aggregates for the on-device preview screen only; the
+ * authoritative upload path is `usage.UsageStatsEventSource` (versioned
+ * contract events). Ticket 13/14 will retire the remaining legacy shapes.
+ */
 class UsageStatsCollector(private val context: Context) {
-    fun collectYesterdayAndToday(settings: SettingsStore): List<LifeEvent> {
-        return collectRecentDays(settings, 2)
-    }
-
     fun collectRecentDays(settings: SettingsStore, days: Int = 7): List<LifeEvent> {
         if (!hasUsageAccess(context)) return emptyList()
 

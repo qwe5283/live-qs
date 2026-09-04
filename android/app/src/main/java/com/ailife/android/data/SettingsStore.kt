@@ -17,6 +17,14 @@ class SettingsStore(context: Context) {
         get() = prefs.getString(KEY_DEVICE_ID, "phone") ?: "phone"
         set(value) = prefs.edit().putString(KEY_DEVICE_ID, value.trim().ifEmpty { "phone" }).apply()
 
+    /**
+     * Owner identity echoed in contract event envelopes; the server rejects
+     * events whose owner does not match the credential owner.
+     */
+    var ownerId: String
+        get() = prefs.getString(KEY_OWNER_ID, DEFAULT_OWNER_ID) ?: DEFAULT_OWNER_ID
+        set(value) = prefs.edit().putString(KEY_OWNER_ID, value.trim().ifEmpty { DEFAULT_OWNER_ID }).apply()
+
     var deviceName: String
         get() = prefs.getString(KEY_DEVICE_NAME, android.os.Build.MODEL ?: "Android") ?: "Android"
         set(value) = prefs.edit().putString(KEY_DEVICE_NAME, value.trim().ifEmpty { "Android" }).apply()
@@ -36,7 +44,9 @@ class SettingsStore(context: Context) {
         private const val KEY_DEVICE_TOKEN = "device_token"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_DEVICE_NAME = "device_name"
+        private const val KEY_OWNER_ID = "owner_id"
         private const val KEY_LAST_HEALTH_SYNC = "last_health_sync"
         private const val KEY_LAST_USAGE_SYNC_DAY = "last_usage_sync_day"
+        private const val DEFAULT_OWNER_ID = "local"
     }
 }

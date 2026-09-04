@@ -12,9 +12,8 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.ailife.android.data.SettingsStore
-import com.ailife.android.data.model.LifeEvent
 import com.ailife.android.health.HealthConnectCollector
-import com.ailife.android.health.UsageStatsCollector
+import com.ailife.android.usage.UsageStatsEventSource
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
@@ -35,21 +34,28 @@ class LifeSyncWorker(
             Instant.ofEpochMilli(lastHealthSync).minus(5, ChronoUnit.MINUTES)
         }
 
-        val events = mutableListOf<LifeEvent>()
-        events += HealthConnectCollector(applicationContext).collect(settings, healthSince, now)
-        events += UsageStatsCollector(applicationContext).collectYesterdayAndToday(settings)
-
-        val drainer = EventQueueDrainer(applicationContext, settings)
-        if (events.isNotEmpty()) {
-            drainer.enqueue(events)
-            settings.lastHealthSyncMillis = now.toEpochMilli()
-        } else {
-            settings.lastHealthSyncMillis = now.toEpochMilli()
+        // Health Connect stays on the legacy event channel until ticket 13.
+        val healthDrainer = EventQueueDrainer(applicationContext, settings)
+        val healthEvents = HealthConnectCollector(applicationContext).collect(settings, healthSince, now)
+        if (healthEvents.isNotEmpty()) {
+            healthDrainer.enqueue(healthEvents)
         }
+        settings.lastHealthSyncMillis = now.toEpochMilli()
+
+        // UsageStats is the authoritative daily usage source and rides the
+        // versioned contract protocol: stable identities, revision
+        // checkpoints, and a durable outbox with per-item acknowledgements.
+        val usageDrainer = UsageEventQueueDrainer(applicationContext, settings)
+        usageDrainer.enqueue(UsageStatsEventSource(applicationContext, settings).collectPendingEvents())
 
         val heartbeatResult = HeartbeatQueueDrainer(applicationContext, settings).drainOnce(MAX_HEARTBEATS_PER_SYNC)
-        val eventResult = drainer.drainOnce(MAX_EVENTS_PER_SYNC)
-        return if (heartbeatResult.isSuccess && eventResult.isSuccess) Result.success() else Result.retry()
+        val usageResult = usageDrainer.drainOnce(MAX_EVENTS_PER_SYNC)
+        val healthResult = healthDrainer.drainOnce(MAX_EVENTS_PER_SYNC)
+        return if (heartbeatResult.isSuccess && usageResult.isSuccess && healthResult.isSuccess) {
+            Result.success()
+        } else {
+            Result.retry()
+        }
     }
 
     companion object {

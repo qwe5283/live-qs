@@ -4,6 +4,13 @@ import { z } from "zod";
 export const REGISTERED_EVENT_TYPES = ["activity.interval"] as const;
 
 /**
+ * Source kinds declared by the registered contract schemas
+ * (contracts/schemas/events/*.schema.json, $defs.SourceKind). Ingest rejects
+ * anything else so stored events always re-read as a contract-valid envelope.
+ */
+export const LEGAL_SOURCE_KINDS = ["windows.foreground", "android.accessibility", "android.usagestats"] as const;
+
+/**
  * The contract forbids full executable paths in `application_id`; it must stay
  * an opaque executable or package name. Path separators and drive-letter
  * prefixes are the rejected shapes.
@@ -36,6 +43,7 @@ const activityIntervalPayloadSchema = z.strictObject({
 export interface RegisteredEventEnvelope {
   eventType: (typeof REGISTERED_EVENT_TYPES)[number];
   schemaVersion: number;
+  sourceKind: string;
   startAt: Date;
   endAt: Date | null;
   finalizationState: "checkpoint" | "final";
@@ -56,6 +64,9 @@ const payloadSchemas = new Map<string, z.ZodType>([
 export function validateRegisteredEvent(envelope: RegisteredEventEnvelope): string | null {
   const schema = payloadSchemas.get(`${envelope.eventType}@${envelope.schemaVersion}`);
   if (!schema) return "The event payload has no registered schema.";
+  if (!(LEGAL_SOURCE_KINDS as readonly string[]).includes(envelope.sourceKind)) {
+    return `source.kind must be one of: ${LEGAL_SOURCE_KINDS.join(", ")}.`;
+  }
   const parsed = schema.safeParse(envelope.payload);
   if (!parsed.success) {
     const issue = parsed.error.issues.at(0);

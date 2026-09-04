@@ -116,7 +116,8 @@
     "SourceKind": {
       "title": "Source Kind",
       "type": "string",
-      "enum": ["windows.foreground", "android.accessibility"]
+      "description": "Collector mechanism that observed the interval. UsageStats is the authoritative source for Android daily application totals; accessibility observations only support current and contextual activity.",
+      "enum": ["windows.foreground", "android.accessibility", "android.usagestats"]
     },
     "DurationUnit": {
       "title": "Duration Unit",

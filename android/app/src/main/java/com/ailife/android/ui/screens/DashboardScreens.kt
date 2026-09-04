@@ -73,6 +73,7 @@ import com.ailife.android.network.testServerReachability
 import com.ailife.android.service.EventQueueDrainer
 import com.ailife.android.service.HeartbeatQueueDrainer
 import com.ailife.android.service.LifeSyncWorker
+import com.ailife.android.service.UsageEventQueueDrainer
 import com.ailife.android.system.deviceSupportsNotificationPermission
 import com.ailife.android.system.hasUsageAccess
 import com.ailife.android.system.isForegroundAccessibilityEnabled
@@ -137,6 +138,7 @@ fun SetupScreen(settings: SettingsStore) {
     var tokenInput by remember { mutableStateOf(settings.deviceToken) }
     var deviceIdInput by remember { mutableStateOf(settings.deviceId) }
     var deviceNameInput by remember { mutableStateOf(settings.deviceName) }
+    var ownerIdInput by remember { mutableStateOf(settings.ownerId) }
     var showToken by remember { mutableStateOf(false) }
     var statusMsg by remember { mutableStateOf<String?>(null) }
 
@@ -194,12 +196,23 @@ fun SetupScreen(settings: SettingsStore) {
             )
         }
 
+        OutlinedTextField(
+            value = ownerIdInput,
+            onValueChange = { ownerIdInput = it },
+            label = { Text("Owner ID") },
+            supportingText = { Text("与服务端 Owner 标识一致（默认 local），否则事件会被拒绝") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+        )
+
         Button(
             onClick = {
                 settings.serverUrl = serverInput
                 settings.deviceToken = tokenInput
                 settings.deviceId = deviceIdInput
                 settings.deviceName = deviceNameInput
+                settings.ownerId = ownerIdInput
                 LifeSyncWorker.schedule(context)
                 statusMsg = "设置已保存，同步任务已更新"
             },
@@ -220,6 +233,7 @@ fun SetupScreen(settings: SettingsStore) {
                     settings.deviceToken = tokenInput
                     settings.deviceId = deviceIdInput
                     settings.deviceName = deviceNameInput
+                    settings.ownerId = ownerIdInput
                     LifeSyncWorker.syncNow(context)
                     statusMsg = "已触发立即同步"
                 },
@@ -235,6 +249,7 @@ fun SetupScreen(settings: SettingsStore) {
                         settings.deviceToken = tokenInput
                         settings.deviceId = deviceIdInput
                         settings.deviceName = deviceNameInput
+                        settings.ownerId = ownerIdInput
                         val ok = testServerReachability(settings.serverUrl)
                         statusMsg = if (ok) "服务端可达" else "服务端不可达"
                     }
@@ -286,6 +301,8 @@ fun SyncScreen(settings: SettingsStore) {
     var healthAvailable by remember { mutableStateOf(HealthConnectCollector.isAvailable(context)) }
     var grantedCount by remember { mutableIntStateOf(0) }
     var queuedEvents by remember { mutableIntStateOf(0) }
+    var queuedUsageEvents by remember { mutableIntStateOf(0) }
+    var usageFailures by remember { mutableIntStateOf(0) }
     var queuedHeartbeats by remember { mutableIntStateOf(0) }
     var statusMsg by remember { mutableStateOf<String?>(null) }
 
@@ -299,6 +316,9 @@ fun SyncScreen(settings: SettingsStore) {
             0
         }
         queuedEvents = EventQueueDrainer(context, settings).queuedCount()
+        val usageDrainer = UsageEventQueueDrainer(context, settings)
+        queuedUsageEvents = usageDrainer.queuedCount()
+        usageFailures = usageDrainer.failureCount()
         queuedHeartbeats = HeartbeatQueueDrainer(context, settings).queuedCount()
     }
 
@@ -361,7 +381,9 @@ fun SyncScreen(settings: SettingsStore) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text("同步队列", style = MaterialTheme.typography.titleMedium)
-                InfoRow("待上传事件", queuedEvents.toString())
+                InfoRow("待上传使用事件（版本化）", queuedUsageEvents.toString())
+                InfoRow("待上传健康事件（旧通道）", queuedEvents.toString())
+                InfoRow("永久失败", usageFailures.toString())
                 InfoRow("待上传心跳", queuedHeartbeats.toString())
                 InfoRow("上次健康同步", formatInstantMillis(settings.lastHealthSyncMillis))
             }
@@ -406,7 +428,7 @@ fun SyncScreen(settings: SettingsStore) {
         DataTypeRow("步数", "Health Connect READ_STEPS", healthAvailable && grantedCount > 0)
         DataTypeRow("心率", "Health Connect READ_HEART_RATE", healthAvailable && grantedCount > 0)
         DataTypeRow("睡眠", "Health Connect READ_SLEEP", healthAvailable && grantedCount > 0)
-        DataTypeRow("屏幕使用", "UsageStats 每日聚合", hasUsageAccess(context))
+        DataTypeRow("应用使用时长（每日权威来源）", "UsageStats 版本化区间事件", hasUsageAccess(context))
         DataTypeRow("实时前台应用", "Accessibility TYPE_WINDOW_STATE_CHANGED", isForegroundAccessibilityEnabled(context))
         DataTypeRow("微信支付通知", "NotificationListenerService", isNotificationListenerEnabled(context))
 
@@ -603,6 +625,9 @@ fun StatusScreen(settings: SettingsStore) {
     val notificationEnabled = remember(tick) { isNotificationListenerEnabled(context) }
     val manufacturer = remember { Build.MANUFACTURER.lowercase(Locale.ROOT) }
     val queuedEvents = remember(tick) { EventQueueDrainer(context, settings).queuedCount() }
+    val usageDrainer = remember(tick) { UsageEventQueueDrainer(context, settings) }
+    val queuedUsageEvents = usageDrainer.queuedCount()
+    val usageFailures = usageDrainer.failureCount()
     val queuedHeartbeats = remember(tick) { HeartbeatQueueDrainer(context, settings).queuedCount() }
 
     Column(
@@ -698,6 +723,9 @@ fun StatusScreen(settings: SettingsStore) {
                 InfoRow("Server", settings.serverUrl.ifBlank { "未配置" })
                 InfoRow("Device ID", settings.deviceId)
                 InfoRow("Device Name", settings.deviceName)
+                InfoRow("Owner ID", settings.ownerId)
+                InfoRow("Queued Usage Events", queuedUsageEvents.toString())
+                InfoRow("Usage Sync Failures", usageFailures.toString())
                 InfoRow("Queued Events", queuedEvents.toString())
                 InfoRow("Queued Heartbeats", queuedHeartbeats.toString())
                 InfoRow("Last Usage Day", settings.lastUsageSyncDay.ifBlank { "无" })

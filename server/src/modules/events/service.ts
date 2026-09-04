@@ -277,6 +277,7 @@ function parseBatchItem(raw: unknown): ParsedBatchResult {
   const payloadError = validateRegisteredEvent({
     eventType: item.eventType,
     schemaVersion: item.schemaVersion,
+    sourceKind: item.source.kind,
     startAt: item.startAt,
     endAt: item.endAt,
     finalizationState: item.finalizationState,
