@@ -1,0 +1,80 @@
+# Windows component release channel (ADR-0002). Tag `windows/vX.Y.Z` builds,
+# checks, packages, and publishes ONLY the Windows collector: a self-contained
+# win-x64 zip plus a SHA-256 update manifest. The manifest is also uploaded to
+# the permanent `windows/stable` channel release (its asset is overwritten on
+# every release), which is the single stable URL clients poll. No generic
+# "latest release" is ever consulted.
+name: windows-release
+
+on:
+  push:
+    tags:
+      - "windows/v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Derive the release version from the tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#windows/v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Tag must be windows/vX.Y.Z, got $GITHUB_REF_NAME"; exit 1; }
+      - name: Verify the tag matches the built version
+        shell: bash
+        run: grep -q "<Version>${VERSION}</Version>" windows/LiveQs.Windows/LiveQs.Windows.csproj
+      - name: Tests
+        run: dotnet test windows/LiveQs.Windows.Tests/LiveQs.Windows.Tests.csproj
+      - name: Publish a self-contained win-x64 build
+        run: >
+          dotnet publish windows/LiveQs.Windows/LiveQs.Windows.csproj
+          -c Release -r win-x64 --self-contained true
+          -o windows/publish
+      - name: Package the zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path "windows/publish/*" -DestinationPath "dist/LiveQs.Windows-$env:VERSION-win-x64.zip" -Force
+      - name: Generate the update manifest
+        shell: bash
+        run: |
+          node scripts/release/generate-manifest.mjs \
+            --component windows \
+            --version "$VERSION" \
+            --download-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/windows%2Fv${VERSION}/LiveQs.Windows-${VERSION}-win-x64.zip" \
+            --min-compatible "$(node -p "require('./windows/release.config.json').min_compatible_version")" \
+            --artifact "dist/LiveQs.Windows-${VERSION}-win-x64.zip" \
+            --out "dist/liveqs-windows-update.json"
+      - name: Create the versioned release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "Windows ${VERSION}" \
+            --notes "LiveQs Windows collector ${VERSION}. 安装包经 SHA-256 校验，见 liveqs-windows-update.json。" \
+            "dist/LiveQs.Windows-${VERSION}-win-x64.zip" \
+            "dist/liveqs-windows-update.json"
+      - name: Publish the manifest to the stable channel
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "windows/stable" \
+            --target "$GITHUB_SHA" \
+            --title "Windows update channel" \
+            --notes "Manifest-only channel release; its asset is overwritten on every windows/vX.Y.Z release. Clients poll the liveqs-windows-update.json asset; never query a repository-wide latest release." \
+            --prerelease || true
+          gh release upload "windows/stable" "dist/liveqs-windows-update.json" --clobber

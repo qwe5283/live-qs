@@ -1,0 +1,38 @@
+# Server component CI: only the server component is built and checked, against
+# a real MongoDB (the primary automated test seam).
+name: server-ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/server-ci.yml"
+  pull_request:
+    paths:
+      - "server/**"
+      - ".github/workflows/server-ci.yml"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install dependencies
+        run: npm --prefix server ci
+      - name: Typecheck
+        run: npm --prefix server run typecheck
+      - name: Integration tests against real MongoDB
+        run: npm --prefix server test
+      - name: Build
+        run: npm --prefix server run build

@@ -28,6 +28,7 @@ import com.ailife.android.ui.screens.SyncScreen
 import com.ailife.android.ui.screens.SetupScreen
 import com.ailife.android.ui.screens.StatusScreen
 import com.ailife.android.ui.theme.AiLifeTheme
+import com.ailife.android.update.UpdateCheckWorker
 
 class MainActivity : ComponentActivity() {
     private lateinit var settingsStore: SettingsStore
@@ -50,6 +51,7 @@ class MainActivity : ComponentActivity() {
         }
 
         LifeSyncWorker.schedule(this)
+        UpdateCheckWorker.schedule(this)
     }
 
     private fun requestNotificationPermission() {

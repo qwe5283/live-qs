@@ -1,0 +1,59 @@
+# Server component release channel (ADR-0002). Tag `server/vX.Y.Z` tests,
+# builds, and publishes ONLY the server as a dist tarball. The server is not
+# auto-discovered by any client; no update manifest exists for it.
+name: server-release
+
+on:
+  push:
+    tags:
+      - "server/v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-server
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Derive the release version from the tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#server/v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Tag must be server/vX.Y.Z, got $GITHUB_REF_NAME"; exit 1; }
+      - name: Verify the tag matches the package version
+        run: test "$(node -p "require('./server/package.json').version")" = "$VERSION"
+      - name: Install dependencies
+        run: npm --prefix server ci
+      - name: Typecheck and integration tests against real MongoDB
+        run: |
+          npm --prefix server run typecheck
+          npm --prefix server test
+      - name: Build
+        run: npm --prefix server run build
+      - name: Package the dist tarball
+        run: |
+          mkdir -p dist
+          tar -czf "dist/liveqs-server-${VERSION}.tar.gz" -C server dist package.json package-lock.json
+      - name: Create the versioned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "Server ${VERSION}" \
+            --notes "LiveQs server ${VERSION}. 解包后 npm ci --omit=dev && node dist/main.js。" \
+            "dist/liveqs-server-${VERSION}.tar.gz"

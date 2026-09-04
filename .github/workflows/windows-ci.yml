@@ -1,0 +1,26 @@
+# Windows component CI: only the Windows collector is built and tested.
+name: windows-ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows-ci.yml"
+  pull_request:
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows-ci.yml"
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Tests
+        run: dotnet test windows/LiveQs.Windows.Tests/LiveQs.Windows.Tests.csproj
+      - name: Build the collector
+        run: dotnet build windows/LiveQs.Windows/LiveQs.Windows.csproj

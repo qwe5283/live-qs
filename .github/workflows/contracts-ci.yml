@@ -1,0 +1,30 @@
+# Contracts component CI: only the contracts component is built and checked.
+# The drift gate (check:generated) verifies all four languages' generated
+# models stay in sync with the OpenAPI and JSON Schema sources.
+name: contracts-ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "contracts/**"
+      - ".github/workflows/contracts-ci.yml"
+  pull_request:
+    paths:
+      - "contracts/**"
+      - ".github/workflows/contracts-ci.yml"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+      - name: Install dependencies
+        run: npm --prefix contracts ci
+      - name: Lint, test, and verify generated models
+        run: npm --prefix contracts run check

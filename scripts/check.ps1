@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("all", "contracts", "server", "web", "skill", "windows", "android")]
+    [ValidateSet("all", "contracts", "server", "web", "skill", "windows", "android", "release")]
     [string]$Component = "all"
 )
 
@@ -63,8 +63,14 @@ function Test-Android {
     }
 }
 
+function Test-Release {
+    Invoke-Check "Release channel tooling tests" {
+        & node.exe --test "$repositoryRoot\scripts\release\*.test.mjs"
+    }
+}
+
 $components = if ($Component -eq "all") {
-    @("contracts", "server", "web", "skill", "windows", "android")
+    @("contracts", "server", "web", "skill", "windows", "android", "release")
 }
 else {
     @($Component)
@@ -78,6 +84,7 @@ foreach ($selectedComponent in $components) {
         "skill" { Test-Skill }
         "windows" { Test-Windows }
         "android" { Test-Android }
+        "release" { Test-Release }
     }
 }
 

@@ -10,6 +10,7 @@ public enum TrayIconState
     Paused,
     CloudConnected,
     CloudUnavailable,
+    UpdateAvailable,
 }
 
 public static class AppIconFactory
@@ -49,6 +50,7 @@ public static class AppIconFactory
             [TrayIconState.Paused] = RenderTrayIcon(Color.FromRgb(226, 126, 86)),
             [TrayIconState.CloudConnected] = RenderTrayIcon(Color.FromRgb(85, 183, 158)),
             [TrayIconState.CloudUnavailable] = RenderTrayIcon(Color.FromRgb(126, 138, 144)),
+            [TrayIconState.UpdateAvailable] = RenderTrayIcon(Color.FromRgb(0, 122, 255)),
         };
 
     private static ImageSource RenderTrayIcon(Color? statusColor = null)

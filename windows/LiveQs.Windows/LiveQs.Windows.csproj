@@ -11,6 +11,7 @@
     <ApplicationIcon>Assets\LiveQs.ico</ApplicationIcon>
     <AssemblyName>LiveQs.Windows</AssemblyName>
     <RootNamespace>LiveQs.Windows</RootNamespace>
+    <Version>0.1.0</Version>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 

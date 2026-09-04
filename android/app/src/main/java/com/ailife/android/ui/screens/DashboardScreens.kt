@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -74,12 +75,17 @@ import com.ailife.android.health.HealthHeartRateSample
 import com.ailife.android.health.HealthSleepSample
 import com.ailife.android.health.HealthStepsSample
 import com.ailife.android.health.UsageStatsCollector
+import com.ailife.android.identity.resolveCollectorVersion
 import com.ailife.android.network.testServerReachability
 import com.ailife.android.payment.PaymentNotificationFailures
 import com.ailife.android.service.ContractEventQueueDrainer
 import com.ailife.android.service.HeartbeatQueueDrainer
 import com.ailife.android.service.LifeSyncWorker
 import com.ailife.android.service.WechatPayNotificationService
+import com.ailife.android.update.UpdateCheckState
+import com.ailife.android.update.UpdateCheckStateStore
+import com.ailife.android.update.UpdateCheckWorker
+import com.ailife.android.update.UpdateCodes
 import com.ailife.android.system.deviceSupportsNotificationPermission
 import com.ailife.android.system.hasUsageAccess
 import com.ailife.android.system.isForegroundAccessibilityEnabled
@@ -787,6 +793,84 @@ fun StatusScreen(settings: SettingsStore) {
                 InfoRow("Payment Notification Failures (local)", paymentNotificationFailures.toString())
                 InfoRow("Queued Heartbeats", queuedHeartbeats.toString())
                 InfoRow("Last Usage Day", settings.lastUsageSyncDay.ifBlank { "无" })
+            }
+        }
+
+        Divider(color = Border, thickness = 1.dp)
+
+        Text("应用更新", style = MaterialTheme.typography.titleMedium)
+        UpdateStatusCard(settings, tick)
+    }
+}
+
+/**
+ * Notify-only component update status (ticket 17): the app checks the
+ * android component's own update manifest, reports the diagnosable outcome,
+ * and links to the download page. It never downloads or installs an APK by
+ * itself, so no unknown-sources flow exists in V1.
+ */
+@Composable
+private fun UpdateStatusCard(settings: SettingsStore, tick: Int) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val updateState = remember(tick) {
+        UpdateCheckStateStore(File(context.filesDir, UpdateCheckWorker.UPDATE_STATE_DIRECTORY)).read()
+    }
+    val currentVersion = remember { resolveCollectorVersion(context) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            InfoRow("当前版本", "v$currentVersion")
+            InfoRow(
+                "更新状态",
+                when (updateState.state) {
+                    UpdateCheckState.IDLE -> "尚未检查"
+                    UpdateCheckState.UP_TO_DATE -> "已是最新"
+                    UpdateCheckState.AVAILABLE -> "发现新版本 v${updateState.availableVersion}（请从下载页安装）"
+                    UpdateCheckState.INCOMPATIBLE ->
+                        "发现新版本 v${updateState.availableVersion}，但需先手动升级到最低兼容版本"
+                    UpdateCheckState.FAILED -> "检查失败（${updateState.errorCode ?: UpdateCodes.MANIFEST_FETCH_FAILED}）"
+                },
+            )
+            InfoRow("上次检查", formatInstantMillis(updateState.lastCheckAtMillis ?: 0L))
+            if (!updateState.errorMessage.isNullOrBlank()) {
+                Text(
+                    text = updateState.errorMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = settings.updateCheckEnabled,
+                    onCheckedChange = { settings.updateCheckEnabled = it },
+                )
+                Text("启用更新检查", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(
+                    onClick = {
+                        settings.updateCheckEnabled = true
+                        UpdateCheckWorker.checkNow(context)
+                    },
+                ) {
+                    Text("检查更新")
+                }
+                if (updateState.state == UpdateCheckState.AVAILABLE && !updateState.downloadUrl.isNullOrBlank()) {
+                    TextButton(onClick = {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, android.net.Uri.parse(updateState.downloadUrl)),
+                        )
+                    }) {
+                        Text("打开下载页")
+                    }
+                }
             }
         }
     }

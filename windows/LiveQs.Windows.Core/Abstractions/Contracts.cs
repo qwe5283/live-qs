@@ -5,6 +5,7 @@ using LiveQs.Windows.Core.Common;
 using LiveQs.Windows.Core.Contracts;
 using LiveQs.Windows.Core.Settings;
 using LiveQs.Windows.Core.Sync;
+using LiveQs.Windows.Core.Update;
 
 namespace LiveQs.Windows.Core.Abstractions;
 
@@ -181,6 +182,47 @@ public interface ISyncStatusService
     SyncStatus Current { get; }
     event EventHandler<SyncStatus>? Changed;
     void Update(SyncStatus status);
+}
+
+/// <summary>The running collector's own release version, as core semver X.Y.Z.</summary>
+public interface IAppVersion
+{
+    string CurrentVersion { get; }
+}
+
+/// <summary>
+/// The component release channel's client surface: fetch the component's own
+/// update manifest and download its artifact with a SHA-256 verification.
+/// Raw transport failures propagate to the caller, which maps them to stable
+/// diagnosable codes per phase.
+/// </summary>
+public interface IUpdateCheckClient
+{
+    /// <summary>Fetches the raw manifest JSON from the component's channel URL.</summary>
+    Task<string> FetchManifestAsync(string manifestUrl, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Streams the artifact into <paramref name="destinationDirectory"/> and
+    /// returns the package path only after its SHA-256 matches the manifest
+    /// digest; a mismatch throws <see cref="Update.UpdateCheckException"/> and
+    /// leaves no file behind.
+    /// </summary>
+    Task<Update.UpdateDownloadResult> DownloadArtifactAsync(
+        string downloadUrl, string destinationDirectory, string expectedSha256, CancellationToken cancellationToken = default);
+}
+
+/// <summary>Durable record of the artifact already verified for a manifest version, so restarts never re-download.</summary>
+public interface IUpdateStateStore
+{
+    Task<Update.VerifiedPackage> GetAsync(CancellationToken cancellationToken = default);
+    Task SaveAsync(Update.VerifiedPackage verified, CancellationToken cancellationToken = default);
+}
+
+public interface IUpdateStatusService
+{
+    Update.UpdateStatus Current { get; }
+    event EventHandler<Update.UpdateStatus>? Changed;
+    void Update(Update.UpdateStatus status);
 }
 
 public interface IAppPaths

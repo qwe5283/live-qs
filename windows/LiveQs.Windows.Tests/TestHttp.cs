@@ -15,11 +15,11 @@ internal sealed class RecordingHandler : HttpMessageHandler
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         Request = request;
-        Body = await request.Content!.ReadAsStringAsync(cancellationToken);
-        Bodies.Add(Body);
+        Body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
+        Bodies.Add(Body ?? "");
         return new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent(ResponseFactory(Body), Encoding.UTF8, "application/json"),
+            Content = new StringContent(ResponseFactory(Body ?? ""), Encoding.UTF8, "application/json"),
         };
     }
 }

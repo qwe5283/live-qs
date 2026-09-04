@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using LiveQs.Windows.Controls;
 using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Sync;
+using LiveQs.Windows.Core.Update;
 using LiveQs.Windows.Interop;
 using LiveQs.Windows.Views;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,7 @@ public sealed class TrayIconService(
     ISettingsStore settingsStore,
     IAppPaths paths,
     ISyncStatusService syncStatusService,
+    IUpdateStatusService updateStatusService,
     ILogger<TrayIconService> logger) : IDisposable
 {
     private NotifyIcon? _icon;
@@ -29,6 +31,7 @@ public sealed class TrayIconService(
     private string? _currentTooltip;
     private bool _samplingPaused;
     private bool _cloudSyncEnabled;
+    private bool _updateAvailable;
     private bool _isRefreshing;
 
     public void Initialize(MainWindow window)
@@ -84,6 +87,8 @@ public sealed class TrayIconService(
         if (!_icon.IsRegistered) logger.LogWarning("The tray icon could not be registered with Windows Explorer.");
 
         syncStatusService.Changed += OnSyncStatusChanged;
+        updateStatusService.Changed += OnUpdateStatusChanged;
+        _updateAvailable = updateStatusService.Current.State == UpdateCheckState.Available;
         _refreshTimer = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, OnRefreshTimer, application.Dispatcher);
         _refreshTimer.Start();
         _ = RefreshAsync();
@@ -120,6 +125,7 @@ public sealed class TrayIconService(
             var settings = await settingsStore.GetSettingsAsync();
             _samplingPaused = settings.SamplingPaused;
             _cloudSyncEnabled = settings.CloudSyncEnabled;
+            _updateAvailable = updateStatusService.Current.State == UpdateCheckState.Available;
             _pauseItem.IsChecked = _samplingPaused;
             _pauseItem.Header = _samplingPaused ? "恢复采样" : "暂停采样";
             ApplyTrayState(syncStatusService.Current);
@@ -139,16 +145,24 @@ public sealed class TrayIconService(
     private void OnSyncStatusChanged(object? sender, SyncStatus status) =>
         System.Windows.Application.Current.Dispatcher.BeginInvoke(() => ApplyTrayState(status));
 
+    private void OnUpdateStatusChanged(object? sender, UpdateStatus status) =>
+        System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            _updateAvailable = status.State == UpdateCheckState.Available;
+            ApplyTrayState(syncStatusService.Current);
+        });
+
     private void ApplyTrayState(SyncStatus syncStatus)
     {
         if (_icon is null) return;
 
-        var state = ResolveIconState(_samplingPaused, _cloudSyncEnabled, syncStatus.LastError);
+        var state = ResolveIconState(_samplingPaused, _cloudSyncEnabled, syncStatus.LastError, _updateAvailable);
         var tooltip = state switch
         {
             TrayIconState.Paused => "LiveQs · 采样已暂停",
             TrayIconState.CloudConnected => "LiveQs · 正在采样 · 云同步",
             TrayIconState.CloudUnavailable => "LiveQs · 正在采样 · 云端不可达",
+            TrayIconState.UpdateAvailable => "LiveQs · 发现新版本 · 详见设置",
             _ => "LiveQs · 正在采样 · 本地模式",
         };
 
@@ -164,13 +178,14 @@ public sealed class TrayIconService(
         }
     }
 
-    internal static TrayIconState ResolveIconState(bool samplingPaused, bool cloudSyncEnabled, string? syncError) =>
+    internal static TrayIconState ResolveIconState(
+        bool samplingPaused, bool cloudSyncEnabled, string? syncError, bool updateAvailable) =>
         samplingPaused
             ? TrayIconState.Paused
             : !cloudSyncEnabled
-                ? TrayIconState.Local
+                ? updateAvailable ? TrayIconState.UpdateAvailable : TrayIconState.Local
                 : string.IsNullOrWhiteSpace(syncError)
-                    ? TrayIconState.CloudConnected
+                    ? updateAvailable ? TrayIconState.UpdateAvailable : TrayIconState.CloudConnected
                     : TrayIconState.CloudUnavailable;
 
     private void OpenDataDirectory()
@@ -194,6 +209,7 @@ public sealed class TrayIconService(
     {
         if (_icon is null) return;
         syncStatusService.Changed -= OnSyncStatusChanged;
+        updateStatusService.Changed -= OnUpdateStatusChanged;
         _refreshTimer?.Stop();
         _refreshTimer = null;
         _icon.Unregister();

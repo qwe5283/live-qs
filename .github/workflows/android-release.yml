@@ -1,0 +1,72 @@
+# Android component release channel (ADR-0002). Tag `android/vX.Y.Z` lints,
+# tests, packages, and publishes ONLY the Android collector: a debug-signed
+# (installable) APK plus a SHA-256 update manifest. The manifest is also
+# uploaded to the permanent `android/stable` channel release (its asset is
+# overwritten on every release), which is the single stable URL clients poll.
+# No generic "latest release" is ever consulted.
+name: android-release
+
+on:
+  push:
+    tags:
+      - "android/v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-android
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Derive the release version from the tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#android/v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Tag must be android/vX.Y.Z, got $GITHUB_REF_NAME"; exit 1; }
+      - name: Verify the tag matches the built version
+        run: grep -q "versionName = \"${VERSION}\"" android/app/build.gradle.kts
+      - name: Lint, test, and assemble
+        working-directory: android
+        run: ./gradlew lint test assembleDebug
+      - name: Package the APK
+        run: |
+          mkdir -p dist
+          cp "android/app/build/outputs/apk/debug/app-debug.apk" "dist/LiveQs.Android-${VERSION}-debug.apk"
+      - name: Generate the update manifest
+        run: |
+          node scripts/release/generate-manifest.mjs \
+            --component android \
+            --version "$VERSION" \
+            --download-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/android%2Fv${VERSION}/LiveQs.Android-${VERSION}-debug.apk" \
+            --min-compatible "$(node -p "require('./android/release.config.json').min_compatible_version")" \
+            --artifact "dist/LiveQs.Android-${VERSION}-debug.apk" \
+            --out "dist/liveqs-android-update.json"
+      - name: Create the versioned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "Android ${VERSION}" \
+            --notes "LiveQs Android collector ${VERSION}（debug 签名，可直接侧载）。SHA-256 见 liveqs-android-update.json。" \
+            "dist/LiveQs.Android-${VERSION}-debug.apk" \
+            "dist/liveqs-android-update.json"
+      - name: Publish the manifest to the stable channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "android/stable" \
+            --target "$GITHUB_SHA" \
+            --title "Android update channel" \
+            --notes "Manifest-only channel release; its asset is overwritten on every android/vX.Y.Z release. Clients poll the liveqs-android-update.json asset; never query a repository-wide latest release." \
+            --prerelease || true
+          gh release upload "android/stable" "dist/liveqs-android-update.json" --clobber

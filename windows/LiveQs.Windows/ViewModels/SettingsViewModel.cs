@@ -6,6 +6,7 @@ using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Common;
 using LiveQs.Windows.Core.Settings;
 using LiveQs.Windows.Core.Sync;
+using LiveQs.Windows.Core.Update;
 using LiveQs.Windows.Services;
 
 namespace LiveQs.Windows.ViewModels;
@@ -17,9 +18,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly IActivityMaintenance _maintenance;
     private readonly IStartupManager _startupManager;
     private readonly ISyncStatusService _syncStatusService;
+    private readonly IUpdateStatusService _updateStatusService;
     private readonly IAppPaths _paths;
     private readonly IUserDialogService _dialogs;
     private readonly TimeProvider _timeProvider;
+    private readonly string _currentVersion;
     [ObservableProperty]
     private int _samplingIntervalSeconds;
     [ObservableProperty]
@@ -45,9 +48,17 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _samplingPaused;
     [ObservableProperty]
+    private bool _updateCheckEnabled;
+    [ObservableProperty]
+    private string _updateManifestUrl = "";
+    [ObservableProperty]
     private string _statusText = "尚未保存";
     [ObservableProperty]
     private string _syncStatusText = "本地模式";
+    [ObservableProperty]
+    private string _updateStatusText = "尚未检查";
+    [ObservableProperty]
+    private string _updateDetailText = "";
     [ObservableProperty]
     private DateTime? _maintenanceStartDate;
     [ObservableProperty]
@@ -59,6 +70,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         IActivityMaintenance maintenance,
         IStartupManager startupManager,
         ISyncStatusService syncStatusService,
+        IUpdateStatusService updateStatusService,
+        IAppVersion appVersion,
         IAppPaths paths,
         IUserDialogService dialogs,
         TimeProvider timeProvider)
@@ -68,6 +81,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _maintenance = maintenance;
         _startupManager = startupManager;
         _syncStatusService = syncStatusService;
+        _updateStatusService = updateStatusService;
+        _currentVersion = appVersion.CurrentVersion;
         _paths = paths;
         _dialogs = dialogs;
         _timeProvider = timeProvider;
@@ -94,10 +109,15 @@ public sealed partial class SettingsViewModel : ViewModelBase
         LaunchOnStartup = _startupManager.IsEnabled();
         CloseToTray = settings.CloseToTray;
         SamplingPaused = settings.SamplingPaused;
+        UpdateCheckEnabled = settings.UpdateCheckEnabled;
+        UpdateManifestUrl = settings.UpdateManifestUrl;
         await ReloadRulesAsync();
         UpdateSyncText(_syncStatusService.Current);
+        UpdateUpdateText(_updateStatusService.Current);
         _syncStatusService.Changed -= OnSyncStatusChanged;
         _syncStatusService.Changed += OnSyncStatusChanged;
+        _updateStatusService.Changed -= OnUpdateStatusChanged;
+        _updateStatusService.Changed += OnUpdateStatusChanged;
         StatusText = "设置已加载";
     }
 
@@ -154,6 +174,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         LaunchOnStartup = LaunchOnStartup,
         CloseToTray = CloseToTray,
         SamplingPaused = SamplingPaused,
+        UpdateCheckEnabled = UpdateCheckEnabled,
+        UpdateManifestUrl = UpdateManifestUrl,
     }.Normalize();
 
     private DateRange SelectedMaintenanceRange()
@@ -166,6 +188,43 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     private void OnSyncStatusChanged(object? sender, SyncStatus status) =>
         System.Windows.Application.Current.Dispatcher.Invoke(() => UpdateSyncText(status));
+
+    private void OnUpdateStatusChanged(object? sender, UpdateStatus status) =>
+        System.Windows.Application.Current.Dispatcher.Invoke(() => UpdateUpdateText(status));
+
+    private void UpdateUpdateText(UpdateStatus status)
+    {
+        UpdateStatusText = !status.Enabled
+            ? "更新检查已关闭"
+            : status.State switch
+            {
+                UpdateCheckState.Idle => "尚未检查",
+                UpdateCheckState.UpToDate => $"已是最新 · 当前 v{_currentVersion}",
+                UpdateCheckState.Available => $"发现新版本 v{status.AvailableVersion}（当前 v{_currentVersion}），安装包已校验",
+                UpdateCheckState.Incompatible => $"发现新版本 v{status.AvailableVersion}，但当前 v{_currentVersion} 低于其最低兼容版本，请先手动升级",
+                _ => $"检查失败（{status.LastErrorCode}）",
+            };
+        var details = new List<string>();
+        if (status.LastCheckedAt is { } checkedAt) details.Add($"上次检查：{checkedAt.ToLocalTime():yyyy-MM-dd HH:mm}");
+        if (status.VerifiedPackagePath is { } packagePath) details.Add($"安装包：{packagePath}");
+        if (!string.IsNullOrWhiteSpace(status.LastErrorMessage)) details.Add(status.LastErrorMessage);
+        UpdateDetailText = string.Join(Environment.NewLine, details);
+    }
+
+    [RelayCommand]
+    private void OpenUpdateFolder()
+    {
+        try
+        {
+            var directory = Path.Combine(_paths.DataDirectory, "updates");
+            Directory.CreateDirectory(directory);
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{directory}\"") { UseShellExecute = true });
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            _dialogs.ShowError("无法打开目录", exception);
+        }
+    }
 
     private void UpdateSyncText(SyncStatus status)
     {
