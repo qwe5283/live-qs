@@ -31,6 +31,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISyncStatusService, SyncStatusService>();
         services.AddSingleton<ISyncClient, CloudSyncClient>();
         services.AddSingleton<IHeartbeatClient, HeartbeatClient>();
+        services.AddSingleton<IDiagnosticsClient, DiagnosticsClient>();
         services.AddSingleton<IClassificationRuleSync, ClassificationRuleSync>();
         services.AddSingleton<IReclassificationClient, ReclassificationClient>();
         services.AddHttpClient("cloud-sync", client => client.Timeout = TimeSpan.FromSeconds(15));

@@ -90,6 +90,30 @@ const deviceStatusSchema = new Schema({
 // This TTL index only bounds collection growth long after a device stops.
 deviceStatusSchema.index({ captured_at: 1 }, { expireAfterSeconds: DEVICE_STATUS_TTL_SECONDS });
 
+/**
+ * Latest sync-state snapshot per device (ticket 06): counts, timestamps, and
+ * stable-code errors pushed by the collector on its sync cadence. Replaced on
+ * every push, so one row per device; snapshots are operational visibility and
+ * never become historical events. The TTL backstop bounds growth for devices
+ * that never report again while keeping outages of realistic length visible.
+ */
+const SYNC_DIAGNOSTIC_TTL_SECONDS = 2592000; // 30 days
+const syncDiagnosticSchema = new Schema({
+  // Server-bound device identity: the Device Token credential that pushed the snapshot.
+  device_key: { type: String, required: true, unique: true },
+  user_id: { type: String, required: true, index: true },
+  platform: { type: String, enum: ["windows", "android"], required: true },
+  device_name: { type: String, default: null },
+  reported_at: { type: Date, required: true },
+  collected_at: { type: Date, required: true },
+  last_successful_upload_at: { type: Date, default: null },
+  oldest_pending_at: { type: Date, default: null },
+  pending_count: { type: Number, required: true },
+  permanent_failure_count: { type: Number, required: true },
+  recent_errors: { type: [Schema.Types.Mixed], default: [] },
+}, commonOptions);
+syncDiagnosticSchema.index({ reported_at: 1 }, { expireAfterSeconds: SYNC_DIAGNOSTIC_TTL_SECONDS });
+
 const dailyRollupSchema = new Schema({
   user_id: { type: String, required: true },
   date: { type: String, required: true },
@@ -213,6 +237,7 @@ export const EventModel = model("Event", eventSchema);
 export const EventRevisionModel = model("EventRevision", eventRevisionSchema);
 export const DeviceStateModel = model("DeviceState", deviceStateSchema);
 export const DeviceStatusModel = model("DeviceStatus", deviceStatusSchema);
+export const SyncDiagnosticModel = model("SyncDiagnostic", syncDiagnosticSchema);
 export const DailyRollupModel = model("DailyRollup", dailyRollupSchema);
 export const AuditLogModel = model("AuditLog", auditLogSchema);
 export const PrivacyRuleModel = model("PrivacyRule", privacyRuleSchema);

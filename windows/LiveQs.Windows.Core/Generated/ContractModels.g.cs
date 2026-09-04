@@ -173,6 +173,18 @@ public partial class ProtocolModels
     [JsonPropertyName("SourcePolicyUpdateRequest")]
     public SourcePolicyUpdateRequest SourcePolicyUpdateRequest { get; set; }
 
+    [JsonPropertyName("SyncDiagnostic")]
+    public SyncDiagnostic SyncDiagnostic { get; set; }
+
+    [JsonPropertyName("SyncDiagnosticError")]
+    public SyncDiagnosticError SyncDiagnosticError { get; set; }
+
+    [JsonPropertyName("SyncDiagnosticList")]
+    public SyncDiagnosticList SyncDiagnosticList { get; set; }
+
+    [JsonPropertyName("SyncDiagnosticsReport")]
+    public SyncDiagnosticsReport SyncDiagnosticsReport { get; set; }
+
     [JsonPropertyName("UsageDayMetrics")]
     public UsageDayMetrics UsageDayMetrics { get; set; }
 
@@ -1622,6 +1634,168 @@ public partial class SourcePolicyUpdateRequest
     public SourcePolicyEntry[] Entries { get; set; }
 }
 
+public partial class SyncDiagnostic
+{
+    /// <summary>
+    /// Seconds elapsed since the latest snapshot was received. During an outage no fresh
+    /// snapshot can arrive, so this age together with the heartbeat online flag distinguishes a
+    /// stale view from a live one.
+    /// </summary>
+    [JsonPropertyName("age_seconds")]
+    public long AgeSeconds { get; set; }
+
+    [JsonPropertyName("collected_at")]
+    public string CollectedAt { get; set; }
+
+    /// <summary>
+    /// Server-bound device identity: the identifier of the Device Token credential that pushed
+    /// the snapshot.
+    /// </summary>
+    [JsonPropertyName("device_id")]
+    [JsonConverter(typeof(PurpleMinMaxLengthCheckConverter))]
+    public string DeviceId { get; set; }
+
+    /// <summary>
+    /// Last reported display label, or null when the collector sent none.
+    /// </summary>
+    [JsonPropertyName("device_name")]
+    public string DeviceName { get; set; }
+
+    [JsonPropertyName("last_successful_upload_at")]
+    public string LastSuccessfulUploadAt { get; set; }
+
+    [JsonPropertyName("oldest_pending_at")]
+    public string OldestPendingAt { get; set; }
+
+    [JsonPropertyName("pending_count")]
+    public long PendingCount { get; set; }
+
+    [JsonPropertyName("permanent_failure_count")]
+    public long PermanentFailureCount { get; set; }
+
+    [JsonPropertyName("platform")]
+    public Platform Platform { get; set; }
+
+    [JsonPropertyName("recent_errors")]
+    public SyncDiagnosticError[] RecentErrors { get; set; }
+
+    /// <summary>
+    /// Server receive instant of the latest snapshot.
+    /// </summary>
+    [JsonPropertyName("reported_at")]
+    public string ReportedAt { get; set; }
+}
+
+public partial class SyncDiagnosticError
+{
+    /// <summary>
+    /// Stable error code: the server's per-item rejection code for permanent failures (such as
+    /// invalid_event or insufficient_scope), or a client-side transport code (such as
+    /// network_error, request_timeout, or server_error) for transient failures.
+    /// </summary>
+    [JsonPropertyName("code")]
+    [JsonConverter(typeof(FriskyMinMaxLengthCheckConverter))]
+    public string Code { get; set; }
+
+    /// <summary>
+    /// Safe, bounded human-readable summary. Contract-level server validation text is safe to
+    /// relay; exception text that could embed local content must be replaced by a fixed summary
+    /// for its code.
+    /// </summary>
+    [JsonPropertyName("message")]
+    [JsonConverter(typeof(MischievousMinMaxLengthCheckConverter))]
+    public string Message { get; set; }
+
+    /// <summary>
+    /// UTC instant at which the error was observed.
+    /// </summary>
+    [JsonPropertyName("occurred_at")]
+    public string OccurredAt { get; set; }
+}
+
+public partial class SyncDiagnosticList
+{
+    /// <summary>
+    /// One independent entry per device that has pushed a snapshot.
+    /// </summary>
+    [JsonPropertyName("devices")]
+    public SyncDiagnostic[] Devices { get; set; }
+
+    /// <summary>
+    /// UTC instant at which the ages were computed.
+    /// </summary>
+    [JsonPropertyName("server_time")]
+    public string ServerTime { get; set; }
+}
+
+/// <summary>
+/// Compact synchronization-state snapshot pushed by a collector on its sync cadence. Counts,
+/// codes, and timestamps only; the bounded `message` of an error entry must be a safe
+/// summary — never a token, a raw window title, an executable path, or notification text.
+/// </summary>
+public partial class SyncDiagnosticsReport
+{
+    /// <summary>
+    /// UTC capture instant of the most recent local observation the collector still holds.
+    /// Omitted when it has not collected anything yet. A fresh value with a zero pending count
+    /// means the device collected and delivered; a fresh value with a growing pending count
+    /// means collection works but delivery lags.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("collected_at")]
+    public string? CollectedAt { get; set; }
+
+    /// <summary>
+    /// Optional human-readable display label of the device. It is display metadata only; the
+    /// server-bound device identity always comes from the authenticated Device Token.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("device_name")]
+    [JsonConverter(typeof(CunningMinMaxLengthCheckConverter))]
+    public string? DeviceName { get; set; }
+
+    /// <summary>
+    /// UTC instant of the most recent acknowledged upload, if any.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("last_successful_upload_at")]
+    public string? LastSuccessfulUploadAt { get; set; }
+
+    /// <summary>
+    /// Capture instant of the oldest observation still waiting in the outbox, if any. How long
+    /// data has been stuck unuploaded.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("oldest_pending_at")]
+    public string? OldestPendingAt { get; set; }
+
+    /// <summary>
+    /// Outbox entries awaiting acknowledgement, including entries waiting for their next backoff
+    /// attempt. Permanent failures are counted separately.
+    /// </summary>
+    [JsonPropertyName("pending_count")]
+    public long PendingCount { get; set; }
+
+    /// <summary>
+    /// Entries in the local failure queue: permanently rejected events that are never retried
+    /// and stay visible for diagnosis.
+    /// </summary>
+    [JsonPropertyName("permanent_failure_count")]
+    public long PermanentFailureCount { get; set; }
+
+    /// <summary>
+    /// Collector platform the snapshot originates from.
+    /// </summary>
+    [JsonPropertyName("platform")]
+    public Platform Platform { get; set; }
+
+    /// <summary>
+    /// Most recent sync errors, newest first.
+    /// </summary>
+    [JsonPropertyName("recent_errors")]
+    public SyncDiagnosticError[] RecentErrors { get; set; }
+}
+
 public partial class UsageDayMetrics
 {
     [JsonPropertyName("active_minutes")]
@@ -1791,6 +1965,8 @@ public enum CredentialScope { EventsRead, EventsWrite, HealthRead, HealthWrite, 
 /// Collector platform the heartbeat originates from.
 ///
 /// Collector platform the device reported its events with.
+///
+/// Collector platform the snapshot originates from.
 /// </summary>
 public enum Platform { Android, Windows };
 
@@ -2945,6 +3121,60 @@ internal class ReclassificationTaskStatusStatusConverter : JsonConverter<Reclass
     }
 
     public static readonly ReclassificationTaskStatusStatusConverter Singleton = new ReclassificationTaskStatusStatusConverter();
+}
+
+internal class FriskyMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
+        if (value.Length <= 64)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length <= 64)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly FriskyMinMaxLengthCheckConverter Singleton = new FriskyMinMaxLengthCheckConverter();
+}
+
+internal class MischievousMinMaxLengthCheckConverter : JsonConverter<string>
+{
+    public override bool CanConvert(Type t) => t == typeof(string);
+
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString() ?? throw new JsonException("Expected a string.");
+        if (value.Length <= 300)
+        {
+            return value;
+        }
+        throw new Exception("Cannot unmarshal type string");
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (value.Length <= 300)
+        {
+            JsonSerializer.Serialize(writer, value, options);
+            return;
+        }
+        throw new Exception("Cannot marshal type string");
+    }
+
+    public static readonly MischievousMinMaxLengthCheckConverter Singleton = new MischievousMinMaxLengthCheckConverter();
 }
 
 public class DateOnlyConverter : JsonConverter<DateOnly>

@@ -65,6 +65,13 @@ public sealed partial class SqliteActivityRepository
                 install_guid TEXT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS sync_errors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                occurred_utc TEXT NOT NULL,
+                code TEXT NOT NULL,
+                message TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS classification_cache (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 rule_set_version INTEGER NOT NULL DEFAULT 0,

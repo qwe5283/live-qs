@@ -4,6 +4,7 @@ import com.ailife.android.generated.VersionedEvent
 import com.ailife.android.generated.EventBatchRequest
 import com.ailife.android.generated.EventBatchResponse
 import com.ailife.android.generated.HeartbeatRequest
+import com.ailife.android.generated.SyncDiagnosticsReport
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -70,6 +71,28 @@ class ReportClient(
                     return Result.failure(IOException("HTTP ${response.code}: $body"))
                 }
                 Result.success(json.decodeFromString<EventBatchResponse>(body))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Pushes the device sync-state snapshot. The snapshot is best-effort:
+     * the caller retries on the next sync cadence when this fails, so a plain
+     * 2xx is all the confirmation the reporter needs.
+     */
+    fun postSyncDiagnostics(report: SyncDiagnosticsReport): Result<Unit> {
+        val request = Request.Builder()
+            .url("${serverUrl.trimEnd('/')}/api/v1/diagnostics/sync")
+            .addHeader("Authorization", "Bearer $token")
+            .post(json.encodeToString(report).toRequestBody(jsonMediaType))
+            .build()
+
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) Result.success(Unit)
+                else Result.failure(IOException("HTTP ${response.code}: ${response.body?.string().orEmpty()}"))
             }
         } catch (e: Exception) {
             Result.failure(e)

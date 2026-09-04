@@ -10,6 +10,7 @@ import { classificationRouter } from "./modules/classification/routes.js";
 import { contextRouter, publicRouter } from "./modules/context/routes.js";
 import { correctionsRouter } from "./modules/corrections/routes.js";
 import { credentialsRouter } from "./modules/credentials/routes.js";
+import { diagnosticsRouter } from "./modules/diagnostics/routes.js";
 import { eventsRouter, healthEventsRouter, paymentEventsRouter } from "./modules/events/routes.js";
 import { healthRouter } from "./modules/health/routes.js";
 import { heartbeatsRouter } from "./modules/heartbeats/routes.js";
@@ -45,6 +46,7 @@ export function createApp(env: Env, clock: Clock = systemClock) {
   app.use("/api/v1/classification", classificationRouter(env));
   app.use("/api/v1/classification", reclassificationRouter(env));
   app.use("/api/v1", heartbeatsRouter(env, clock));
+  app.use("/api/v1", diagnosticsRouter(env, clock));
   app.use("/api/v1/health", healthEventsRouter(env));
   app.use("/api/v1/payment", paymentEventsRouter(env));
   app.use("/api/v1", ownerAuth());

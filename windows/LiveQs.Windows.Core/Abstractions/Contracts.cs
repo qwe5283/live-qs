@@ -29,6 +29,16 @@ public interface IHeartbeatClient
     Task SendAsync(HeartbeatState state, AppSettings settings, CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// Pushes the device's synchronization-state snapshot to the service on the
+/// sync cadence. Snapshots carry counts, timestamps, and stable-code errors
+/// only; a push failure never breaks the sync loop — the next cadence retries.
+/// </summary>
+public interface IDiagnosticsClient
+{
+    Task PushAsync(SyncDiagnosticsSnapshot snapshot, AppSettings settings, CancellationToken cancellationToken = default);
+}
+
 public interface IDatabaseInitializer
 {
     Task InitializeAsync(CancellationToken cancellationToken = default);
@@ -65,6 +75,17 @@ public interface ISyncQueueStore
     Task MarkSyncFailedAsync(IEnumerable<long> segmentIds, string error, DateTimeOffset nextAttemptAt, CancellationToken cancellationToken = default);
     Task MarkPermanentAsync(IEnumerable<long> segmentIds, string error, DateTimeOffset at, CancellationToken cancellationToken = default);
     Task<int> GetPendingSyncCountAsync(CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Queue-state overview for sync diagnostics: retryable outbox depth,
+    /// permanent failure count, the capture instant of the oldest waiting
+    /// observation, the most recent local collection instant, and the most
+    /// recent acknowledged upload.
+    /// </summary>
+    Task<Sync.SyncQueueOverview> GetSyncOverviewAsync(CancellationToken cancellationToken = default);
+    /// <summary>Appends one stable-code sync error to the local diagnostics ring buffer (newest kept, bounded).</summary>
+    Task RecordSyncErrorAsync(string code, string message, DateTimeOffset occurredAt, CancellationToken cancellationToken = default);
+    /// <summary>Reads the most recent sync errors, newest first.</summary>
+    Task<IReadOnlyList<Sync.SyncErrorEntry>> GetRecentSyncErrorsAsync(int limit, CancellationToken cancellationToken = default);
     /// <summary>Stable identity of the local database, used to derive event identifiers that never collide with a wiped store.</summary>
     Task<string> GetInstallIdAsync(CancellationToken cancellationToken = default);
     /// <summary>

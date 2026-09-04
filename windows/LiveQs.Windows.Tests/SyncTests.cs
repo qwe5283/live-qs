@@ -12,6 +12,24 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace LiveQs.Windows.Tests;
 
+/// <summary>Scripted ISyncClient: returns canned outcomes or throws, counting upload calls.</summary>
+internal sealed class StubSyncClient : ISyncClient
+{
+    public IReadOnlyList<SyncOutcome>? Outcomes { get; set; }
+    public Exception? Failure { get; set; }
+    public int CallCount { get; private set; }
+
+    public Task<IReadOnlyList<SyncOutcome>> UploadAsync(IReadOnlyList<SyncQueueItem> items, AppSettings settings, CancellationToken cancellationToken)
+    {
+        CallCount++;
+        if (Failure is not null) throw Failure;
+        return Task.FromResult(Outcomes ?? (IReadOnlyList<SyncOutcome>)Array.Empty<SyncOutcome>());
+    }
+
+    public Task<IReadOnlyList<SyncOutcome>> UploadReclassificationAsync(IReadOnlyList<ReclassificationDecision> decisions, AppSettings settings, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("Reclassification is not exercised by the outbox tests.");
+}
+
 public sealed class SyncTests : IDisposable
 {
     private readonly TestPaths _paths = new();
@@ -207,7 +225,7 @@ public sealed class SyncTests : IDisposable
     }
 
     private static SyncWorker CreateWorker(SqliteActivityRepository repository, StubSyncClient client, SyncStatusService statusService) =>
-        new(repository, repository, client, statusService, new NoopRuleSync(repository), TimeProvider.System, NullLogger<SyncWorker>.Instance);
+        new(repository, repository, client, statusService, new NoopRuleSync(repository), new StubDiagnosticsClient(), TimeProvider.System, NullLogger<SyncWorker>.Instance);
 
     /// <summary>Refresh stub: the worker's rule refresh never interferes with outbox assertions.</summary>
     private sealed class NoopRuleSync(SqliteActivityRepository repository) : IClassificationRuleSync
@@ -272,22 +290,5 @@ public sealed class SyncTests : IDisposable
         public string DataDirectory { get; }
         public string DatabasePath => Path.Combine(DataDirectory, "test.db");
         public string LogPath => Path.Combine(DataDirectory, "test.log");
-    }
-
-    private sealed class StubSyncClient : ISyncClient
-    {
-        public IReadOnlyList<SyncOutcome>? Outcomes { get; set; }
-        public Exception? Failure { get; set; }
-        public int CallCount { get; private set; }
-
-        public Task<IReadOnlyList<SyncOutcome>> UploadAsync(IReadOnlyList<SyncQueueItem> items, AppSettings settings, CancellationToken cancellationToken)
-        {
-            CallCount++;
-            if (Failure is not null) throw Failure;
-            return Task.FromResult(Outcomes ?? (IReadOnlyList<SyncOutcome>)Array.Empty<SyncOutcome>());
-        }
-
-        public Task<IReadOnlyList<SyncOutcome>> UploadReclassificationAsync(IReadOnlyList<ReclassificationDecision> decisions, AppSettings settings, CancellationToken cancellationToken) =>
-            throw new NotSupportedException("Reclassification is not exercised by the outbox tests.");
     }
 }

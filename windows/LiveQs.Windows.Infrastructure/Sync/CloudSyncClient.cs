@@ -151,12 +151,15 @@ public sealed class CloudSyncClient(
         // entry may be removed.
         Core.Contracts.EventAcknowledgementStatus.Accepted or Core.Contracts.EventAcknowledgementStatus.Duplicate or Core.Contracts.EventAcknowledgementStatus.StaleRevision
             => new SyncOutcome(item, SyncOutcomeKind.Acknowledged, null, acknowledgement.Status),
-        _ => new SyncOutcome(item, SyncOutcomeKind.Rejected, DescribeError(acknowledgement), acknowledgement.Status),
+        _ => new SyncOutcome(item, SyncOutcomeKind.Rejected, DescribeError(acknowledgement), acknowledgement.Status, StableErrorCode(acknowledgement)),
     };
 
     private static string DescribeError(Core.Contracts.EventAcknowledgement acknowledgement) => acknowledgement.Error is { } error
         ? $"{error.Code}: {error.Message}"
         : "rejected";
+
+    private static string StableErrorCode(Core.Contracts.EventAcknowledgement acknowledgement) =>
+        acknowledgement.Error is { } error ? error.Code : "rejected";
 
     internal static Core.Contracts.VersionedEvent ToEnvelope(
         SyncQueueItem item,

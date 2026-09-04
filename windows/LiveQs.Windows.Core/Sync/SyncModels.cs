@@ -41,13 +41,16 @@ public enum SyncOutcomeKind
 /// the contract-level answer (accepted, duplicate, stale_revision, rejected)
 /// even within the coarse <see cref="SyncOutcomeKind.Acknowledged"/> bucket,
 /// so reclassification can tell a settled revision from a yield to a manual
-/// Owner correction.
+/// Owner correction. <see cref="ErrorCode"/> carries the stable error code of
+/// a permanent rejection (for example invalid_event or insufficient_scope) so
+/// diagnostics never depend on parsing free-form text.
 /// </summary>
 public sealed record SyncOutcome(
     SyncQueueItem Item,
     SyncOutcomeKind Kind,
     string? Error,
-    Contracts.EventAcknowledgementStatus Status = Contracts.EventAcknowledgementStatus.Accepted);
+    Contracts.EventAcknowledgementStatus Status = Contracts.EventAcknowledgementStatus.Accepted,
+    string? ErrorCode = null);
 
 public sealed record SyncStatus(
     bool Enabled,
@@ -58,3 +61,27 @@ public sealed record SyncStatus(
 {
     public static SyncStatus Disabled { get; } = new(false, false, 0, null, "");
 }
+
+/// <summary>One recent sync error as it is shown in diagnostics: a stable code and a safe summary.</summary>
+public sealed record SyncErrorEntry(string Code, string Message, DateTimeOffset OccurredAt);
+
+/// <summary>
+/// The device's synchronization-state snapshot pushed to the service on the
+/// sync cadence: counts, timestamps, and stable-code errors only — no raw
+/// window titles, executable paths, or tokens ever travel in a snapshot.
+/// </summary>
+public sealed record SyncDiagnosticsSnapshot(
+    DateTimeOffset? CollectedAt,
+    DateTimeOffset? LastSuccessfulUploadAt,
+    DateTimeOffset? OldestPendingAt,
+    int PendingCount,
+    int PermanentFailureCount,
+    IReadOnlyList<SyncErrorEntry> RecentErrors);
+
+/// <summary>Queue-state facts the sync worker reads from local storage to build a diagnostics snapshot.</summary>
+public sealed record SyncQueueOverview(
+    int PendingCount,
+    int PermanentFailureCount,
+    DateTimeOffset? OldestPendingAt,
+    DateTimeOffset? LastCollectionAt,
+    DateTimeOffset? LastSuccessfulUploadAt);

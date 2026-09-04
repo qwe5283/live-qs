@@ -166,6 +166,18 @@ data class ProtocolModels(
     @SerialName("SourcePolicyUpdateRequest")
     val sourcePolicyUpdateRequest: SourcePolicyUpdateRequest,
 
+    @SerialName("SyncDiagnostic")
+    val syncDiagnostic: SyncDiagnostic,
+
+    @SerialName("SyncDiagnosticError")
+    val syncDiagnosticError: SyncDiagnosticError,
+
+    @SerialName("SyncDiagnosticList")
+    val syncDiagnosticList: SyncDiagnosticList,
+
+    @SerialName("SyncDiagnosticsReport")
+    val syncDiagnosticsReport: SyncDiagnosticsReport,
+
     @SerialName("UsageDayMetrics")
     val usageDayMetrics: UsageDayMetrics,
 
@@ -616,6 +628,8 @@ data class HeartbeatActivity(
  * Collector platform the heartbeat originates from.
  *
  * Collector platform the device reported its events with.
+ *
+ * Collector platform the snapshot originates from.
  */
 @Serializable
 enum class Platform(val value: String) {
@@ -1584,6 +1598,155 @@ data class SourcePolicyUpdateRequest(
      * policy change only rebuilds derived results and never modifies raw observations.
      */
     val entries: List<SourcePolicyEntry>
+)
+
+@Serializable
+data class SyncDiagnostic(
+    /**
+     * Seconds elapsed since the latest snapshot was received. During an outage no fresh
+     * snapshot can arrive, so this age together with the heartbeat online flag distinguishes a
+     * stale view from a live one.
+     */
+    @SerialName("age_seconds")
+    val ageSeconds: Long,
+
+    @SerialName("collected_at")
+    val collectedAt: String? = null,
+
+    /**
+     * Server-bound device identity: the identifier of the Device Token credential that pushed
+     * the snapshot.
+     */
+    @SerialName("device_id")
+    val deviceId: String,
+
+    /**
+     * Last reported display label, or null when the collector sent none.
+     */
+    @SerialName("device_name")
+    val deviceName: String? = null,
+
+    @SerialName("last_successful_upload_at")
+    val lastSuccessfulUploadAt: String? = null,
+
+    @SerialName("oldest_pending_at")
+    val oldestPendingAt: String? = null,
+
+    @SerialName("pending_count")
+    val pendingCount: Long,
+
+    @SerialName("permanent_failure_count")
+    val permanentFailureCount: Long,
+
+    val platform: Platform,
+
+    @SerialName("recent_errors")
+    val recentErrors: List<SyncDiagnosticError>,
+
+    /**
+     * Server receive instant of the latest snapshot.
+     */
+    @SerialName("reported_at")
+    val reportedAt: String
+)
+
+@Serializable
+data class SyncDiagnosticError(
+    /**
+     * Stable error code: the server's per-item rejection code for permanent failures (such as
+     * invalid_event or insufficient_scope), or a client-side transport code (such as
+     * network_error, request_timeout, or server_error) for transient failures.
+     */
+    val code: String,
+
+    /**
+     * Safe, bounded human-readable summary. Contract-level server validation text is safe to
+     * relay; exception text that could embed local content must be replaced by a fixed summary
+     * for its code.
+     */
+    val message: String,
+
+    /**
+     * UTC instant at which the error was observed.
+     */
+    @SerialName("occurred_at")
+    val occurredAt: String
+)
+
+@Serializable
+data class SyncDiagnosticList(
+    /**
+     * One independent entry per device that has pushed a snapshot.
+     */
+    val devices: List<SyncDiagnostic>,
+
+    /**
+     * UTC instant at which the ages were computed.
+     */
+    @SerialName("server_time")
+    val serverTime: String
+)
+
+/**
+ * Compact synchronization-state snapshot pushed by a collector on its sync cadence. Counts,
+ * codes, and timestamps only; the bounded `message` of an error entry must be a safe
+ * summary — never a token, a raw window title, an executable path, or notification text.
+ */
+@Serializable
+data class SyncDiagnosticsReport(
+    /**
+     * UTC capture instant of the most recent local observation the collector still holds.
+     * Omitted when it has not collected anything yet. A fresh value with a zero pending count
+     * means the device collected and delivered; a fresh value with a growing pending count
+     * means collection works but delivery lags.
+     */
+    @SerialName("collected_at")
+    val collectedAt: String? = null,
+
+    /**
+     * Optional human-readable display label of the device. It is display metadata only; the
+     * server-bound device identity always comes from the authenticated Device Token.
+     */
+    @SerialName("device_name")
+    val deviceName: String? = null,
+
+    /**
+     * UTC instant of the most recent acknowledged upload, if any.
+     */
+    @SerialName("last_successful_upload_at")
+    val lastSuccessfulUploadAt: String? = null,
+
+    /**
+     * Capture instant of the oldest observation still waiting in the outbox, if any. How long
+     * data has been stuck unuploaded.
+     */
+    @SerialName("oldest_pending_at")
+    val oldestPendingAt: String? = null,
+
+    /**
+     * Outbox entries awaiting acknowledgement, including entries waiting for their next backoff
+     * attempt. Permanent failures are counted separately.
+     */
+    @SerialName("pending_count")
+    val pendingCount: Long,
+
+    /**
+     * Entries in the local failure queue: permanently rejected events that are never retried
+     * and stay visible for diagnosis.
+     */
+    @SerialName("permanent_failure_count")
+    val permanentFailureCount: Long,
+
+    /**
+     * Collector platform the snapshot originates from.
+     */
+    val platform: Platform,
+
+    /**
+     * Most recent sync errors, newest first.
+     */
+    @SerialName("recent_errors")
+    val recentErrors: List<SyncDiagnosticError>
 )
 
 @Serializable

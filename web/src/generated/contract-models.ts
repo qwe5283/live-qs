@@ -53,6 +53,10 @@ export interface ProtocolModels {
   SourcePolicyEntry: SourcePolicyEntry;
   SourcePolicyImpact: SourcePolicyImpact;
   SourcePolicyUpdateRequest: SourcePolicyUpdateRequest;
+  SyncDiagnostic: SyncDiagnostic;
+  SyncDiagnosticError: SyncDiagnosticError;
+  SyncDiagnosticList: SyncDiagnosticList;
+  SyncDiagnosticsReport: SyncDiagnosticsReport;
   UsageDayMetrics: UsageDayMetrics;
   UsageDayReport: UsageDayReport;
   UsageDeviceMetrics: UsageDeviceMetrics;
@@ -383,6 +387,8 @@ export interface HeartbeatActivity {
  * Collector platform the heartbeat originates from.
  *
  * Collector platform the device reported its events with.
+ *
+ * Collector platform the snapshot originates from.
  */
 export type Platform = "windows" | "android";
 
@@ -1102,6 +1108,112 @@ export interface SourcePolicyUpdateRequest {
    * policy change only rebuilds derived results and never modifies raw observations.
    */
   entries: SourcePolicyEntry[];
+}
+
+export interface SyncDiagnostic {
+  /**
+   * Seconds elapsed since the latest snapshot was received. During an outage no fresh
+   * snapshot can arrive, so this age together with the heartbeat online flag distinguishes a
+   * stale view from a live one.
+   */
+  age_seconds: number;
+  collected_at: null | string;
+  /**
+   * Server-bound device identity: the identifier of the Device Token credential that pushed
+   * the snapshot.
+   */
+  device_id: string;
+  /**
+   * Last reported display label, or null when the collector sent none.
+   */
+  device_name?: null | string;
+  last_successful_upload_at?: null | string;
+  oldest_pending_at?: null | string;
+  pending_count: number;
+  permanent_failure_count: number;
+  platform: Platform;
+  recent_errors: SyncDiagnosticError[];
+  /**
+   * Server receive instant of the latest snapshot.
+   */
+  reported_at: string;
+}
+
+export interface SyncDiagnosticError {
+  /**
+   * Stable error code: the server's per-item rejection code for permanent failures (such as
+   * invalid_event or insufficient_scope), or a client-side transport code (such as
+   * network_error, request_timeout, or server_error) for transient failures.
+   */
+  code: string;
+  /**
+   * Safe, bounded human-readable summary. Contract-level server validation text is safe to
+   * relay; exception text that could embed local content must be replaced by a fixed summary
+   * for its code.
+   */
+  message: string;
+  /**
+   * UTC instant at which the error was observed.
+   */
+  occurred_at: string;
+}
+
+export interface SyncDiagnosticList {
+  /**
+   * One independent entry per device that has pushed a snapshot.
+   */
+  devices: SyncDiagnostic[];
+  /**
+   * UTC instant at which the ages were computed.
+   */
+  server_time: string;
+}
+
+/**
+ * Compact synchronization-state snapshot pushed by a collector on its sync cadence. Counts,
+ * codes, and timestamps only; the bounded `message` of an error entry must be a safe
+ * summary — never a token, a raw window title, an executable path, or notification text.
+ */
+export interface SyncDiagnosticsReport {
+  /**
+   * UTC capture instant of the most recent local observation the collector still holds.
+   * Omitted when it has not collected anything yet. A fresh value with a zero pending count
+   * means the device collected and delivered; a fresh value with a growing pending count
+   * means collection works but delivery lags.
+   */
+  collected_at?: string;
+  /**
+   * Optional human-readable display label of the device. It is display metadata only; the
+   * server-bound device identity always comes from the authenticated Device Token.
+   */
+  device_name?: string;
+  /**
+   * UTC instant of the most recent acknowledged upload, if any.
+   */
+  last_successful_upload_at?: string;
+  /**
+   * Capture instant of the oldest observation still waiting in the outbox, if any. How long
+   * data has been stuck unuploaded.
+   */
+  oldest_pending_at?: string;
+  /**
+   * Outbox entries awaiting acknowledgement, including entries waiting for their next backoff
+   * attempt. Permanent failures are counted separately.
+   */
+  pending_count: number;
+  /**
+   * Entries in the local failure queue: permanently rejected events that are never retried
+   * and stay visible for diagnosis.
+   */
+  permanent_failure_count: number;
+  /**
+   * Collector platform the snapshot originates from.
+   */
+  platform: Platform;
+  /**
+   * Most recent sync errors, newest first.
+   */
+  recent_errors: SyncDiagnosticError[];
 }
 
 export interface UsageDayMetrics {
