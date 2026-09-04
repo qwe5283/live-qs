@@ -8,18 +8,10 @@ COPY npm-ca/ /tmp/npm-ca/
 RUN touch /etc/npm-extra-ca.pem && cat /tmp/npm-ca/*.pem >> /etc/npm-extra-ca.pem 2>/dev/null || true
 ENV NODE_EXTRA_CA_CERTS=/etc/npm-extra-ca.pem
 RUN npm ci --no-audit --no-fund
-COPY tsconfig.json ./
-COPY src ./src
+COPY . .
 RUN npm run build
 
-FROM node:22-alpine
-ENV NODE_ENV=production
-WORKDIR /app
-COPY package*.json ./
-COPY npm-ca/ /tmp/npm-ca/
-RUN touch /etc/npm-extra-ca.pem && cat /tmp/npm-ca/*.pem >> /etc/npm-extra-ca.pem 2>/dev/null || true
-ENV NODE_EXTRA_CA_CERTS=/etc/npm-extra-ca.pem
-RUN npm ci --omit=dev --no-audit --no-fund
-COPY --from=build /app/dist ./dist
-EXPOSE 8787
-CMD ["node", "dist/src/main.js"]
+FROM nginx:1.27-alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 8080
