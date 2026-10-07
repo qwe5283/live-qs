@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 
-## Problem Statement
+## 问题陈述
 
 用户希望持续追踪自己在 Windows 和 Android 设备上的当前及历史活动，包括前台应用、屏幕使用、健康指标和消费记录，并通过 WebUI 查看跨设备时间线与摘要，也允许只读 AI Agent 基于这些数据提供有证据的分析和建议。
 
@@ -10,7 +10,7 @@ Status: ready-for-agent
 
 V1 需要先证明一条可靠的纵向链路：真实设备能够连续采集，离线时安全排队，恢复联网后无丢失、无重复地上传，Owner 能在 WebUI 查看和修正跨设备事实，并让受限 AI Agent 只读查询。V1 不追求完整推断、公开分享或公网生产化。
 
-## Solution
+## 解决方案
 
 构建一个单一数据所有者、服务端权威、客户端本地采集的量化自我平台。Windows 和 Android 保留已经验证的平台采集与生命周期代码，但统一迁移到全新的版本化事件协议。Express 服务通过 MongoDB 保存跨设备权威事件，严格执行 OpenAPI 3.1 和 JSON Schema 契约，并提供当前状态、时间线、摘要、诊断、分类、修正和凭据管理能力。
 
@@ -20,149 +20,149 @@ Owner 使用纯密码登录 WebUI，并通过安全 Session 管理 Device Token 
 
 V1 在可信局域网内运行，以真实 HTTP API 加真实 MongoDB 为主要自动化测试边界，并通过真实设备冒烟和连续七天验收验证采集可靠性。
 
-## User Stories
+## 用户故事
 
-1. As the Owner, I want to initialize the system with a password, so that I can control access without managing an unnecessary username.
-2. As the Owner, I want to log in through the WebUI, so that I can access all authorized personal data and management functions.
-3. As the Owner, I want my browser session to be revocable, so that a lost or shared browser does not retain permanent access.
-4. As the Owner, I want to create a separately named Device Token for each collector, so that one compromised device can be revoked without interrupting others.
-5. As the Owner, I want a Device Token to upload only its permitted event types, so that a collector cannot query or administer my data.
-6. As the Owner, I want to create time-limited Query Tokens with explicit scopes, so that AI Agents receive only the data required for a task.
-7. As the Owner, I want to see each credential's scopes, expiry, last use, and revocation state, so that I can understand and control access.
-8. As the Owner, I want credential plaintext displayed only once when created, so that long-lived secrets are not recoverable from the database or UI.
-9. As the Owner, I want to revoke any device, query, or browser credential immediately, so that access ends without rotating unrelated credentials.
-10. As the Owner, I want all credential use and management actions audited, so that I can investigate unexpected access.
-11. As the Owner, I want to see all online devices and their latest current activity, so that I know what the system presently observes.
-12. As the Owner, I want stale devices to become offline automatically, so that an old heartbeat is never presented as current truth.
-13. As the Owner, I want concurrent device states shown independently, so that the system does not invent a single attention focus.
-14. As the Owner, I want a cross-device historical timeline with separate device lanes, so that simultaneous activities remain visible.
-15. As the Owner, I want device usage minutes to sum every device's activity, so that I can measure total device consumption.
-16. As the Owner, I want de-duplicated active minutes to union overlapping intervals, so that I can measure elapsed active time without double counting.
-17. As the Owner, I want every metric clearly labelled as device time or de-duplicated time, so that I do not misinterpret totals.
-18. As the Owner, I want Windows foreground activity and AFK intervals collected locally, so that application use remains available during server outages.
-19. As the Owner, I want Android foreground context and UsageStats collected for different purposes, so that realtime context does not duplicate authoritative daily usage.
-20. As the Owner, I want Health Connect steps, heart rate, and sleep intervals ingested with their source metadata, so that health summaries remain traceable.
-21. As the Owner, I want payment notifications converted into structured transaction events, so that I can review spending without storing notification bodies.
-22. As the Owner, I want unparseable or rejected observations placed in a visible failure queue, so that collection failures are never silently discarded.
-23. As the Owner, I want clients to retain pending events through disconnection and process restart, so that intermittent connectivity does not lose history.
-24. As the Owner, I want repeated uploads of the same event to remain one logical fact, so that retrying cannot inflate reports.
-25. As the Owner, I want older revisions rejected after a newer revision is accepted, so that delayed messages cannot overwrite current truth.
-26. As the Owner, I want partial batch success acknowledged per event, so that valid events progress while invalid events can be diagnosed separately.
-27. As the Owner, I want the WebUI to show last collection, last upload, queue depth, and recent sync errors per device, so that I can distinguish missing activity from a broken collector.
-28. As the Owner, I want browser and IDE titles classified locally into stable services or projects, so that meaningful activities can be compared across platforms without uploading raw titles.
-29. As the Owner, I want Edge activity containing a Bilibili rule to share a semantic subject with the Android Bilibili package, so that cross-platform media use can be aggregated.
-30. As the Owner, I want Rider activity classified by an approved project alias, so that work time can be separated by project.
-31. As the Owner, I want to manage a central semantic dictionary and versioned classification rules in the WebUI, so that devices use consistent categories.
-32. As the Owner, I want clients to cache and execute applicable rules locally, so that classification continues offline without revealing raw titles.
-33. As the Owner, I want each classification to expose its rule, version, and confidence, so that results are explainable and correctable.
-34. As the Owner, I want rule changes to affect future observations by default, so that historical reports do not change unexpectedly.
-35. As the Owner, I want to explicitly request historical reclassification within available local retention, so that improved rules can correct past summaries under my control.
-36. As the Owner, I want new automatically discovered project names represented by opaque identifiers until I approve an alias, so that sensitive names are not uploaded accidentally.
-37. As the Owner, I want `private` observations blocked from upload on the client, so that privacy is enforced before data reaches the network.
-38. As the Owner, I want raw window titles, executable paths, and notification text to remain local, so that the service stores only analysis-relevant structured data.
-39. As the Owner, I want to correct merchant, category, project, or other interpretations without destroying the collected fact, so that reports improve while provenance remains intact.
-40. As the Owner, I want to mark a false observation invalid without immediately erasing it, so that it stops affecting reports but remains auditable.
-41. As the Owner, I want affected summaries rebuilt after a correction or reclassification, so that all views agree on the latest valid revision.
-42. As the Owner, I want every corrected result to indicate automatic or manual provenance, so that I can assess its trustworthiness.
-43. As the Owner, I want all source observations retained when multiple collectors observe the same phenomenon, so that automatic de-duplication cannot silently delete evidence.
-44. As the Owner, I want an explicit, versioned source-priority policy for each metric, so that normalized statistics have deterministic authority.
-45. As the Owner, I want source conflicts and coverage gaps shown in the WebUI, so that a selected value is not presented without qualification.
-46. As the Owner, I want event facts stored as UTC instants with capture timezone context, so that travel and daylight-saving changes do not corrupt history.
-47. As the Owner, I want one configured report timezone to define day and week boundaries, so that reports remain stable across browsers and devices.
-48. As the Owner, I want changing my report timezone to rebuild derived summaries without rewriting original events, so that the same facts can be viewed under a different calendar.
-49. As the Owner, I want source-provided sleep intervals displayed as observations, so that the system does not pretend to medically infer sleep.
-50. As the Owner, I want focus shown only when produced by an explicit user rule, so that a software label is not confused with a psychological state.
-51. As the Owner, I want usage, health, and spending summaries to include source coverage and missing-data information, so that I can interpret them responsibly.
-52. As an AI Agent, I want a scoped, documented read API for current context, timelines, summaries, and coverage, so that I can provide evidence-based analysis.
-53. As an AI Agent, I want every response to identify time range, timezone, provenance, and completeness, so that I do not present partial data as certain.
-54. As an AI Agent, I want no mutation or execution endpoints available to my credential, so that analysis cannot alter the Owner's records or settings.
-55. As the Owner, I want AI recommendations separated from system actions, so that no suggestion is executed without a future explicit approval flow.
-56. As a developer, I want OpenAPI and versioned JSON Schema to be the only protocol authority, so that TypeScript, Kotlin, C#, and Web models cannot drift independently.
-57. As a developer, I want valid and invalid examples for each event type, so that collectors and the service agree on time, units, privacy, and required fields.
-58. As a developer, I want breaking contract changes to create a new version, so that historical data remains interpretable.
-59. As a developer, I want all components in one Monorepo with independent component versions, so that cross-platform changes are atomic without coupling release cadence.
-60. As a developer, I want component-specific release tags and update manifests, so that Windows and Android can discover only their applicable releases.
-61. As a developer, I want to retain proven Windows and Android platform adapters, so that protocol work does not reopen solved operating-system integration risks.
-62. As a developer, I want legacy API compatibility removed, so that the new model is not constrained by deprecated routes or payloads.
-63. As a developer, I want automated tests to enter through the real HTTP boundary and real MongoDB, so that they verify behavior instead of implementation calls.
-64. As a developer, I want sanitized real event shapes used as golden fixtures, so that deterministic tests remain representative of actual collectors.
-65. As the Owner, I want the complete system to run for seven days without manual collector restart, so that V1 demonstrates practical reliability.
-66. As the Owner, I want a 24-hour simulated outage to recover every queued event, so that the offline-first claim is verified.
-67. As the Owner, I want observable latency, accuracy, CPU, and battery results recorded during acceptance, so that V1 quality is evaluated against agreed evidence.
+1. 作为 Owner，我希望通过密码初始化系统，从而无需管理多余的用户名就能控制访问。
+2. 作为 Owner，我希望通过 WebUI 登录，从而访问所有已授权的个人数据和管理功能。
+3. 作为 Owner，我希望浏览器会话可以被吊销，这样丢失或共享的浏览器就不会永久保留访问权限。
+4. 作为 Owner，我希望为每个采集器创建单独命名的 Device Token，这样某台设备失陷时可以单独吊销而不影响其他设备。
+5. 作为 Owner，我希望 Device Token 只能上传其被允许的事件类型，这样采集器无法查询或管理我的数据。
+6. 作为 Owner，我希望创建带明确 scopes、有时限的 Query Token，这样 AI Agent 只能获得某个任务所需的数据。
+7. 作为 Owner，我希望查看每个凭据的 scopes、有效期、最后使用时间和吊销状态，从而理解并控制访问。
+8. 作为 Owner，我希望凭据明文只在创建时显示一次，这样长期有效的密钥无法从数据库或 UI 中找回。
+9. 作为 Owner，我希望可以立即吊销任何设备、查询或浏览器凭据，从而无需轮换无关凭据即可终止访问。
+10. 作为 Owner，我希望所有凭据使用和管理操作都被审计，这样我可以排查异常访问。
+11. 作为 Owner，我希望看到所有在线设备及其最新的当前活动，从而了解系统当前观测到了什么。
+12. 作为 Owner，我希望心跳过期的设备自动变为离线，这样过期的心跳永远不会被当作当前事实呈现。
+13. 作为 Owner，我希望并发的设备状态独立展示，这样系统不会虚构出一个单一的注意力焦点。
+14. 作为 Owner，我希望跨设备历史时间线带有独立的设备泳道，这样并行的活动始终可见。
+15. 作为 Owner，我希望设备使用分钟数汇总所有设备的活动，从而衡量设备使用的总量。
+16. 作为 Owner，我希望去重后的活跃分钟数对重叠区间取并集，从而在不重复计数的情况下衡量实际活跃时长。
+17. 作为 Owner，我希望每个指标都明确标注是设备时长还是去重时长，从而不会误解总数。
+18. 作为 Owner，我希望 Windows 前台活动和 AFK 区间在本地采集，这样服务器中断期间应用使用数据仍然可用。
+19. 作为 Owner，我希望 Android 前台上下文和 UsageStats 为不同目的分别采集，这样实时上下文不会与权威的每日使用统计重复。
+20. 作为 Owner，我希望 Health Connect 的步数、心率和睡眠区间连同其来源元数据一起采集，这样健康摘要始终可追溯。
+21. 作为 Owner，我希望支付通知被转换为结构化的交易事件，这样无需存储通知正文即可回顾消费。
+22. 作为 Owner，我希望无法解析或被拒绝的观测进入可见的失败队列，这样采集失败永远不会被静默丢弃。
+23. 作为 Owner，我希望客户端在断网和进程重启后仍保留待发事件，这样间歇性联网不会丢失历史。
+24. 作为 Owner，我希望同一事件的重复上传仍对应同一条逻辑事实，这样重试不会夸大报表。
+25. 作为 Owner，我希望在较新的 revision 被接受之后拒绝较旧的 revision，这样延迟的消息无法覆盖当前事实。
+26. 作为 Owner，我希望批量上传的部分成功按事件逐一确认，这样有效事件继续推进，无效事件可以单独诊断。
+27. 作为 Owner，我希望 WebUI 按设备显示最近采集时间、最近上传时间、队列深度和近期同步错误，这样我能区分“没有活动”和“采集器故障”。
+28. 作为 Owner，我希望浏览器和 IDE 标题在本地分类为稳定的服务或项目，这样有意义的活动可以跨平台比较，而无需上传原始标题。
+29. 作为 Owner，我希望匹配到 Bilibili 规则的 Edge 活动与 Android 的 Bilibili 包共享同一个语义主体，这样跨平台的媒体使用可以被聚合。
+30. 作为 Owner，我希望 Rider 活动通过已批准的项目别名分类，这样工作时间可以按项目拆分。
+31. 作为 Owner，我希望在 WebUI 中管理中央语义字典和版本化分类规则，这样各设备使用一致的分类。
+32. 作为 Owner，我希望客户端在本地缓存并执行适用的规则，这样离线时分类仍可继续，且不暴露原始标题。
+33. 作为 Owner，我希望每次分类都暴露其规则、版本和置信度，这样结果可解释、可纠正。
+34. 作为 Owner，我希望规则变更默认只影响未来的观测，这样历史报表不会意外变化。
+35. 作为 Owner，我希望在本地保留范围内显式请求历史重分类，这样改进后的规则可以在我的控制下修正过去的摘要。
+36. 作为 Owner，我希望自动发现的新项目名在我批准别名之前用不透明标识符表示，这样敏感名称不会被意外上传。
+37. 作为 Owner，我希望 `private` 观测在客户端就被阻止上传，这样隐私在数据到达网络之前就得到强制保护。
+38. 作为 Owner，我希望原始窗口标题、可执行文件路径和通知文本保留在本地，这样服务端只存储与分析相关的结构化数据。
+39. 作为 Owner，我希望在不破坏已采集事实的前提下修正商户、类别、项目或其他解释，这样报表不断改善而来源信息保持完整。
+40. 作为 Owner，我希望将错误的观测标记为无效而不立即删除，这样它不再影响报表，但仍可审计。
+41. 作为 Owner，我希望修正或重分类后重建受影响的摘要，这样所有视图对最新有效 revision 达成一致。
+42. 作为 Owner，我希望每个修正结果都标明是自动还是手动来源，这样我可以评估其可信度。
+43. 作为 Owner，我希望多个采集器观测同一现象时保留所有来源的观测，这样自动去重不会静默删除证据。
+44. 作为 Owner，我希望每个指标都有显式、版本化的来源优先级策略，这样归一化统计具有确定性的权威来源。
+45. 作为 Owner，我希望来源冲突和覆盖缺口在 WebUI 中展示，这样被选中的值不会不加说明地直接呈现。
+46. 作为 Owner，我希望事件事实以 UTC 时刻存储并附带采集时区上下文，这样旅行和夏令时切换不会破坏历史。
+47. 作为 Owner，我希望由一个配置的报告时区定义日和周的边界，这样报表在不同浏览器和设备间保持稳定。
+48. 作为 Owner，我希望更改报告时区时重建派生摘要而不重写原始事件，这样同一批事实可以在不同日历下查看。
+49. 作为 Owner，我希望来源提供的睡眠区间作为观测展示，这样系统不会伪装成在医学上推断睡眠。
+50. 作为 Owner，我希望“专注”只在由显式用户规则产生时展示，这样软件标签不会被误当成心理状态。
+51. 作为 Owner，我希望使用、健康和消费摘要包含来源覆盖与缺失数据信息，这样我可以负责任地解读它们。
+52. 作为 AI Agent，我希望有一个范围受限、文档完善的只读 API 来获取当前上下文、时间线、摘要和覆盖情况，这样我可以提供基于证据的分析。
+53. 作为 AI Agent，我希望每个响应都标明时间范围、时区、来源和完整性，这样我不会把部分数据当作确定结论呈现。
+54. 作为 AI Agent，我希望我的凭据无法访问任何修改或执行端点，这样分析不可能改动 Owner 的记录或设置。
+55. 作为 Owner，我希望 AI 建议与系统操作分离，这样任何建议都不会在未经未来显式批准流程的情况下被执行。
+56. 作为开发者，我希望 OpenAPI 和版本化 JSON Schema 是唯一的协议权威，这样 TypeScript、Kotlin、C# 和 Web 模型不会各自漂移。
+57. 作为开发者，我希望每种事件类型都有有效和无效示例，这样采集器和服务端在时间、单位、隐私和必填字段上达成一致。
+58. 作为开发者，我希望破坏性契约变更创建新版本，这样历史数据保持可解读。
+59. 作为开发者，我希望所有组件放在一个 Monorepo 中且组件版本相互独立，这样跨平台变更可以原子化，而不绑定发布节奏。
+60. 作为开发者，我希望有组件专属的发布标签和更新清单，这样 Windows 和 Android 只会发现适用于自己的发布版本。
+61. 作为开发者，我希望保留经过验证的 Windows 和 Android 平台适配器，这样协议工作不会重新引入已经解决的操作系统集成风险。
+62. 作为开发者，我希望移除旧 API 兼容，这样新模型不受已废弃路由或载荷的约束。
+63. 作为开发者，我希望自动化测试从真实 HTTP 边界和真实 MongoDB 进入，这样它们验证的是行为而不是实现调用。
+64. 作为开发者，我希望以脱敏后的真实事件形态作为黄金基准样本（golden fixtures），这样确定性测试仍能代表真实采集器。
+65. 作为 Owner，我希望整个系统连续运行七天而无需手动重启采集器，这样 V1 能证明实际可靠性。
+66. 作为 Owner，我希望一次 24 小时的模拟断网能恢复所有排队事件，这样“离线优先”的主张得到验证。
+67. 作为 Owner，我希望验收期间记录可观测的延迟、准确性、CPU 和电池结果，这样 V1 质量基于约定的证据进行评估。
 
-## Implementation Decisions
+## 实现决策
 
-1. **Product boundary:** V1 has one Owner and no registration or multi-tenant product behavior. Other humans do not receive accounts in V1. Full sharing-link UX is deferred.
-2. **Deployment boundary:** V1 runs on a trusted LAN and listens on the configured wildcard host. Dual-stack listening should be used where the operating system supports it. Firewall rules restrict access to trusted networks, and CORS uses an explicit origin allowlist. Public VPS deployment is a later security gate.
-3. **Owner authentication:** The Owner uses a password with an implicit fixed identity. Passwords are stored with a memory-hard hash. Successful login produces a revocable, server-managed session in an HttpOnly, SameSite cookie. Production deployment additionally requires Secure cookies and HTTPS.
-4. **Credential model:** Device, query, and optional management credentials are separate actor types. Authorization is expressed with capabilities rather than a simple linear access level: actor type, scopes, maximum privacy level, permitted event types, expiry, and revocation. The server stores only token hashes and displays plaintext once. Normal Web administration uses the Owner Session, not a long-lived management token.
-5. **Repository model:** The project becomes one Monorepo containing contracts, server, Web, Windows, and Android. Components keep independent semantic versions and component-prefixed release tags. Path-aware CI builds only affected components. Release assets may remain on GitHub Releases; platform-specific update manifests avoid the ambiguous repository-wide “latest release” endpoint.
-6. **Contract authority:** OpenAPI 3.1 defines HTTP routes, authentication, errors, and response models. Versioned JSON Schema defines event envelopes and payloads. These language-neutral contracts are authoritative; runtime validation and generated or contract-checked client models derive from them.
-7. **Protocol compatibility:** The new API uses a clean version boundary and has no obligation to preserve deprecated API routes, response shapes, tokens, or test data. All active clients migrate together. The deprecated server remains reference material only.
-8. **Event envelope:** Every analyzable event contains a stable globally unique event identifier, type, schema version, Owner, source, device, UTC start and optional end, capture timezone and offset, structured payload, privacy level, revision, finalization state, provenance, and deletion or invalidation state where applicable. Unknown event types or schema versions are rejected.
-9. **Payload registry:** Each core event type has a registered, versioned schema defining units, time semantics, required fields, privacy defaults, and legal sources. New optional fields may be compatible; removal, renaming, unit changes, or semantic changes require a new schema version.
-10. **Data authority:** MongoDB is authoritative for cross-device querying and analysis. Client stores provide local collection, offline experience, short-term raw context where permitted, and durable outbox delivery. WebUI and AI read service results.
-11. **Upload protocol:** Clients batch-upsert events with stable identifiers and increasing revisions. The server returns one result per item with accepted, duplicate, stale-revision, or rejected status and a stable error code. A client removes an outbox revision only after its corresponding acknowledgement. Partial success retries only unresolved transient failures; permanent validation failures enter a visible local failure queue.
-12. **Concurrency control:** The database uniquely identifies logical events by Owner and event identifier. A lower or equal revision cannot replace a higher revision. Competing revisions are resolved atomically.
-13. **Realtime boundary:** Heartbeats update a TTL-backed device projection and never directly contribute to historical totals. Devices become offline after the configured staleness threshold. Current context exposes concurrent device states rather than inferring one global focus.
-14. **Historical activity:** Clients create historical activity intervals because they own platform context and offline state. Active intervals use stable identifiers and revision checkpoints; final transitions mark them finalized. A server does not extend an event merely because a device stopped reporting.
-15. **Data minimization:** Window-title text, full executable paths, and notification bodies are not uploaded. Windows may keep raw titles locally according to local retention. Any uploaded title fingerprint uses a device-secret HMAC, not an unsalted general hash. Payment ingestion uploads extracted amount, direction, approved merchant label, category, and source metadata. A private event is blocked before upload.
-16. **Semantic model:** Device and application identity remain provenance; semantic dimensions such as activity category and subject provide cross-platform grouping. A browser and a native application may map to one service subject, while an IDE may map to an approved project subject. Aggregation never destroys source identity.
-17. **Classification control plane:** The service and WebUI manage semantic entities and versioned rules. Clients download, cache, and execute applicable rules locally. Uploaded classification contains the semantic result, rule identifier, rule version, and confidence, never the matched raw title.
-18. **Project privacy:** User-approved project aliases may be uploaded. Newly parsed project names remain local and use opaque identifiers until the Owner approves a stable label.
-19. **Historical reclassification:** Rule edits affect new observations by default. The Owner may explicitly start historical reclassification. Devices re-evaluate only locally retained raw context and submit higher event revisions. Affected derived summaries are invalidated and rebuilt; the operation is audited.
-20. **Corrections:** Collected structured observations retain provenance. Owner corrections create auditable higher revisions and record changed fields, time, actor, and optional reason. False observations become invalid for statistics without immediate physical erasure. Default queries return the latest valid revision and expose correction provenance.
-21. **Multiple sources:** Raw or structured observations from different sources remain distinct. Each normalized metric has an explicit, versioned authority policy. Android UsageStats is authoritative for Android daily application totals; accessibility observations support current and contextual activity. Health events retain data origin. Payment records prefer stable source identifiers, and ambiguous candidates are surfaced instead of fuzzily merged.
-22. **Time semantics:** Facts are stored as UTC instants with capture IANA timezone and offset. One Owner report timezone defines default day and week boundaries. Rollup cache identity includes timezone. Changing report timezone rebuilds derived summaries, not events. Source-provided sleep intervals retain full bounds and are assigned consistently for reporting.
-23. **Time metrics:** Device minutes sum all qualifying device intervals and may exceed elapsed time. Active minutes are the union of qualifying non-AFK intervals and never double count overlap. Timelines preserve parallel device lanes. APIs and UI label each metric explicitly.
-24. **WebUI scope:** Core screens cover Owner login, current device state, cross-device timeline, usage/health/spending summaries, data coverage, synchronization diagnostics, classification entities and rules, explicit historical reclassification, corrections, source conflicts, and credential lifecycle management.
-25. **AI boundary:** V1 provides one thin Skill over documented read APIs. Query Tokens can access only granted structured resources, have bounded time range, pagination, rate limits, expiry, and revocation. AI cannot create, update, delete, classify, administer, or execute. Responses expose time range, timezone, provenance, and completeness.
-26. **Platform reuse:** Windows retains proven Win32 foreground sampling, SQLite, tray lifecycle, and WPF foundations. Android retains UsageStats, Health Connect, notification listening, and permission flows. Both replace legacy DTOs, event boundaries, classification integration, outbox behavior where needed, and API clients.
-27. **Core versus experimental reports:** Source-provided health facts can appear in core views. Inferred anomalies, inferred sleep, and inferred focus remain experimental and are excluded from V1 acceptance and the primary dashboard. Focus is presented only when based on an explicit Owner rule.
-28. **Operational visibility:** Each collector reports or exposes last collection, last successful upload, pending queue size, permanent failures, and recent transient error. Missing data is never visually indistinguishable from zero activity.
-29. **V1 sequencing:** Implement contracts first, followed by service behavior, Windows integration, WebUI, Android integration, and finally the read-only AI Skill. A vertical slice must be runnable before adding another data domain.
-30. **Backup deferral:** Automated, encrypted, and offsite backup is not a V1 functional requirement. The accepted consequence is that LAN-stage history may be unrecoverable after database loss. Public deployment must reopen backup, recovery, HTTPS, rate limiting, and credential-hardening decisions.
+1. **产品边界：** V1 只有一个 Owner，没有注册或多租户产品行为。其他人在 V1 中不获得账户。完整的分享链接 UX 推迟。
+2. **部署边界：** V1 运行在可信局域网中，监听配置指定的通配主机。在操作系统支持时使用双栈监听。防火墙规则将访问限制在可信网络，CORS 使用显式的来源白名单。公网 VPS 部署是后续的安全关卡。
+3. **Owner 认证：** Owner 使用密码登录，身份为隐式固定身份。密码使用 memory-hard 哈希存储。登录成功后产生一个可吊销、由服务端管理的会话，存放在 HttpOnly、SameSite cookie 中。生产部署还要求 Secure cookie 和 HTTPS。
+4. **凭据模型：** 设备、查询和可选的管理凭据是不同的主体（actor）类型。授权用能力（capabilities）表达而不是简单的线性访问级别：主体类型、scopes、最高隐私级别、允许的事件类型、有效期和吊销。服务端只存储 token 哈希，明文只显示一次。日常 Web 管理使用 Owner Session，而不是长期有效的管理 token。
+5. **仓库模型：** 项目成为一个 Monorepo，包含 contracts、server、Web、Windows 和 Android。组件保持独立的语义化版本和带组件前缀的发布标签。路径感知的 CI 只构建受影响的组件。发布资产可以继续放在 GitHub Releases 上；平台专属的更新清单避免了含义模糊的仓库级“最新发布”端点。
+6. **契约权威：** OpenAPI 3.1 定义 HTTP 路由、认证、错误和响应模型。版本化 JSON Schema 定义事件信封和载荷。这些语言无关的契约是权威；运行时校验以及生成或经契约核验的客户端模型都派生自它们。
+7. **协议兼容性：** 新 API 采用干净的版本边界，没有义务保留已废弃的 API 路由、响应结构、token 或测试数据。所有活跃客户端一起迁移。被废弃的服务端仅作为参考资料。
+8. **事件信封：** 每个可分析的事件包含：稳定的全局唯一事件标识符、类型、schema 版本、Owner、来源、设备、UTC 开始时间和可选的结束时间、采集时区与偏移、结构化载荷、隐私级别、revision、终结状态、来源信息（provenance），以及适用时的删除或失效状态。未知的事件类型或 schema 版本会被拒绝。
+9. **载荷注册表：** 每个核心事件类型都有一个注册的、版本化的 schema，定义单位、时间语义、必填字段、隐私默认值和合法来源。新增可选字段可以兼容；删除、重命名、单位变更或语义变更都需要新的 schema 版本。
+10. **数据权威：** MongoDB 是跨设备查询与分析的权威。客户端存储提供本地采集、离线体验、允许范围内的短期原始上下文，以及持久的 outbox 投递。WebUI 和 AI 读取服务端结果。
+11. **上传协议：** 客户端以批量 upsert 方式上传事件，带稳定标识符和递增的 revision。服务端对每一项返回一个结果：accepted、duplicate、stale-revision 或 rejected 状态以及稳定的错误码。客户端只有在收到对应确认后才移除 outbox 中的 revision。部分成功时只重试未解决的瞬态失败；永久性校验失败进入可见的本地失败队列。
+12. **并发控制：** 数据库按 Owner 和事件标识符唯一确定逻辑事件。较低或相等的 revision 不能替换较高的 revision。竞争的 revision 原子地裁决。
+13. **实时边界：** 心跳更新基于 TTL 的设备投影，绝不直接计入历史总数。设备在超过配置的失联阈值后变为离线。当前上下文展示并发的设备状态，而不是推断一个全局焦点。
+14. **历史活动：** 由客户端创建历史活动区间，因为平台上下文和离线状态都由客户端掌握。活跃区间使用稳定标识符和 revision 检查点；最终转移将其标记为已终结（finalized）。服务端绝不会仅因为设备停止上报就延长某个事件。
+15. **数据最小化：** 窗口标题文本、完整可执行文件路径和通知正文不上传。Windows 可以根据本地保留策略在本地保存原始标题。任何上传的标题指纹都使用设备密钥的 HMAC，而不是无盐的通用哈希。支付采集上传提取出的金额、方向、已批准的商户标签、类别和来源元数据。private 事件在上传前即被阻止。
+16. **语义模型：** 设备和应用身份保持为来源信息；活动类别和主体等语义维度提供跨平台分组。浏览器和原生应用可以映射到同一个服务主体，而 IDE 可以映射到已批准的项目主体。聚合永不破坏来源身份。
+17. **分类控制平面：** 服务端和 WebUI 管理语义实体和版本化规则。客户端下载、缓存并在本地执行适用的规则。上传的分类包含语义结果、规则标识符、规则版本和置信度，绝不包含匹配到的原始标题。
+18. **项目隐私：** 用户批准的项目别名可以上传。新解析出的项目名保留在本地并使用不透明标识符，直到 Owner 批准一个稳定标签。
+19. **历史重分类：** 规则编辑默认只影响新的观测。Owner 可以显式启动历史重分类。设备只重新评估本地保留的原始上下文并提交更高的事件 revision。受影响的派生摘要被失效并重建；该操作会被审计。
+20. **修正：** 采集到的结构化观测保留来源信息。Owner 修正创建可审计的更高 revision，并记录变更字段、时间、操作者与可选原因。错误观测对统计变为无效，但不立即物理删除。默认查询返回最新有效 revision，并暴露修正来源。
+21. **多来源：** 来自不同来源的原始或结构化观测保持相互独立。每个归一化指标都有显式、版本化的权威策略。Android UsageStats 是 Android 每日应用使用总量的权威；无障碍（accessibility）观测支持当前和情境活动。健康事件保留数据来源。支付记录优先使用稳定的来源标识符，有歧义的候选会被呈现出来而不是被模糊合并。
+22. **时间语义：** 事实以 UTC 时刻存储，附带采集时的 IANA 时区和偏移。一个 Owner 报告时区定义默认的日和周边界。Rollup 缓存标识包含时区。更改报告时区会重建派生摘要，而不是事件。来源提供的睡眠区间保留完整起止边界，并在报表中按一致方式归属。
+23. **时间指标：** 设备分钟数汇总所有符合条件的设备区间，可能超过自然流逝时间。活跃分钟数是符合条件的非 AFK 区间的并集，绝不重复计算重叠。时间线保留并行的设备泳道。API 和 UI 对每个指标都明确标注。
+24. **WebUI 范围：** 核心页面覆盖 Owner 登录、当前设备状态、跨设备时间线、使用/健康/消费摘要、数据覆盖、同步诊断、分类实体与规则、显式历史重分类、修正、来源冲突和凭据生命周期管理。
+25. **AI 边界：** V1 在有文档的只读 API 之上提供一个轻量 Skill。Query Token 只能访问被授权的结构化资源，具有有界时间范围、分页、速率限制、有效期和吊销。AI 不能创建、更新、删除、分类、管理或执行。响应暴露时间范围、时区、来源和完整性。
+26. **平台复用：** Windows 保留经过验证的 Win32 前台采样、SQLite、托盘生命周期和 WPF 基础。Android 保留 UsageStats、Health Connect、通知监听和权限流程。两端按需替换旧 DTO、事件边界、分类集成、outbox 行为和 API 客户端。
+27. **核心与实验性报表：** 来源提供的健康事实可以出现在核心视图中。推断的异常、推断的睡眠和推断的专注保持实验性质，不纳入 V1 验收和主仪表盘。专注只在基于显式 Owner 规则时呈现。
+28. **运维可见性：** 每个采集器上报或暴露最近采集时间、最近成功上传时间、待发队列大小、永久失败数和近期瞬态错误。缺失数据在视觉上永远不能与零活动混为一谈。
+29. **V1 实施顺序：** 先实现契约，然后是服务端行为、Windows 集成、WebUI、Android 集成，最后是只读 AI Skill。在添加下一个数据域之前，当前垂直切片必须可运行。
+30. **备份推迟：** 自动化、加密的异地备份不是 V1 的功能需求。接受的后果是：局域网阶段的历史在数据库丢失后可能无法恢复。公网部署必须重新打开备份、恢复、HTTPS、速率限制和凭据加固等决策。
 
-## Testing Decisions
+## 测试决策
 
-1. Tests assert externally observable behavior rather than internal calls, Mongoose query shape, component structure, or private method use. Refactoring is safe when the public contract and resulting facts remain unchanged.
-2. The primary automated seam is the real HTTP API running against a real MongoDB instance. Tests submit contract-valid or invalid requests, then observe HTTP results and subsequent query behavior.
-3. Contract validation covers OpenAPI structure, every event schema, compatible examples, invalid examples, units, time semantics, and unknown-version rejection.
-4. Service integration tests cover Owner and credential authorization, scope denial, privacy ceilings, partial batch results, duplicate delivery, stale revisions, competing revisions, current-state expiry, correction, invalidation, source policies, timezone reports, and union versus summed time.
-5. Client synchronization tests stop at the transport interface and cover exactly the critical state transitions: acknowledged success, transient network failure, partial acknowledgement, permanent rejection, stale revision, and process restart with a durable outbox.
-6. Pure deterministic tests cover interval union, day-boundary calculation, source-priority selection, rule precedence, rule-version output, and classification golden cases.
-7. Sanitized events captured from real collectors become contract examples and golden fixtures. Synthetic boundary cases supplement rather than replace real event shapes.
-8. No generic coverage percentage is required. The small set of synchronization, authorization, schema, and statistics invariants must have regression tests before related defects are considered fixed.
-9. Real-device smoke testing validates Windows foreground sampling and AFK detection, Android UsageStats permission, Health Connect permission and records, notification parsing, local classification, outbox upload, and WebUI visibility.
-10. V1 acceptance runs the system continuously for seven days without manual collector restart and records evidence for all agreed quality targets.
-11. The outage acceptance test disconnects a device for 24 hours, restores connectivity, and reconciles all locally queued event identifiers with service acknowledgements and queries.
-12. Replaying one logical event ten times must produce one latest logical fact. Older revisions must never replace a newer accepted revision.
-13. While online, 95% of historical events should become queryable within five minutes; Android system scheduling may extend the maximum to twenty minutes.
-14. Current status should be no more than thirty seconds old while reporting, and a device should appear offline within sixty seconds after heartbeats stop.
-15. Activity interval boundary error must be no more than one configured sample period. Daily application totals should remain within five percent of the agreed operating-system reference measurement.
-16. Health and payment ingestion reconciles source record counts. Unsupported or invalid observations must appear in a failure queue rather than disappear.
-17. Acceptance records Windows background average CPU with a target below one percent and Android incremental daily battery usage with a target below three percent, including device and measurement method. A missed target requires an explicit documented decision, not silent acceptance.
+1. 测试断言外部可观察的行为，而不是内部调用、Mongoose 查询形态、组件结构或私有方法的使用。当公共契约和产生的事实保持不变时，重构是安全的。
+2. 主要的自动化测试边界是运行在真实 MongoDB 实例上的真实 HTTP API。测试提交契约有效或无效的请求，然后观察 HTTP 结果和后续查询行为。
+3. 契约校验覆盖 OpenAPI 结构、每个事件 schema、兼容示例、无效示例、单位、时间语义和未知版本拒绝。
+4. 服务集成测试覆盖 Owner 与凭据授权、scope 拒绝、隐私上限、批量部分结果、重复投递、过期 revision、竞争 revision、当前状态过期、修正、失效、来源策略、时区报表，以及并集时长与累加时长。
+5. 客户端同步测试止步于传输接口，精确覆盖关键状态转移：确认成功、瞬态网络失败、部分确认、永久拒绝、过期 revision，以及带持久 outbox 的进程重启。
+6. 纯确定性测试覆盖区间并集、日界计算、来源优先级选择、规则优先级、规则版本输出和分类黄金用例。
+7. 从真实采集器捕获并脱敏的事件成为契约示例和黄金基准样本。合成的边界用例是对真实事件形态的补充，而不是替代。
+8. 不要求通用覆盖率百分比。在相关缺陷可被视为修复之前，同步、授权、schema 和统计这小组不变量必须先有回归测试。
+9. 真机冒烟测试验证 Windows 前台采样与 AFK 检测、Android UsageStats 权限、Health Connect 权限与记录、通知解析、本地分类、outbox 上传和 WebUI 可见性。
+10. V1 验收让系统连续运行七天而无需手动重启采集器，并记录所有约定质量目标的证据。
+11. 断网验收测试将设备断网 24 小时，恢复联网后，将所有本地排队事件的标识符与服务端确认及查询结果进行对账。
+12. 同一逻辑事件重放十次必须只产生一条最新逻辑事实。较旧的 revision 绝不能替换已被接受的较新 revision。
+13. 在线时，95% 的历史事件应在五分钟内可查询；Android 系统调度最多可将上限延长到二十分钟。
+14. 正常上报期间，当前状态最多滞后三十秒；心跳停止后，设备应在六十秒内显示为离线。
+15. 活动区间边界误差不得超过一个配置的采样周期。每日应用使用总量与约定的操作系统参考测量的偏差应保持在 5% 以内。
+16. 健康与支付采集要与来源记录数量对账。不支持或无效的观测必须出现在失败队列中，而不是消失。
+17. 验收记录 Windows 后台平均 CPU（目标低于 1%）和 Android 每日增量电池消耗（目标低于 3%），并记录设备与测量方法。未达标需要显式记录在案的决策，而不是默默接受。
 
-## Out of Scope
+## 范围之外
 
-- User registration, multiple data owners, tenant isolation, organizations, and account switching.
-- Complete human sharing-link experience or viewer accounts.
-- Any AI mutation, automatic execution, autonomous remediation, or natural-language chat UI.
-- Machine-learning classification and server-side processing of raw window or notification text.
-- Server-inferred sleep, psychological focus, anomaly diagnosis, or health advice as trusted V1 behavior.
-- macOS and iOS collectors.
-- Compatibility with deprecated APIs, deprecated response contracts, legacy tokens, or legacy test databases.
-- Public VPS production deployment and its required TLS, reverse-proxy, rate-limiting, and internet threat-model work.
-- Automated, encrypted, offsite backups and disaster-recovery automation.
-- A generalized raw personal-data lake.
-- Broad UI unit-test coverage, multi-tenant tests, high-load benchmarks, and arbitrary coverage-percentage targets.
-- Guaranteed reclassification beyond the retention window of raw context on the originating device.
+- 用户注册、多个数据 Owner、租户隔离、组织和账户切换。
+- 完整的面向人的分享链接体验或查看者账户。
+- 任何 AI 修改、自动执行、自主修复或自然语言聊天 UI。
+- 机器学习分类，以及在服务端处理原始窗口或通知文本。
+- 将服务端推断的睡眠、心理专注、异常诊断或健康建议作为 V1 受信行为。
+- macOS 和 iOS 采集器。
+- 与已废弃 API、已废弃响应契约、旧 token 或旧测试数据库的兼容。
+- 公网 VPS 生产部署及其所需的 TLS、反向代理、速率限制和互联网威胁模型工作。
+- 自动化、加密的异地备份和灾备自动化。
+- 通用化的原始个人数据湖。
+- 大范围 UI 单元测试覆盖、多租户测试、高负载基准测试和任意的覆盖率百分比目标。
+- 超出来源设备上原始上下文保留窗口的保证重分类。
 
-## Further Notes
+## 补充说明
 
-- V1 success means trustworthy capture and explainable data coverage, not the number of charts or inferred insights.
-- MongoDB and Express are suitable implementation choices for the agreed event model, but the language-neutral contracts, not Mongoose schemas, define the product protocol.
-- Existing code is evidence and reusable platform infrastructure, not an implicit requirements document.
-- The deprecated implementations remain read-only references during migration and should not receive new features.
-- The first runnable slice should use one activity event type from one real Windows collector, persist it through the new batch protocol, and display it in the WebUI timeline before health, finance, or AI work expands the surface.
-- Major decisions from this specification should be recorded as focused ADRs when implementation begins. Product scope belongs in the PRD/specification; protocol details belong in executable contracts; shared terminology belongs in the domain glossary.
+- V1 的成功意味着可信的采集和可解释的数据覆盖，而不是图表数量或推断洞见的数量。
+- MongoDB 和 Express 是对约定事件模型合适的实现选择，但定义产品协议的是语言无关的契约，而不是 Mongoose schema。
+- 现有代码是证据和可复用的平台基础设施，而不是隐含的需求文档。
+- 被废弃的实现作为只读参考保留到迁移结束，不应获得新功能。
+- 第一个可运行切片应使用来自一个真实 Windows 采集器的一种活动事件类型，通过新的批量协议持久化并显示在 WebUI 时间线中，之后再由健康、财务或 AI 的工作扩展系统面。
+- 本规范中的重大决策应在实现开始时记录为聚焦的 ADR。产品范围属于 PRD/规范；协议细节属于可执行契约；共享术语属于领域词汇表。

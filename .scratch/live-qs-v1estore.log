@@ -1,0 +1,6 @@
+ Container server-web-1 Running 
+ Container server-mongo-1 Running 
+ Container server-server-1 Running 
+ Container server-mongo-1 Waiting 
+ Container server-mongo-1 Healthy 
+2026/09/11 ÖÜÎå  9:45:02.21 restore-executed 
