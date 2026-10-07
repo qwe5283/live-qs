@@ -16,4 +16,15 @@ public sealed record DashboardSnapshot(
     TimeSpan ActiveDuration,
     TimeSpan AfkDuration,
     int AppCount,
-    IReadOnlyList<AppUsage> Apps);
+    IReadOnlyList<AppUsage> Apps,
+    IReadOnlyList<ActiveTimeBucket> ActiveBuckets);
+
+public sealed record ActiveTimeBucket(
+    DateTime LocalStart,
+    TimeSpan PeriodDuration,
+    TimeSpan ActiveDuration)
+{
+    public double Share => PeriodDuration > TimeSpan.Zero
+        ? Math.Clamp(ActiveDuration.TotalSeconds / PeriodDuration.TotalSeconds, 0, 1)
+        : 0;
+}

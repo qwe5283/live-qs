@@ -184,7 +184,8 @@ public sealed partial class SqliteActivityRepository
                 active > TimeSpan.Zero ? item.Value.Duration.TotalSeconds / active.TotalSeconds : 0, item.Value.Color))
             .OrderByDescending(item => item.Duration)
             .ToArray();
-        return new DashboardSnapshot(range.Start, range.End, active, afk, apps.Length, apps);
+        var buckets = ActiveTimeDistribution.Build(range, segments, TimeZoneInfo.Local);
+        return new DashboardSnapshot(range.Start, range.End, active, afk, apps.Length, apps, buckets);
     }
 
     public async Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(DateRange range, CancellationToken cancellationToken = default) =>

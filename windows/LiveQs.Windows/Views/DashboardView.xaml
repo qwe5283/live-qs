@@ -69,12 +69,34 @@
                 </Grid>
 
                 <Grid Visibility="{Binding IsEmpty, Converter={StaticResource VisibleWhenFalse}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="16" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="340" />
-                        <ColumnDefinition Width="16" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="340" />
                     </Grid.ColumnDefinitions>
                     <Border Grid.Column="0" Style="{StaticResource Surface}" Padding="20" MinHeight="390">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="活跃时间占比" Style="{StaticResource SectionTitle}" />
+                            <TextBlock Grid.Row="1" Text="{Binding DistributionText}" Style="{StaticResource MutedText}" Margin="0,6,0,0" />
+                            <ScrollViewer Grid.Row="2" Margin="0,14,0,0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                <controls:ActiveTimeChart ItemsSource="{Binding ActiveBuckets}" IsHourly="{Binding IsHourlyDistribution}"
+                                                          BarBrush="{DynamicResource AccentBrush}" TextBrush="{DynamicResource SecondaryTextBrush}"
+                                                          GridBrush="{DynamicResource BorderBrush}" />
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Column="2" Style="{StaticResource Surface}" Padding="20" MinHeight="390">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -83,13 +105,13 @@
                             </Grid.RowDefinitions>
                             <TextBlock Text="应用时间占比" Style="{StaticResource SectionTitle}" />
                             <Grid Grid.Row="1" Margin="20">
-                                <controls:DonutChart ItemsSource="{Binding Apps}" />
+                                <controls:DonutChart ItemsSource="{Binding TopApps}" />
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                                     <TextBlock Text="总计" Style="{StaticResource MutedText}" HorizontalAlignment="Center" />
                                     <TextBlock Text="{Binding ActiveText}" FontSize="18" FontWeight="SemiBold" Margin="0,3,0,0" />
                                 </StackPanel>
                             </Grid>
-                            <ItemsControl Grid.Row="2" ItemsSource="{Binding Apps}">
+                            <ItemsControl Grid.Row="2" ItemsSource="{Binding TopApps}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
@@ -105,33 +127,31 @@
                         </Grid>
                     </Border>
 
-                    <Border Grid.Column="2" Style="{StaticResource Surface}" Padding="20" MinHeight="390">
+                    <Border Grid.Row="2" Grid.ColumnSpan="3" Style="{StaticResource Surface}" Padding="20">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <TextBlock Text="应用排行" Style="{StaticResource SectionTitle}" />
-                            <ScrollViewer Grid.Row="1" Margin="0,14,0,0" VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding Apps}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="0,0,0,16">
-                                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /></Grid.RowDefinitions>
-                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="50" /></Grid.ColumnDefinitions>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <Ellipse Width="10" Height="10" Fill="{Binding Color}" VerticalAlignment="Center" />
-                                                    <TextBlock Text="{Binding AppName}" FontWeight="SemiBold" Margin="8,0,0,0" MaxWidth="230" TextTrimming="CharacterEllipsis" />
-                                                </StackPanel>
-                                                <TextBlock Grid.Column="1" Text="{Binding Duration, Converter={StaticResource DurationText}}" Foreground="{DynamicResource SecondaryTextBrush}" Margin="12,0" />
-                                                <TextBlock Grid.Column="2" Text="{Binding Share, Converter={StaticResource ShareText}}" HorizontalAlignment="Right" />
-                                                <ProgressBar Grid.Row="1" Grid.ColumnSpan="3" Maximum="100" Value="{Binding Share, Converter={StaticResource SharePercent}}"
-                                                             Foreground="{Binding Color}" Background="#E4E9EB" BorderThickness="0" Height="6" Margin="0,8,0,0" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
+                            <ItemsControl Grid.Row="1" Margin="0,14,0,0" ItemsSource="{Binding Apps}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,16">
+                                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="50" /></Grid.ColumnDefinitions>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Ellipse Width="10" Height="10" Fill="{Binding Color}" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding AppName}" FontWeight="SemiBold" Margin="8,0,0,0" MaxWidth="230" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{Binding Duration, Converter={StaticResource DurationText}}" Foreground="{DynamicResource SecondaryTextBrush}" Margin="12,0" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Share, Converter={StaticResource ShareText}}" HorizontalAlignment="Right" />
+                                            <ProgressBar Grid.Row="1" Grid.ColumnSpan="3" Maximum="100" Value="{Binding Share, Converter={StaticResource SharePercent}}"
+                                                         Foreground="{Binding Color}" Background="{DynamicResource BorderBrush}" BorderThickness="0" Height="6" Margin="0,8,0,0" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </Grid>
                     </Border>
                 </Grid>

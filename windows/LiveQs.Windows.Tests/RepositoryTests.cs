@@ -30,6 +30,30 @@ public sealed class RepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task Dashboard_DistributionMatchesTotalsAndApplicationExclusions()
+    {
+        var repository = await CreateRepositoryAsync();
+        var date = new DateTime(2026, 10, 7);
+        var local = new DateTimeOffset(date.AddHours(9).AddMinutes(58), TimeZoneInfo.Local.GetUtcOffset(date));
+        await repository.RecordSampleAsync(Sample(local, false), TimeSpan.FromMinutes(5));
+        await repository.RecordSampleAsync(Sample(local.AddMinutes(5), true), TimeSpan.FromMinutes(5));
+
+        var range = DateRange.FromLocalDates(date, date);
+        var dashboard = await repository.GetDashboardAsync(range);
+
+        Assert.Equal(24, dashboard.ActiveBuckets.Count);
+        Assert.Equal(TimeSpan.FromMinutes(2), dashboard.ActiveBuckets[9].ActiveDuration);
+        Assert.Equal(TimeSpan.FromMinutes(3), dashboard.ActiveBuckets[10].ActiveDuration);
+        Assert.Equal(dashboard.ActiveDuration.Ticks, dashboard.ActiveBuckets.Sum(bucket => bucket.ActiveDuration.Ticks));
+        Assert.Equal(TimeSpan.FromMinutes(5), dashboard.AfkDuration);
+
+        await repository.SaveApplicationRuleAsync(new ApplicationRule("browser.exe", "浏览器", "工作", true));
+        var excluded = await repository.GetDashboardAsync(range);
+        Assert.All(excluded.ActiveBuckets, bucket => Assert.Equal(TimeSpan.Zero, bucket.ActiveDuration));
+        Assert.Equal(TimeSpan.Zero, excluded.ActiveDuration);
+    }
+
+    [Fact]
     public async Task ApplicationRule_ChangesHistoricalQueriesWithoutDeletingRows()
     {
         var repository = await CreateRepositoryAsync();

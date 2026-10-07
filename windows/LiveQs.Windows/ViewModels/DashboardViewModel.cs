@@ -29,6 +29,14 @@ public sealed partial class DashboardViewModel : ViewModelBase
     private bool _isEmpty = true;
     [ObservableProperty]
     private bool _isLoading;
+    [ObservableProperty]
+    private IReadOnlyList<ActiveTimeBucket> _activeBuckets = [];
+    [ObservableProperty]
+    private bool _isHourlyDistribution = true;
+    [ObservableProperty]
+    private string _distributionText = "每小时活跃占比";
+    [ObservableProperty]
+    private IReadOnlyList<AppUsage> _topApps = [];
 
     public DashboardViewModel(IActivityQueryService queryService, IUserDialogService dialogs, TimeProvider timeProvider)
     {
@@ -51,8 +59,12 @@ public sealed partial class DashboardViewModel : ViewModelBase
             var end = (EndDate ?? start).Date;
             if (end < start) (start, end) = (end, start);
             var snapshot = await _queryService.GetDashboardAsync(DateRange.FromLocalDates(start, end));
+            ActiveBuckets = snapshot.ActiveBuckets;
+            IsHourlyDistribution = start == end;
+            DistributionText = IsHourlyDistribution ? "每小时活跃占比" : "每日活跃占比";
             Apps.Clear();
             foreach (var app in snapshot.Apps) Apps.Add(app);
+            TopApps = snapshot.Apps.Take(5).ToArray();
             ActiveText = DurationText.Format(snapshot.ActiveDuration);
             AfkText = DurationText.Format(snapshot.AfkDuration);
             AppCountText = snapshot.AppCount.ToString(System.Globalization.CultureInfo.CurrentCulture);
