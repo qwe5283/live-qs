@@ -1,20 +1,21 @@
 using System.Collections;
 using System.Globalization;
 using System.Windows;
-using System.Windows.Input;
+using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Media;
 using LiveQs.Windows.Core.Analytics;
-using LiveQs.Windows.Core.Common;
+using Rectangle = System.Windows.Shapes.Rectangle;
 
 namespace LiveQs.Windows.Controls;
 
-public sealed class ActiveTimeChart : FrameworkElement
+public sealed class ActiveTimeChart : Panel
 {
-    private const double AxisWidth = 44;
+    private const double AxisWidth = 56;
     private const double RightMargin = 10;
     private const double TopMargin = 16;
     private const double BottomMargin = 32;
-    private int? _hoveredIndex;
+    private ActiveTimeBucket[] _items = [];
 
     public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.Register(
         nameof(ItemsSource), typeof(IEnumerable), typeof(ActiveTimeChart),
@@ -25,6 +26,11 @@ public sealed class ActiveTimeChart : FrameworkElement
     public static readonly DependencyProperty BarBrushProperty = RegisterBrush(nameof(BarBrush), Brushes.DodgerBlue);
     public static readonly DependencyProperty TextBrushProperty = RegisterBrush(nameof(TextBrush), Brushes.Gray);
     public static readonly DependencyProperty GridBrushProperty = RegisterBrush(nameof(GridBrush), Brushes.LightGray);
+
+    public ActiveTimeChart()
+    {
+        Unloaded += (_, _) => CloseTooltips();
+    }
 
     public IEnumerable? ItemsSource
     {
@@ -58,75 +64,108 @@ public sealed class ActiveTimeChart : FrameworkElement
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        var count = ItemsSource?.OfType<ActiveTimeBucket>().Count() ?? 0;
+        foreach (UIElement child in Children) child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var count = _items.Length;
         return new Size(Math.Max(260, IsHourly || count <= 31 ? 260 : AxisWidth + RightMargin + count * 12), 280);
+    }
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        var width = Math.Max(0, finalSize.Width - AxisWidth - RightMargin);
+        var height = Math.Max(0, finalSize.Height - TopMargin - BottomMargin);
+        var slot = _items.Length > 0 ? width / _items.Length : 0;
+        var barWidth = Math.Max(1, Math.Min(28, slot * 0.65));
+        var maximum = TickStep() * 4;
+        for (var index = 0; index < _items.Length; index++)
+        {
+            var x = AxisWidth + slot * (index + 0.5);
+            var barHeight = height * Math.Max(0, _items[index].ActiveDuration.TotalSeconds / UnitSeconds) / maximum;
+            Children[index].Arrange(new Rect(x - barWidth / 2, TopMargin + height - barHeight, barWidth, barHeight));
+        }
+        return finalSize;
     }
 
     protected override void OnRender(DrawingContext context)
     {
         base.OnRender(context);
-        var items = ItemsSource?.OfType<ActiveTimeBucket>().ToArray() ?? [];
         var width = ActualWidth - AxisWidth - RightMargin;
         var height = ActualHeight - TopMargin - BottomMargin;
-        if (width <= 0 || height <= 0 || items.Length == 0) return;
+        if (width <= 0 || height <= 0 || _items.Length == 0) return;
         var baseline = TopMargin + height;
         var gridPen = new Pen(GridBrush, 1);
+        var unitText = IsHourly ? "分钟" : "小时";
+        var tickStep = TickStep();
 
         for (var tick = 0; tick <= 4; tick++)
         {
             var y = baseline - height * tick / 4;
             context.DrawLine(gridPen, new Point(AxisWidth, y), new Point(ActualWidth - RightMargin, y));
-            var label = Text($"{tick * 25}%");
+            var label = Text($"{tick * tickStep:0.#}{unitText}");
             context.DrawText(label, new Point(AxisWidth - label.Width - 8, y - label.Height / 2));
         }
 
-        var slot = width / items.Length;
-        var barWidth = Math.Max(1, Math.Min(28, slot * 0.65));
+        var slot = width / _items.Length;
         var labelStep = Math.Max(1, (int)Math.Ceiling((IsHourly ? 20 : 46) / slot));
-        for (var index = 0; index < items.Length; index++)
+        for (var index = 0; index < _items.Length; index++)
         {
             var x = AxisWidth + slot * (index + 0.5);
-            var barHeight = height * items[index].Share;
-            if (barHeight > 0)
-            {
-                context.PushOpacity(_hoveredIndex == index ? 0.75 : 1);
-                context.DrawRoundedRectangle(BarBrush, null,
-                    new Rect(x - barWidth / 2, baseline - barHeight, barWidth, barHeight), 2, 2);
-                context.Pop();
-            }
             if (index % labelStep != 0) continue;
-            var label = Text(items[index].LocalStart.ToString(IsHourly ? "HH" : "M/d", CultureInfo.CurrentCulture));
+            var label = Text(_items[index].LocalStart.ToString(IsHourly ? "HH" : "M/d", CultureInfo.CurrentCulture));
             context.DrawText(label, new Point(x - label.Width / 2, baseline + 10));
         }
     }
 
-    protected override HitTestResult HitTestCore(PointHitTestParameters parameters) =>
-        new PointHitTestResult(this, parameters.HitPoint);
+    private double UnitSeconds => IsHourly ? 60 : 3600;
 
-    protected override void OnMouseMove(MouseEventArgs args)
+    private double TickStep()
     {
-        base.OnMouseMove(args);
-        var items = ItemsSource?.OfType<ActiveTimeBucket>().ToArray() ?? [];
-        var point = args.GetPosition(this);
-        var width = ActualWidth - AxisWidth - RightMargin;
-        int? index = items.Length > 0 && width > 0 && point.X >= AxisWidth && point.X < AxisWidth + width
-            && point.Y >= TopMargin && point.Y <= ActualHeight - BottomMargin
-            ? Math.Min(items.Length - 1, (int)((point.X - AxisWidth) / width * items.Length))
-            : null;
-        if (_hoveredIndex == index) return;
-        _hoveredIndex = index;
-        ToolTip = index is { } selected
-            ? $"{items[selected].LocalStart.ToString(IsHourly ? "M月d日 HH:00" : "yyyy年M月d日", CultureInfo.CurrentCulture)}\n活跃 {DurationText.Format(items[selected].ActiveDuration)} · {items[selected].Share:P1}"
-            : null;
-        InvalidateVisual();
+        var minimumMaximum = IsHourly ? 60d : 24d;
+        var quantum = IsHourly ? 15d : 1d;
+        var maximumDuration = _items.Length > 0 ? _items.Max(item => item.ActiveDuration.TotalSeconds / UnitSeconds) : 0;
+        return Math.Ceiling(Math.Max(minimumMaximum, maximumDuration) / 4 / quantum) * quantum;
     }
 
-    protected override void OnMouseLeave(MouseEventArgs args)
+    private void UpdateBars()
     {
-        base.OnMouseLeave(args);
-        _hoveredIndex = null;
-        ToolTip = null;
-        InvalidateVisual();
+        CloseTooltips();
+        Children.Clear();
+        _items = ItemsSource?.OfType<ActiveTimeBucket>().ToArray() ?? [];
+        foreach (var item in _items)
+        {
+            var bar = new Rectangle
+            {
+                RadiusX = 2,
+                RadiusY = 2,
+                Visibility = item.ActiveDuration > TimeSpan.Zero ? Visibility.Visible : Visibility.Collapsed,
+                ToolTip = new ToolTip { Content = TooltipText(item) },
+            };
+            bar.SetBinding(Rectangle.FillProperty, new Binding(nameof(BarBrush)) { Source = this });
+            ToolTipService.SetInitialShowDelay(bar, 250);
+            ToolTipService.SetBetweenShowDelay(bar, 500);
+            ToolTipService.SetShowDuration(bar, int.MaxValue);
+            bar.MouseEnter += static (sender, _) => ((Rectangle)sender).Opacity = 0.75;
+            bar.MouseLeave += static (sender, _) => ((Rectangle)sender).Opacity = 1;
+            Children.Add(bar);
+        }
+    }
+
+    private string TooltipText(ActiveTimeBucket item)
+    {
+        var end = IsHourly ? item.LocalStart.AddHours(1) : item.LocalStart.AddDays(1);
+        var startText = item.LocalStart.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture);
+        var endText = end.ToString(end.Date == item.LocalStart.Date ? "HH:mm" : "yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture);
+        var duration = TimeSpan.FromMilliseconds(Math.Round(item.ActiveDuration.TotalMilliseconds, MidpointRounding.AwayFromZero));
+        var seconds = (duration.Ticks % TimeSpan.TicksPerMinute) / (double)TimeSpan.TicksPerSecond;
+        var value = $"{seconds:0} 秒";
+        if (duration.TotalMinutes >= 1) value = $"{duration.Minutes} 分钟 {value}";
+        if (duration.TotalHours >= 1) value = $"{duration.Ticks / TimeSpan.TicksPerHour} 小时 {value}";
+        return $"{startText} – {endText}\n活跃时长：{value}";
+    }
+
+    private void CloseTooltips()
+    {
+        foreach (var bar in Children.OfType<Rectangle>())
+            if (bar.ToolTip is ToolTip tooltip) tooltip.IsOpen = false;
     }
 
     private FormattedText Text(string value) => new(value, CultureInfo.CurrentCulture,
@@ -139,8 +178,6 @@ public sealed class ActiveTimeChart : FrameworkElement
 
     private static void OnDataChanged(DependencyObject owner, DependencyPropertyChangedEventArgs args)
     {
-        var chart = (ActiveTimeChart)owner;
-        chart._hoveredIndex = null;
-        chart.ToolTip = null;
+        ((ActiveTimeChart)owner).UpdateBars();
     }
 }

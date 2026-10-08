@@ -11,6 +11,7 @@
         <converters:DurationConverter x:Key="DurationText" />
         <converters:SharePercentConverter x:Key="SharePercent" />
         <converters:ShareTextConverter x:Key="ShareText" />
+        <converters:ApplicationIconConverter x:Key="ApplicationIcon" />
     </UserControl.Resources>
     <Grid Background="{DynamicResource WindowBrush}">
         <Grid.RowDefinitions>
@@ -105,25 +106,31 @@
                             </Grid.RowDefinitions>
                             <TextBlock Text="应用时间占比" Style="{StaticResource SectionTitle}" />
                             <Grid Grid.Row="1" Margin="20">
-                                <controls:DonutChart ItemsSource="{Binding TopApps}" />
+                                <controls:DonutChart x:Name="ApplicationShareChart" ItemsSource="{Binding TopApps}" />
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                                     <TextBlock Text="总计" Style="{StaticResource MutedText}" HorizontalAlignment="Center" />
                                     <TextBlock Text="{Binding ActiveText}" FontSize="18" FontWeight="SemiBold" Margin="0,3,0,0" />
                                 </StackPanel>
                             </Grid>
-                            <ItemsControl Grid.Row="2" ItemsSource="{Binding TopApps}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal" Margin="0,3,12,3">
-                                            <Ellipse Width="8" Height="8" Fill="{Binding Color}" VerticalAlignment="Center" />
-                                            <TextBlock Text="{Binding AppName}" Margin="5,0,0,0" FontSize="12" MaxWidth="90" TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <StackPanel Grid.Row="2">
+                                <ItemsControl ItemsSource="{Binding TopApps}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="0,3,12,3">
+                                                <Ellipse Width="8" Height="8" Fill="{Binding Color}" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding AppName}" Margin="5,0,0,0" FontSize="12" MaxWidth="90" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <StackPanel Orientation="Horizontal" Margin="0,3,12,3">
+                                    <Ellipse Width="8" Height="8" Fill="{Binding TrackBrush, ElementName=ApplicationShareChart}" VerticalAlignment="Center" />
+                                    <TextBlock Text="其他" Margin="5,0,0,0" FontSize="12" />
+                                </StackPanel>
+                            </StackPanel>
                         </Grid>
                     </Border>
 
@@ -141,8 +148,9 @@
                                             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="50" /></Grid.ColumnDefinitions>
                                             <StackPanel Orientation="Horizontal">
-                                                <Ellipse Width="10" Height="10" Fill="{Binding Color}" VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding AppName}" FontWeight="SemiBold" Margin="8,0,0,0" MaxWidth="230" TextTrimming="CharacterEllipsis" />
+                                                <Image Width="20" Height="20" Source="{Binding ExecutablePath, Converter={StaticResource ApplicationIcon}}"
+                                                       VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" />
+                                                <TextBlock Text="{Binding AppName}" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" MaxWidth="230" TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
                                             <TextBlock Grid.Column="1" Text="{Binding Duration, Converter={StaticResource DurationText}}" Foreground="{DynamicResource SecondaryTextBrush}" Margin="12,0" />
                                             <TextBlock Grid.Column="2" Text="{Binding Share, Converter={StaticResource ShareText}}" HorizontalAlignment="Right" />

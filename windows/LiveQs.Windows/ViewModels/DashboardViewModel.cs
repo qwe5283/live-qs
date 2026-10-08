@@ -10,6 +10,7 @@ namespace LiveQs.Windows.ViewModels;
 
 public sealed partial class DashboardViewModel : ViewModelBase
 {
+    private static readonly string[] TopAppColors = ["#007AFF", "#FF7A00", "#1DB954", "#8B5CF6", "#E94D73"];
     private readonly IActivityQueryService _queryService;
     private readonly IUserDialogService _dialogs;
     private readonly TimeProvider _timeProvider;
@@ -34,7 +35,7 @@ public sealed partial class DashboardViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isHourlyDistribution = true;
     [ObservableProperty]
-    private string _distributionText = "每小时活跃占比";
+    private string _distributionText = "每小时活跃时长";
     [ObservableProperty]
     private IReadOnlyList<AppUsage> _topApps = [];
 
@@ -61,10 +62,13 @@ public sealed partial class DashboardViewModel : ViewModelBase
             var snapshot = await _queryService.GetDashboardAsync(DateRange.FromLocalDates(start, end));
             ActiveBuckets = snapshot.ActiveBuckets;
             IsHourlyDistribution = start == end;
-            DistributionText = IsHourlyDistribution ? "每小时活跃占比" : "每日活跃占比";
+            DistributionText = IsHourlyDistribution ? "每小时活跃时长" : "每日活跃时长";
+            var apps = snapshot.Apps.Select((app, index) => index < TopAppColors.Length
+                ? app with { Color = TopAppColors[index] }
+                : app).ToArray();
             Apps.Clear();
-            foreach (var app in snapshot.Apps) Apps.Add(app);
-            TopApps = snapshot.Apps.Take(5).ToArray();
+            foreach (var app in apps) Apps.Add(app);
+            TopApps = apps.Take(TopAppColors.Length).ToArray();
             ActiveText = DurationText.Format(snapshot.ActiveDuration);
             AfkText = DurationText.Format(snapshot.AfkDuration);
             AppCountText = snapshot.AppCount.ToString(System.Globalization.CultureInfo.CurrentCulture);

@@ -160,7 +160,7 @@ public sealed partial class SqliteActivityRepository
         var segments = await ReadSegmentsAsync(range, cancellationToken);
         var active = TimeSpan.Zero;
         var afk = TimeSpan.Zero;
-        var byApp = new Dictionary<string, (string Name, string Category, string Color, TimeSpan Duration)>(StringComparer.OrdinalIgnoreCase);
+        var byApp = new Dictionary<string, (string Name, string Category, string Color, string Path, TimeSpan Duration)>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var segment in segments)
         {
@@ -175,13 +175,18 @@ public sealed partial class SqliteActivityRepository
             active += duration;
             var key = segment.AppId;
             if (!byApp.TryGetValue(key, out var current))
-                current = (segment.AppName, segment.Category, segment.Color, TimeSpan.Zero);
-            byApp[key] = (current.Name, current.Category, current.Color, current.Duration + duration);
+                current = (segment.AppName, segment.Category, segment.Color, segment.ExecutablePath, TimeSpan.Zero);
+            // Segments are newest first; retain the most recent nonempty local path.
+            var path = string.IsNullOrWhiteSpace(current.Path) ? segment.ExecutablePath : current.Path;
+            byApp[key] = (current.Name, current.Category, current.Color, path, current.Duration + duration);
         }
 
         var apps = byApp
             .Select(item => new AppUsage(item.Key, item.Value.Name, item.Value.Category, item.Value.Duration,
-                active > TimeSpan.Zero ? item.Value.Duration.TotalSeconds / active.TotalSeconds : 0, item.Value.Color))
+                active > TimeSpan.Zero ? item.Value.Duration.TotalSeconds / active.TotalSeconds : 0, item.Value.Color)
+            {
+                ExecutablePath = item.Value.Path,
+            })
             .OrderByDescending(item => item.Duration)
             .ToArray();
         var buckets = ActiveTimeDistribution.Build(range, segments, TimeZoneInfo.Local);
@@ -214,7 +219,7 @@ public sealed partial class SqliteActivityRepository
             SELECT s.id, s.started_utc, s.ended_utc, s.app_id,
                    COALESCE(NULLIF(r.alias, ''), s.app_name) AS display_name,
                    s.window_title, s.is_afk, s.is_audio_playing, s.is_fullscreen,
-                   COALESCE(NULLIF(r.category, ''), '未分类') AS category
+                   COALESCE(NULLIF(r.category, ''), '未分类') AS category, s.executable_path
             FROM activity_segments s
             LEFT JOIN application_rules r ON r.app_id = s.app_id
             WHERE s.started_utc < $end AND s.ended_utc > $start
@@ -231,7 +236,10 @@ public sealed partial class SqliteActivityRepository
             result.Add(new ActivitySegment(
                 reader.GetInt64(0), ParseTime(reader.GetString(1)), ParseTime(reader.GetString(2)), appId,
                 reader.GetString(4), reader.GetString(5), reader.GetBoolean(6), reader.GetBoolean(7),
-                reader.GetBoolean(8), reader.GetString(9), ColorFor(appId)));
+                reader.GetBoolean(8), reader.GetString(9), ColorFor(appId))
+            {
+                ExecutablePath = reader.GetString(10),
+            });
         }
         return result;
     }
@@ -249,7 +257,7 @@ public sealed partial class SqliteActivityRepository
                 SELECT s.id, s.started_utc, s.ended_utc, s.app_id,
                        COALESCE(NULLIF(r.alias, ''), s.app_name) AS display_name,
                        s.window_title, s.is_afk, s.is_audio_playing, s.is_fullscreen,
-                       COALESCE(NULLIF(r.category, ''), '未分类') AS category
+                       COALESCE(NULLIF(r.category, ''), '未分类') AS category, s.executable_path
                 FROM activity_segments s
                 LEFT JOIN application_rules r ON r.app_id = s.app_id
                 WHERE s.started_utc < $end AND s.ended_utc > $start
@@ -261,7 +269,7 @@ public sealed partial class SqliteActivityRepository
                 SELECT s.id, s.started_utc, s.ended_utc, s.app_id,
                        COALESCE(NULLIF(r.alias, ''), s.app_name) AS display_name,
                        s.window_title, s.is_afk, s.is_audio_playing, s.is_fullscreen,
-                       COALESCE(NULLIF(r.category, ''), '未分类') AS category
+                       COALESCE(NULLIF(r.category, ''), '未分类') AS category, s.executable_path
                 FROM activity_segments s
                 LEFT JOIN application_rules r ON r.app_id = s.app_id
                 WHERE s.started_utc < $end AND s.ended_utc > $start
@@ -288,7 +296,10 @@ public sealed partial class SqliteActivityRepository
             result.Add(new ActivitySegment(
                 reader.GetInt64(0), ParseTime(reader.GetString(1)), ParseTime(reader.GetString(2)), appId,
                 reader.GetString(4), reader.GetString(5), reader.GetBoolean(6), reader.GetBoolean(7),
-                reader.GetBoolean(8), reader.GetString(9), ColorFor(appId)));
+                reader.GetBoolean(8), reader.GetString(9), ColorFor(appId))
+            {
+                ExecutablePath = reader.GetString(10),
+            });
         }
         return result;
     }

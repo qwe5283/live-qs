@@ -54,6 +54,40 @@ public sealed class RepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task Dashboard_UsesLatestKnownExecutablePathIndependentlyOfAlias()
+    {
+        var repository = await CreateRepositoryAsync();
+        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+        await repository.RecordSampleAsync(Sample(localNoon, false), TimeSpan.FromSeconds(5));
+        await repository.RecordSampleAsync(Sample(localNoon.AddMinutes(1), false) with
+        {
+            ExecutablePath = @"D:\Apps\Browser.exe",
+        }, TimeSpan.FromSeconds(5));
+        await repository.RecordSampleAsync(Sample(localNoon.AddMinutes(2), false) with
+        {
+            ExecutablePath = "",
+        }, TimeSpan.FromSeconds(5));
+        await repository.RecordSampleAsync(Sample(localNoon.AddMinutes(3), false, "unknown.exe") with
+        {
+            ExecutablePath = "",
+        }, TimeSpan.FromSeconds(5));
+        await repository.SaveApplicationRuleAsync(new ApplicationRule("browser.exe", "我的浏览器", "工作", false));
+
+        var dashboard = await repository.GetDashboardAsync(DateRange.Today());
+        var browser = Assert.Single(dashboard.Apps, app => app.AppId == "browser.exe");
+        Assert.Equal("我的浏览器", browser.AppName);
+        Assert.Equal(@"D:\Apps\Browser.exe", browser.ExecutablePath);
+        Assert.Equal(TimeSpan.FromSeconds(15), browser.Duration);
+        Assert.Empty(dashboard.Apps.Single(app => app.AppId == "unknown.exe").ExecutablePath);
+
+        var timeline = await repository.GetTimelineAsync(DateRange.Today());
+        var firstPage = await repository.GetTimelinePageAsync(DateRange.Today(), 2);
+        var secondPage = await repository.GetTimelinePageAsync(DateRange.Today(), 2, firstPage.NextCursor);
+        Assert.Equal(timeline.Select(segment => segment.ExecutablePath),
+            firstPage.Items.Concat(secondPage.Items).Select(segment => segment.ExecutablePath));
+    }
+
+    [Fact]
     public async Task ApplicationRule_ChangesHistoricalQueriesWithoutDeletingRows()
     {
         var repository = await CreateRepositoryAsync();

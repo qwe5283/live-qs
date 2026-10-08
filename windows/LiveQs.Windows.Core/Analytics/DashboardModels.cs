@@ -8,7 +8,10 @@ public sealed record AppUsage(
     string Category,
     TimeSpan Duration,
     double Share,
-    string Color);
+    string Color)
+{
+    public string ExecutablePath { get; init; } = "";
+}
 
 public sealed record DashboardSnapshot(
     DateTimeOffset RangeStart,

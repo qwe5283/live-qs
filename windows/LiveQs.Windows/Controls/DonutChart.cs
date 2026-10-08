@@ -12,12 +12,22 @@ public sealed class DonutChart : FrameworkElement
         nameof(ItemsSource), typeof(IEnumerable), typeof(DonutChart),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender, OnItemsChanged));
 
+    public static readonly DependencyProperty TrackBrushProperty = DependencyProperty.Register(
+        nameof(TrackBrush), typeof(Brush), typeof(DonutChart),
+        new FrameworkPropertyMetadata(new SolidColorBrush(Color.FromRgb(226, 231, 234)), FrameworkPropertyMetadataOptions.AffectsRender));
+
     private INotifyCollectionChanged? _observable;
 
     public IEnumerable? ItemsSource
     {
         get => (IEnumerable?)GetValue(ItemsSourceProperty);
         set => SetValue(ItemsSourceProperty, value);
+    }
+
+    public Brush TrackBrush
+    {
+        get => (Brush)GetValue(TrackBrushProperty);
+        set => SetValue(TrackBrushProperty, value);
     }
 
     protected override void OnRender(DrawingContext drawingContext)
@@ -28,7 +38,7 @@ public sealed class DonutChart : FrameworkElement
         var center = new System.Windows.Point(ActualWidth / 2, ActualHeight / 2);
         var radius = size / 2;
         var thickness = Math.Clamp(size * 0.14, 14, 26);
-        var background = new Pen(new SolidColorBrush(Color.FromRgb(226, 231, 234)), thickness)
+        var background = new Pen(TrackBrush, thickness)
         {
             StartLineCap = PenLineCap.Round,
             EndLineCap = PenLineCap.Round,

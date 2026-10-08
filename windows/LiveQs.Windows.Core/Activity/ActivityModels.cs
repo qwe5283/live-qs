@@ -27,5 +27,7 @@ public sealed record ActivitySegment(
     string Category,
     string Color)
 {
+    public string ExecutablePath { get; init; } = "";
+
     public TimeSpan Duration => EndedAt > StartedAt ? EndedAt - StartedAt : TimeSpan.Zero;
 }
