@@ -1,0 +1,51 @@
+<UserControl x:Class="LiveQs.Windows.Controls.DateRangePicker"
+             x:Name="Picker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             Focusable="False">
+    <Grid>
+        <Button x:Name="PickerButton" Style="{StaticResource SecondaryButton}"
+                Padding="11,7" MinHeight="38" MaxWidth="280"
+                Click="OnPickerClick" ToolTip="{Binding DisplayText, ElementName=Picker}"
+                AutomationProperties.Name="{Binding DisplayText, ElementName=Picker}"
+                AutomationProperties.HelpText="选择日期范围，先选开始日期，再选结束日期；Esc 取消">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ui:FontIcon x:Name="CalendarIcon" FontSize="16" VerticalAlignment="Center"
+                             FontFamily="{DynamicResource FluentSystemIcons}"
+                             Foreground="{Binding Foreground, ElementName=PickerButton}" />
+                <TextBlock Grid.Column="1" Text="{Binding DisplayText, ElementName=Picker}"
+                           Foreground="{Binding Foreground, ElementName=PickerButton}"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
+                <ui:SymbolIcon Grid.Column="2" Symbol="ChevronDown16" FontSize="12" VerticalAlignment="Center"
+                               FontFamily="{DynamicResource FluentSystemIcons}"
+                               Foreground="{Binding Foreground, ElementName=PickerButton}" />
+            </Grid>
+        </Button>
+        <Popup x:Name="RangePopup" PlacementTarget="{Binding ElementName=PickerButton}" Placement="Bottom"
+               VerticalOffset="6" StaysOpen="False" AllowsTransparency="True"
+               Opened="OnPopupOpened" Closed="OnPopupClosed">
+            <Border x:Name="PopupSurface" Background="{DynamicResource SurfaceBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12"
+                    PreviewKeyDown="OnPopupKeyDown">
+                <StackPanel>
+                    <Calendar x:Name="RangeCalendar" SelectionMode="SingleRange" FirstDayOfWeek="Monday"
+                              Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                              BorderThickness="0" Margin="0"
+                              AutomationProperties.Name="选择起止日期"
+                              PreviewMouseLeftButtonDown="OnCalendarMouseDown"
+                              PreviewMouseLeftButtonUp="OnCalendarMouseUp"
+                              MouseMove="OnCalendarMouseMove" PreviewKeyDown="OnCalendarKeyDown" />
+                    <TextBlock x:Name="SelectionHint" Style="{StaticResource MutedText}"
+                               FontSize="12" Margin="5,8,5,3" AutomationProperties.LiveSetting="Polite"
+                               Text="选择开始日期" />
+                </StackPanel>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

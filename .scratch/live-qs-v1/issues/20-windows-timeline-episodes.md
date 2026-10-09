@@ -42,3 +42,17 @@ Status: resolved
 - [空数据](../evidence/20-timeline/empty-light.png)
 
 随后启动验证后的客户端并打开时间线，现有数据首批 500 条原始记录显示为 18 个活动段落；其中一段 14 分钟的多应用活动包含 63 条原始记录。通过单独的 WPF 视图只查询现有 SQLite，保留了 [现有数据界面](../evidence/20-timeline/live-data.png)，截图中原始记录保持折叠。更新后的客户端保持运行在时间线页。
+
+## Comments
+
+2026-10-09 Owner 追加：活动段落左边的起止时间改成类似 Git 的时间轴。左侧采用连续竖轴和起止圆点，结束时间在上、开始时间在下；段落展开后轴线随内容延伸，相邻段落保持共轴。继续使用现有主题颜色、虚拟化、分页及展开交互。
+
+2026-10-09 Owner 追加：把滚动条放到页边距外侧。将时间线列表的滚动条移到右侧页面留白、靠近窗口边缘，保留卡片的页面边距及内容内边距；继续使用列表自身的 ScrollViewer，保留虚拟化、滚动事件和分页位置恢复。
+
+### 追加改动交付
+
+- 活动段落的起止时间分别对齐纵轴圆点，结束时间在上，开始时间在下；段落内使用强调色轴线，相邻段落以中性轴线连接，展开时随内容高度延伸。
+- 卡片保留 28 px 页面边距和 18 px 内容内边距；滚动条位于右侧独立的页面留白，靠近窗口边缘。列表保留自身 ScrollViewer、像素滚动、虚拟化及分页事件，没有增加嵌套滚动容器。
+- `.\scripts\check.ps1 windows` 通过：148 项测试，构建零警告、零错误；`git diff --check` 通过。
+- `dotnet run --project .scratch/live-qs-v1/evidence/20-timeline/smoke/TimelineSmoke.csproj -p:BuildProjectReferences=false -- --git-axis` 通过；实际 WPF 控件验证滚动条位于卡片外、拖动滚动、虚拟化、展开/折叠、原始记录选区、窄窗口、浅色/深色、缺口及空数据，无绑定错误。使用已经检查过的项目程序集，避免覆盖正在运行的客户端文件。
+- [折叠段落与纵轴](../evidence/20-timeline/git-axis/collapsed-light.png)、[展开轨迹](../evidence/20-timeline/git-axis/expanded-light.png)、[浅色外侧滚动条](../evidence/20-timeline/git-axis/raw-records-light.png)、[深色窄窗口外侧滚动条](../evidence/20-timeline/git-axis/raw-records-narrow-dark.png)。

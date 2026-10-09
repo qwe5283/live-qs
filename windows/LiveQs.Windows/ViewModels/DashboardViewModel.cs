@@ -14,9 +14,13 @@ public sealed partial class DashboardViewModel : ViewModelBase
     private readonly IActivityQueryService _queryService;
     private readonly IUserDialogService _dialogs;
     private readonly TimeProvider _timeProvider;
+    private CancellationTokenSource? _loadCancellation;
+    private long _requestVersion;
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RangeText))]
     private DateTime? _startDate;
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RangeText))]
     private DateTime? _endDate;
     [ObservableProperty]
     private string _activeText = "0分钟";
@@ -25,11 +29,18 @@ public sealed partial class DashboardViewModel : ViewModelBase
     [ObservableProperty]
     private string _appCountText = "0";
     [ObservableProperty]
-    private string _rangeText = "今天";
+    [NotifyPropertyChangedFor(nameof(IsTodayRange), nameof(IsWeekRange), nameof(IsMonthRange))]
+    private int _presetDays = 1;
     [ObservableProperty]
     private bool _isEmpty = true;
     [ObservableProperty]
     private bool _isLoading;
+    [ObservableProperty]
+    private bool _hasSnapshot;
+    [ObservableProperty]
+    private bool _hasQueryError;
+    [ObservableProperty]
+    private string _queryStatusText = "正在加载统计…";
     [ObservableProperty]
     private IReadOnlyList<ActiveTimeBucket> _activeBuckets = [];
     [ObservableProperty]
@@ -49,17 +60,36 @@ public sealed partial class DashboardViewModel : ViewModelBase
     }
 
     public ObservableCollection<AppUsage> Apps { get; } = [];
+    public bool IsTodayRange => PresetDays == 1;
+    public bool IsWeekRange => PresetDays == 7;
+    public bool IsMonthRange => PresetDays == 30;
+    public string RangeText => Formatting.DateRangeText.Format(StartDate, EndDate, Today.Year);
 
     public async Task RefreshAsync()
     {
-        if (IsLoading) return;
+        var version = Interlocked.Increment(ref _requestVersion);
+        var cancellation = new CancellationTokenSource();
+        var previous = Interlocked.Exchange(ref _loadCancellation, cancellation);
+        previous?.Cancel();
+        previous?.Dispose();
+        var token = cancellation.Token;
+        if (PresetDays > 0)
+        {
+            StartDate = Today.AddDays(-(PresetDays - 1));
+            EndDate = Today;
+        }
         IsLoading = true;
+        HasSnapshot = false;
+        HasQueryError = false;
+        QueryStatusText = "正在更新统计…";
         try
         {
             var start = (StartDate ?? Today).Date;
             var end = (EndDate ?? start).Date;
             if (end < start) (start, end) = (end, start);
-            var snapshot = await _queryService.GetDashboardAsync(DateRange.FromLocalDates(start, end));
+            var range = DateRange.FromLocalDates(start, end);
+            var snapshot = await Task.Run(() => _queryService.GetDashboardAsync(range, token), token);
+            if (version != Volatile.Read(ref _requestVersion) || token.IsCancellationRequested) return;
             ActiveBuckets = snapshot.ActiveBuckets;
             IsHourlyDistribution = start == end;
             DistributionText = IsHourlyDistribution ? "每小时活跃时长" : "每日活跃时长";
@@ -72,14 +102,38 @@ public sealed partial class DashboardViewModel : ViewModelBase
             ActiveText = DurationText.Format(snapshot.ActiveDuration);
             AfkText = DurationText.Format(snapshot.AfkDuration);
             AppCountText = snapshot.AppCount.ToString(System.Globalization.CultureInfo.CurrentCulture);
-            RangeText = start == end ? start.ToString("M月d日") : $"{start:M月d日} - {end:M月d日}";
             IsEmpty = Apps.Count == 0;
+            HasSnapshot = true;
+            QueryStatusText = DistributionText;
         }
-        finally { IsLoading = false; }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception exception)
+        {
+            if (version != Volatile.Read(ref _requestVersion)) return;
+            HasQueryError = true;
+            QueryStatusText = "查询失败，请重试或选择其他日期范围。";
+            _dialogs.ShowError("查询失败", exception);
+        }
+        finally
+        {
+            if (version == Volatile.Read(ref _requestVersion)) IsLoading = false;
+        }
+    }
+
+    public Task SelectRangeAsync(DateTime start, DateTime end)
+    {
+        start = start.Date;
+        end = end.Date;
+        if (end < start) (start, end) = (end, start);
+        PresetDays = end == Today && (end - start).Days + 1 is 1 or 7 or 30 ? (end - start).Days + 1 : 0;
+        StartDate = start;
+        EndDate = end;
+        return RefreshAsync();
     }
 
     private async Task SelectPresetAsync(int days)
     {
+        PresetDays = days;
         EndDate = Today;
         StartDate = Today.AddDays(-(Math.Max(1, days) - 1));
         await RefreshAsync();
@@ -87,21 +141,15 @@ public sealed partial class DashboardViewModel : ViewModelBase
 
     private DateTime Today => _timeProvider.GetLocalNow().Date;
 
-    [RelayCommand]
-    private Task LoadAsync() => RunAsync(RefreshAsync);
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private Task LoadAsync() => RefreshAsync();
 
-    [RelayCommand]
-    private Task TodayAsync() => RunAsync(() => SelectPresetAsync(1));
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private Task TodayAsync() => SelectPresetAsync(1);
 
-    [RelayCommand]
-    private Task WeekAsync() => RunAsync(() => SelectPresetAsync(7));
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private Task WeekAsync() => SelectPresetAsync(7);
 
-    [RelayCommand]
-    private Task MonthAsync() => RunAsync(() => SelectPresetAsync(30));
-
-    private async Task RunAsync(Func<Task> action)
-    {
-        try { await action(); }
-        catch (Exception exception) { _dialogs.ShowError("查询失败", exception); }
-    }
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private Task MonthAsync() => SelectPresetAsync(30);
 }

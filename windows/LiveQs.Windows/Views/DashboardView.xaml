@@ -12,6 +12,41 @@
         <converters:SharePercentConverter x:Key="SharePercent" />
         <converters:ShareTextConverter x:Key="ShareText" />
         <converters:ApplicationIconConverter x:Key="ApplicationIcon" />
+        <Style x:Key="RangeSegment" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="11,6" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="SegmentSurface" Background="{TemplateBinding Background}"
+                                BorderBrush="Transparent" BorderThickness="1" CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                    <Condition Property="IsChecked" Value="False" />
+                                </MultiTrigger.Conditions>
+                                <Setter Property="Background" Value="{DynamicResource InputBrush}" />
+                            </MultiTrigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="SegmentSurface" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
     <Grid Background="{DynamicResource WindowBrush}">
         <Grid.RowDefinitions>
@@ -19,27 +54,49 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid Margin="28,8,28,18">
+        <Grid x:Name="DashboardHeader" Margin="28,8,28,18" SizeChanged="OnHeaderSizeChanged">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel>
                 <TextBlock Text="统计" Style="{StaticResource PageTitle}" />
-                <TextBlock Text="{Binding RangeText}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
+                <TextBlock Text="{Binding QueryStatusText}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
             </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Content="今天" Style="{StaticResource SecondaryButton}" Padding="11,7" Margin="0,0,6,0" Command="{Binding TodayCommand}" />
-                <Button Content="近 7 天" Style="{StaticResource SecondaryButton}" Padding="11,7" Margin="0,0,6,0" Command="{Binding WeekCommand}" />
-                <Button Content="近 30 天" Style="{StaticResource SecondaryButton}" Padding="11,7" Margin="0,0,10,0" Command="{Binding MonthCommand}" />
-                <DatePicker SelectedDate="{Binding StartDate}" Width="160" />
-                <TextBlock Text="至" VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" Margin="7,0" />
-                <DatePicker SelectedDate="{Binding EndDate}" Width="160" />
-                <Button Style="{StaticResource PrimaryButton}" Margin="10,0,0,0" Command="{Binding LoadCommand}"><TextBlock Text="查询" Style="{StaticResource ButtonContentText}" /></Button>
-            </StackPanel>
+            <Grid x:Name="RangeFilters" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="16,0,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <controls:DateRangePicker x:Name="DateRangeSelector" StartDate="{Binding StartDate, Mode=OneWay}"
+                                          EndDate="{Binding EndDate, Mode=OneWay}" RangeSelected="OnRangeSelected"
+                                          VerticalAlignment="Center" Margin="0,0,12,0" />
+                <Border x:Name="PresetSegments" Grid.Column="1" Background="{DynamicResource SidebarBrush}"
+                        CornerRadius="6" Padding="3" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" AutomationProperties.Name="快捷日期范围">
+                        <RadioButton GroupName="DashboardRange" Style="{StaticResource RangeSegment}"
+                                     AutomationProperties.Name="今天" IsChecked="{Binding IsTodayRange, Mode=OneWay}" Command="{Binding TodayCommand}">
+                            <TextBlock Text="今天" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+                        </RadioButton>
+                        <RadioButton GroupName="DashboardRange" Style="{StaticResource RangeSegment}" Margin="2,0"
+                                     AutomationProperties.Name="近 7 天" IsChecked="{Binding IsWeekRange, Mode=OneWay}" Command="{Binding WeekCommand}">
+                            <TextBlock Text="近 7 天" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+                        </RadioButton>
+                        <RadioButton GroupName="DashboardRange" Style="{StaticResource RangeSegment}"
+                                     AutomationProperties.Name="近 30 天" IsChecked="{Binding IsMonthRange, Mode=OneWay}" Command="{Binding MonthCommand}">
+                            <TextBlock Text="近 30 天" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+                        </RadioButton>
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Grid>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      Visibility="{Binding HasSnapshot, Converter={StaticResource VisibleWhenTrue}}">
             <StackPanel Margin="28,0,28,28">
                 <Grid Margin="0,0,0,16">
                     <Grid.ColumnDefinitions>
@@ -174,5 +231,14 @@
                 </Border>
             </StackPanel>
         </ScrollViewer>
+        <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="28"
+                    Visibility="{Binding HasSnapshot, Converter={StaticResource VisibleWhenFalse}}">
+            <ui:ProgressRing IsIndeterminate="True" Width="28" Height="28" Margin="0,0,0,14"
+                             Visibility="{Binding IsLoading, Converter={StaticResource VisibleWhenTrue}}" />
+            <TextBlock Text="{Binding QueryStatusText}" Style="{StaticResource MutedText}" />
+            <Button Content="重试" Style="{StaticResource SecondaryButton}" Command="{Binding LoadCommand}"
+                    HorizontalAlignment="Center" Margin="0,14,0,0"
+                    Visibility="{Binding HasQueryError, Converter={StaticResource VisibleWhenTrue}}" />
+        </StackPanel>
     </Grid>
 </UserControl>
