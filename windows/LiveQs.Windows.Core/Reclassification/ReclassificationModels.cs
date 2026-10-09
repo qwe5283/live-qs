@@ -47,7 +47,10 @@ public static class ReclassificationPlanner
 {
     public static ReclassificationDecision Decide(SyncQueueItem segment, ClassificationOutcome? recomputed)
     {
-        var bumped = segment with { SyncVersion = segment.SyncVersion + 1 };
+        var bumped = segment with
+        {
+            SyncVersion = segment.SyncVersion + 1
+        };
         var recorded = segment.UploadOutcome;
         var changed = recorded is null ? recomputed is not null : !SameOutcome(recorded, recomputed);
         return new ReclassificationDecision(

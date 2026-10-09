@@ -5,10 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Activity;
-using LiveQs.Windows.Core.Analytics;
-using LiveQs.Windows.Core.Common;
 using LiveQs.Windows.Core.Settings;
-using LiveQs.Windows.Core.Sync;
 using Microsoft.Data.Sqlite;
 
 namespace LiveQs.Windows.Infrastructure.Persistence.Sqlite;
@@ -22,12 +19,12 @@ public sealed partial class SqliteActivityRepository :
     IClassificationRuleStore,
     IActivityMaintenance
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
     };
 
-    private static readonly string[] Palette =
+    private static readonly string[] _palette =
     [
         "#007AFF", "#D56A45", "#4285F4", "#1DB954", "#7A63A8",
         "#4A154B", "#A75B2D", "#A259FF", "#FF6F00", "#526D82",
@@ -58,13 +55,6 @@ public sealed partial class SqliteActivityRepository :
         return connection;
     }
 
-    private static TimeSpan ClippedDuration(DateTimeOffset startedAt, DateTimeOffset endedAt, DateRange range)
-    {
-        var start = startedAt > range.Start ? startedAt : range.Start;
-        var end = endedAt < range.End ? endedAt : range.End;
-        return end > start ? end - start : TimeSpan.Zero;
-    }
-
     private static string Fingerprint(ActivitySample sample, WindowTitleMode mode)
     {
         var title = mode switch
@@ -85,7 +75,7 @@ public sealed partial class SqliteActivityRepository :
             hash ^= char.ToLowerInvariant(character);
             hash *= 16777619;
         }
-        return Palette[hash % Palette.Length];
+        return _palette[hash % _palette.Length];
     }
 
     private static string Csv(string value) => $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";

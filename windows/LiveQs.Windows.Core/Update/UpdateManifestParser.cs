@@ -13,7 +13,7 @@ public static partial class UpdateManifestParser
 {
     private const int ManifestVersion = 1;
 
-    private static readonly string[] RequiredFields =
+    private static readonly string[] _requiredFields =
     [
         "manifest_version",
         "component",
@@ -49,7 +49,10 @@ public static partial class UpdateManifestParser
         }
     }
 
-    private static bool TryParseDocument(JsonElement root, out UpdateManifest? manifest, out IReadOnlyList<string> errors)
+    private static bool TryParseDocument(
+        JsonElement root,
+        out UpdateManifest? manifest,
+        out IReadOnlyList<string> errors)
     {
         manifest = null;
         if (root.ValueKind is not JsonValueKind.Object)
@@ -59,25 +62,51 @@ public static partial class UpdateManifestParser
         }
 
         var properties = root.EnumerateObject().ToArray();
-        var unknown = properties
-            .Select(property => property.Name)
-            .Where(name => !RequiredFields.Contains(name))
-            .ToArray();
-        var missing = RequiredFields
-            .Where(field => !properties.Any(property => string.Equals(property.Name, field, StringComparison.Ordinal)))
-            .ToArray();
-
         var failures = new List<string>();
-        if (unknown.Length > 0) failures.Add($"unknown fields: {string.Join(", ", unknown)}");
-        if (missing.Length > 0) failures.Add($"missing fields: {string.Join(", ", missing)}");
+        ValidateFieldNames(properties, failures);
+
         if (failures.Count > 0)
         {
             errors = failures;
             return false;
         }
 
-        int manifestVersion = 0;
-        string component = "", version = "", releasedAt = "", downloadUrl = "", sha256 = "", minCompatible = "";
+        var fields = ReadFields(properties, failures);
+        manifest = ValidateValues(fields, failures);
+        errors = failures;
+        return manifest is not null;
+    }
+
+    private static void ValidateFieldNames(JsonProperty[] properties, List<string> failures)
+    {
+        var unknown = properties
+            .Select(property => property.Name)
+            .Where(name => !_requiredFields.Contains(name))
+            .ToArray();
+        var missing = _requiredFields
+            .Where(field => !properties.Any(property => string.Equals(property.Name, field, StringComparison.Ordinal)))
+            .ToArray();
+
+        if (unknown.Length > 0)
+        {
+            failures.Add($"unknown fields: {string.Join(", ", unknown)}");
+        }
+
+        if (missing.Length > 0)
+        {
+            failures.Add($"missing fields: {string.Join(", ", missing)}");
+        }
+    }
+
+    private static ManifestFields ReadFields(JsonProperty[] properties, List<string> failures)
+    {
+        var manifestVersion = 0;
+        var component = "";
+        var version = "";
+        var releasedAt = "";
+        var downloadUrl = "";
+        var sha256 = "";
+        var minCompatible = "";
         foreach (var property in properties)
         {
             switch (property.Name)
@@ -87,7 +116,11 @@ public static partial class UpdateManifestParser
                     {
                         manifestVersion = parsed;
                     }
-                    else failures.Add("manifest_version must be an integer");
+                    else
+                    {
+                        failures.Add("manifest_version must be an integer");
+                    }
+
                     break;
                 case "component":
                     component = ReadString(property.Value, failures, "component");
@@ -110,33 +143,63 @@ public static partial class UpdateManifestParser
             }
         }
 
-        if (manifestVersion != ManifestVersion) failures.Add($"manifest_version must be {ManifestVersion}");
-        if (!IsLowercaseIdentifier(component)) failures.Add("component must be a lowercase [a-z][a-z0-9-]* identifier");
-        if (!UpdateSemver.IsCoreSemver(version)) failures.Add("version must be core semver X.Y.Z");
-        if (!UpdateSemver.IsCoreSemver(minCompatible)) failures.Add("min_compatible_version must be core semver X.Y.Z");
-        if (!Sha256Pattern().IsMatch(sha256)) failures.Add("sha256 must be a lowercase 64-hex digest");
-        if (!Uri.TryCreate(downloadUrl, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
+        return new ManifestFields(
+            manifestVersion, component, version, releasedAt, downloadUrl, sha256, minCompatible);
+    }
+
+    private static UpdateManifest? ValidateValues(ManifestFields fields, List<string> failures)
+    {
+        if (fields.ManifestVersion != ManifestVersion)
+        {
+            failures.Add($"manifest_version must be {ManifestVersion}");
+        }
+
+        if (!IsLowercaseIdentifier(fields.Component))
+        {
+            failures.Add("component must be a lowercase [a-z][a-z0-9-]* identifier");
+        }
+
+        if (!UpdateSemver.IsCoreSemver(fields.Version))
+        {
+            failures.Add("version must be core semver X.Y.Z");
+        }
+
+        if (!UpdateSemver.IsCoreSemver(fields.MinCompatibleVersion))
+        {
+            failures.Add("min_compatible_version must be core semver X.Y.Z");
+        }
+
+        if (!Sha256Pattern().IsMatch(fields.Sha256))
+        {
+            failures.Add("sha256 must be a lowercase 64-hex digest");
+        }
+
+        if (!Uri.TryCreate(fields.DownloadUrl, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
         {
             failures.Add("download_url must be an absolute http(s) URL");
         }
-        if (!TryParseUtcInstant(releasedAt, out var released))
+        if (!TryParseUtcInstant(fields.ReleasedAt, out var released))
         {
             failures.Add("released_at must be a UTC ISO-8601 instant (YYYY-MM-DDTHH:MM:SSZ)");
         }
 
-        if (failures.Count == 0 && UpdateSemver.Compare(minCompatible, version) > 0)
+        if (failures.Count == 0 && UpdateSemver.Compare(fields.MinCompatibleVersion, fields.Version) > 0)
         {
             failures.Add("min_compatible_version must not exceed version");
         }
         if (failures.Count > 0)
         {
-            errors = failures;
-            return false;
+            return null;
         }
 
-        manifest = new UpdateManifest(manifestVersion, component, version, released, downloadUrl, sha256, minCompatible);
-        errors = [];
-        return true;
+        return new UpdateManifest(
+            fields.ManifestVersion,
+            fields.Component,
+            fields.Version,
+            released,
+            fields.DownloadUrl,
+            fields.Sha256,
+            fields.MinCompatibleVersion);
     }
 
     private static string ReadString(JsonElement value, List<string> failures, string field)
@@ -157,11 +220,24 @@ public static partial class UpdateManifestParser
     private static bool TryParseUtcInstant(string value, out DateTimeOffset instant)
     {
         instant = default;
-        if (!IsoInstantPattern().IsMatch(value)) return false;
+        if (!IsoInstantPattern().IsMatch(value))
+        {
+            return false;
+        }
+
         return DateTimeOffset.TryParse(
             value,
             CultureInfo.InvariantCulture,
             DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
             out instant) && instant.Offset == TimeSpan.Zero;
     }
+
+    private sealed record ManifestFields(
+        int ManifestVersion,
+        string Component,
+        string Version,
+        string ReleasedAt,
+        string DownloadUrl,
+        string Sha256,
+        string MinCompatibleVersion);
 }

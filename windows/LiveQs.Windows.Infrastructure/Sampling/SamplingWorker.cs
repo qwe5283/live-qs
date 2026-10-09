@@ -1,5 +1,4 @@
 using LiveQs.Windows.Core.Abstractions;
-using LiveQs.Windows.Core.Settings;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -25,7 +24,9 @@ public sealed class SamplingWorker(
                 {
                     var sample = sampler.Capture(settings);
                     if (sample is not null)
+                    {
                         await activityWriter.RecordSampleAsync(sample, delay, stoppingToken);
+                    }
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -37,8 +38,14 @@ public sealed class SamplingWorker(
                 logger.LogError(exception, "Foreground sampling failed; the next sample will still run.");
             }
 
-            try { await Task.Delay(delay, timeProvider, stoppingToken); }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            try
+            {
+                await Task.Delay(delay, timeProvider, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 }

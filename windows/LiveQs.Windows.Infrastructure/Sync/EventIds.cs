@@ -12,10 +12,10 @@ namespace LiveQs.Windows.Infrastructure.Sync;
 /// </summary>
 public static class EventIds
 {
-    private static readonly Guid Namespace = new("10eace7c-1a13-4a4c-af9c-5f4a1d2b3c9d");
+    private static readonly Guid _namespace = new("10eace7c-1a13-4a4c-af9c-5f4a1d2b3c9d");
 
     public static Guid ForSegment(string deviceId, string installId, long segmentId) =>
-        NewUuid5(Namespace, $"liveqs:activity.interval:{deviceId}:{installId}:{segmentId}");
+        NewUuid5(_namespace, $"liveqs:activity.interval:{deviceId}:{installId}:{segmentId}");
 
     private static Guid NewUuid5(Guid namespaceId, string name)
     {

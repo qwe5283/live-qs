@@ -1,5 +1,4 @@
 using LiveQs.Windows.Core.Activity;
-using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Common;
 using LiveQs.Windows.Core.Settings;
 using LiveQs.Windows.Infrastructure.Persistence.Sqlite;
@@ -8,20 +7,23 @@ namespace LiveQs.Windows.Tests;
 
 public sealed class RepositoryTests : IDisposable
 {
-    private readonly TestPaths _paths = new();
+    private readonly TestDataPaths _paths = new();
+    private readonly TestClock _clock = new();
+    private static readonly DateTime _testDate = new(2026, 10, 10);
+    private static DateRange _testRange => DateRange.FromLocalDates(_testDate, _testDate);
 
     [Fact]
     public async Task RecordSample_MergesContinuousStateAndSeparatesAfk()
     {
         var repository = await CreateRepositoryAsync();
-        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+        var localNoon = new DateTimeOffset(_testDate.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(_testDate.AddHours(12)));
 
         await repository.RecordSampleAsync(Sample(localNoon, false), TimeSpan.FromSeconds(5));
         await repository.RecordSampleAsync(Sample(localNoon.AddSeconds(5), false), TimeSpan.FromSeconds(5));
         await repository.RecordSampleAsync(Sample(localNoon.AddSeconds(10), true), TimeSpan.FromSeconds(5));
 
-        var dashboard = await repository.GetDashboardAsync(DateRange.Today());
-        var timeline = await repository.GetTimelineAsync(DateRange.Today());
+        var dashboard = await repository.GetDashboardAsync(_testRange);
+        var timeline = await repository.GetTimelineAsync(_testRange);
         Assert.Equal(2, timeline.Count);
         Assert.Equal(10, dashboard.ActiveDuration.TotalSeconds, 3);
         Assert.Equal(5, dashboard.AfkDuration.TotalSeconds, 3);
@@ -57,7 +59,7 @@ public sealed class RepositoryTests : IDisposable
     public async Task Dashboard_UsesLatestKnownExecutablePathIndependentlyOfAlias()
     {
         var repository = await CreateRepositoryAsync();
-        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+        var localNoon = new DateTimeOffset(_testDate.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(_testDate.AddHours(12)));
         await repository.RecordSampleAsync(Sample(localNoon, false), TimeSpan.FromSeconds(5));
         await repository.RecordSampleAsync(Sample(localNoon.AddMinutes(1), false) with
         {
@@ -73,16 +75,16 @@ public sealed class RepositoryTests : IDisposable
         }, TimeSpan.FromSeconds(5));
         await repository.SaveApplicationRuleAsync(new ApplicationRule("browser.exe", "我的浏览器", "工作", false));
 
-        var dashboard = await repository.GetDashboardAsync(DateRange.Today());
+        var dashboard = await repository.GetDashboardAsync(_testRange);
         var browser = Assert.Single(dashboard.Apps, app => app.AppId == "browser.exe");
         Assert.Equal("我的浏览器", browser.AppName);
         Assert.Equal(@"D:\Apps\Browser.exe", browser.ExecutablePath);
         Assert.Equal(TimeSpan.FromSeconds(15), browser.Duration);
         Assert.Empty(dashboard.Apps.Single(app => app.AppId == "unknown.exe").ExecutablePath);
 
-        var timeline = await repository.GetTimelineAsync(DateRange.Today());
-        var firstPage = await repository.GetTimelinePageAsync(DateRange.Today(), 2);
-        var secondPage = await repository.GetTimelinePageAsync(DateRange.Today(), 2, firstPage.NextCursor);
+        var timeline = await repository.GetTimelineAsync(_testRange);
+        var firstPage = await repository.GetTimelinePageAsync(_testRange, 2);
+        var secondPage = await repository.GetTimelinePageAsync(_testRange, 2, firstPage.NextCursor);
         Assert.Equal(timeline.Select(segment => segment.ExecutablePath),
             firstPage.Items.Concat(secondPage.Items).Select(segment => segment.ExecutablePath));
     }
@@ -91,15 +93,15 @@ public sealed class RepositoryTests : IDisposable
     public async Task ApplicationRule_ChangesHistoricalQueriesWithoutDeletingRows()
     {
         var repository = await CreateRepositoryAsync();
-        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+        var localNoon = new DateTimeOffset(_testDate.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(_testDate.AddHours(12)));
         await repository.RecordSampleAsync(Sample(localNoon, false), TimeSpan.FromSeconds(5));
 
         await repository.SaveApplicationRuleAsync(new ApplicationRule("browser.exe", "浏览器", "工作", true));
-        var hidden = await repository.GetTimelineAsync(DateRange.Today());
+        var hidden = await repository.GetTimelineAsync(_testRange);
         Assert.Empty(hidden);
 
         await repository.SaveApplicationRuleAsync(new ApplicationRule("browser.exe", "浏览器", "工作", false));
-        var restored = await repository.GetTimelineAsync(DateRange.Today());
+        var restored = await repository.GetTimelineAsync(_testRange);
         Assert.Single(restored);
         Assert.Equal("浏览器", restored[0].AppName);
         Assert.Equal("工作", restored[0].Category);
@@ -109,33 +111,35 @@ public sealed class RepositoryTests : IDisposable
     public async Task MarkSyncedAndDeleteRange_MaintainQueueConsistency()
     {
         var repository = await CreateRepositoryAsync();
-        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+        var localNoon = new DateTimeOffset(_testDate.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(_testDate.AddHours(12)));
         await repository.RecordSampleAsync(Sample(localNoon, false), TimeSpan.FromSeconds(5));
-        var items = await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1));
+        var items = await repository.GetPendingSyncAsync(10, _clock.GetUtcNow().AddMinutes(1));
         Assert.Single(items);
 
-        await repository.MarkSyncedAsync(items.Select(item => item.SegmentId), DateTimeOffset.UtcNow);
+        await repository.MarkSyncedAsync(items.Select(item => item.Revision), _clock.GetUtcNow());
         Assert.Equal(0, await repository.GetPendingSyncCountAsync());
 
-        Assert.Equal(1, await repository.DeleteRangeAsync(DateRange.Today()));
-        Assert.Empty(await repository.GetTimelineAsync(DateRange.Today()));
+        Assert.Equal(1, await repository.DeleteRangeAsync(_testRange));
+        Assert.Empty(await repository.GetTimelineAsync(_testRange));
     }
 
     [Fact]
     public async Task TimelinePage_UsesStableCursorWithoutDuplicatesOrGaps()
     {
         var repository = await CreateRepositoryAsync();
-        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+        var localNoon = new DateTimeOffset(_testDate.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(_testDate.AddHours(12)));
         for (var index = 0; index < 7; index++)
+        {
             await repository.RecordSampleAsync(Sample(localNoon.AddSeconds(index * 5), index % 2 == 0), TimeSpan.FromSeconds(5));
+        }
 
-        var expected = await repository.GetTimelineAsync(DateRange.Today());
+        var expected = await repository.GetTimelineAsync(_testRange);
         var actual = new List<ActivitySegment>();
         TimelineCursor? cursor = null;
         TimelinePage page;
         do
         {
-            page = await repository.GetTimelinePageAsync(DateRange.Today(), 3, cursor);
+            page = await repository.GetTimelinePageAsync(_testRange, 3, cursor);
             actual.AddRange(page.Items);
             cursor = page.NextCursor;
         } while (page.HasMore);
@@ -149,18 +153,18 @@ public sealed class RepositoryTests : IDisposable
     public async Task PendingSync_CarriesRevisionAndFinalizesWhenIntervalEnds()
     {
         var repository = await CreateRepositoryAsync();
-        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+        var localNoon = new DateTimeOffset(_testDate.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(_testDate.AddHours(12)));
 
         // Two contiguous samples of the same app merge into one logical interval at revision 2.
         await repository.RecordSampleAsync(Sample(localNoon, false), TimeSpan.FromSeconds(5));
         await repository.RecordSampleAsync(Sample(localNoon.AddSeconds(5), false), TimeSpan.FromSeconds(5));
-        var openItem = Assert.Single(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1)));
+        var openItem = Assert.Single(await repository.GetPendingSyncAsync(10, _clock.GetUtcNow().AddMinutes(1)));
         Assert.Equal(2, openItem.SyncVersion);
         Assert.False(openItem.Finalized);
 
         // A different foreground app starts a new segment and finalizes the previous one.
         await repository.RecordSampleAsync(Sample(localNoon.AddSeconds(20), false, "editor.exe"), TimeSpan.FromSeconds(5));
-        var pending = await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1));
+        var pending = await repository.GetPendingSyncAsync(10, _clock.GetUtcNow().AddMinutes(1));
         Assert.Equal(2, pending.Count);
 
         var finalized = pending.Single(item => item.AppId == "browser.exe");
@@ -176,14 +180,14 @@ public sealed class RepositoryTests : IDisposable
     public async Task MarkPermanent_StopsRetryingRejectedSegments()
     {
         var repository = await CreateRepositoryAsync();
-        var localNoon = new DateTimeOffset(DateTime.Today.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(DateTime.Today.AddHours(12)));
+        var localNoon = new DateTimeOffset(_testDate.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(_testDate.AddHours(12)));
         await repository.RecordSampleAsync(Sample(localNoon, false), TimeSpan.FromSeconds(5));
-        var item = Assert.Single(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1)));
+        var item = Assert.Single(await repository.GetPendingSyncAsync(10, _clock.GetUtcNow().AddMinutes(1)));
 
-        await repository.MarkPermanentAsync(new[] { item.SegmentId }, "privacy_ceiling_exceeded", DateTimeOffset.UtcNow);
+        await repository.MarkPermanentAsync(new[] { item.Revision }, "privacy_ceiling_exceeded", _clock.GetUtcNow());
 
         // The dead letter never retries, but stays visible in the queue depth.
-        Assert.Empty(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1)));
+        Assert.Empty(await repository.GetPendingSyncAsync(10, _clock.GetUtcNow().AddMinutes(1)));
         Assert.Equal(1, await repository.GetPendingSyncCountAsync());
     }
 
@@ -200,7 +204,7 @@ public sealed class RepositoryTests : IDisposable
 
     private async Task<SqliteActivityRepository> CreateRepositoryAsync()
     {
-        var repository = new SqliteActivityRepository(_paths, TimeProvider.System);
+        var repository = new SqliteActivityRepository(_paths, _clock);
         await repository.InitializeAsync();
         return repository;
     }
@@ -209,22 +213,5 @@ public sealed class RepositoryTests : IDisposable
         time.ToUniversalTime(), appId, "Browser", "C:\\Browser.exe", "Docs", "hash",
         afk ? 120 : 0, afk, false, false, null, null);
 
-    public void Dispose()
-    {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        if (Directory.Exists(_paths.DataDirectory)) Directory.Delete(_paths.DataDirectory, true);
-    }
-
-    private sealed class TestPaths : IAppPaths
-    {
-        public TestPaths()
-        {
-            DataDirectory = Path.Combine(Path.GetTempPath(), "LiveQs.Tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(DataDirectory);
-        }
-
-        public string DataDirectory { get; }
-        public string DatabasePath => Path.Combine(DataDirectory, "test.db");
-        public string LogPath => Path.Combine(DataDirectory, "test.log");
-    }
+    public void Dispose() => _paths.Dispose();
 }

@@ -17,8 +17,8 @@ namespace LiveQs.Windows;
 
 public partial class LiveQsApplication : System.Windows.Application
 {
-    private static readonly Uri LightThemeUri = new("Styles/Theme.Light.xaml", UriKind.Relative);
-    private static readonly Uri DarkThemeUri = new("Styles/Theme.Dark.xaml", UriKind.Relative);
+    private static readonly Uri _lightThemeUri = new("Styles/Theme.Light.xaml", UriKind.Relative);
+    private static readonly Uri _darkThemeUri = new("Styles/Theme.Dark.xaml", UriKind.Relative);
     private IHost? _host;
     private SingleInstanceCoordinator? _singleInstance;
     private ApplicationLifecycleService? _lifecycle;
@@ -38,44 +38,14 @@ public partial class LiveQsApplication : System.Windows.Application
 
         ApplySystemTheme();
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
-        DispatcherUnhandledException += (_, eventArgs) =>
-        {
-            _bootstrapLogger?.Error(eventArgs.Exception, "Unhandled dispatcher exception.");
-            MessageBox.Show(eventArgs.Exception.Message, "LiveQs 发生错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            eventArgs.Handled = true;
-        };
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
 
         try
         {
-            var builder = Host.CreateApplicationBuilder();
             var appPaths = new AppPaths();
-            _bootstrapLogger = new LoggerConfiguration()
-                .MinimumLevel.Information()
-                .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-                .Enrich.FromLogContext()
-                .WriteTo.File(
-                    appPaths.LogPath,
-                    rollingInterval: RollingInterval.Day,
-                    retainedFileCountLimit: 14,
-                    fileSizeLimitBytes: 10 * 1024 * 1024,
-                    rollOnFileSizeLimit: true,
-                    shared: true)
-                .CreateLogger();
+            _bootstrapLogger = CreateBootstrapLogger(appPaths);
             _bootstrapLogger.Information("LiveQs is starting.");
-            builder.Logging.ClearProviders();
-            builder.Logging.AddDebug();
-            builder.Logging.AddSerilog(_bootstrapLogger, dispose: false);
-            builder.Services.AddLiveQsInfrastructure(appPaths);
-            builder.Services.AddSingleton<IUserDialogService, WpfUserDialogService>();
-            builder.Services.AddSingleton<DashboardViewModel>();
-            builder.Services.AddSingleton<TimelineViewModel>();
-            builder.Services.AddSingleton<SettingsViewModel>();
-            builder.Services.AddSingleton<DashboardView>();
-            builder.Services.AddSingleton<TimelineView>();
-            builder.Services.AddSingleton<SettingsView>();
-            builder.Services.AddSingleton<MainWindow>();
-            builder.Services.AddSingleton<TrayIconService>();
-            _host = builder.Build();
+            _host = BuildHost(appPaths, _bootstrapLogger);
             _lifecycle = new ApplicationLifecycleService(
                 this,
                 _host,
@@ -90,33 +60,100 @@ public partial class LiveQsApplication : System.Windows.Application
         catch (Exception exception)
         {
             _bootstrapLogger?.Fatal(exception, "LiveQs failed to start.");
-            try
-            {
-                var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LiveQs", "Windows");
-                Directory.CreateDirectory(directory);
-                File.AppendAllText(Path.Combine(directory, "startup-error.log"), $"[{TimeProvider.System.GetLocalNow():O}]\n{exception}\n\n");
-            }
-            catch (Exception) { }
+            WriteStartupFailure(exception);
             MessageBox.Show(exception.ToString(), "LiveQs 启动失败", MessageBoxButton.OK, MessageBoxImage.Error);
             RequestExit();
         }
     }
 
+    private static Serilog.ILogger CreateBootstrapLogger(IAppPaths paths) => new LoggerConfiguration()
+        .MinimumLevel.Information()
+        .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+        .Enrich.FromLogContext()
+        .WriteTo.File(
+            paths.LogPath,
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: 14,
+            fileSizeLimitBytes: 10 * 1024 * 1024,
+            rollOnFileSizeLimit: true,
+            shared: true,
+            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] " +
+                "{Message:lj} {Properties:j}{NewLine}{Exception}")
+        .CreateLogger();
+
+    private static IHost BuildHost(IAppPaths paths, Serilog.ILogger logger)
+    {
+        var builder = Host.CreateApplicationBuilder();
+        builder.Logging.ClearProviders();
+        builder.Logging.AddDebug();
+        builder.Logging.AddSerilog(logger, dispose: false);
+        builder.Services.AddLiveQsInfrastructure(paths);
+        builder.Services.AddSingleton<IUserDialogService, WpfUserDialogService>();
+        builder.Services.AddSingleton<DashboardViewModel>();
+        builder.Services.AddSingleton<TimelineViewModel>();
+        builder.Services.AddSingleton<SettingsViewModel>();
+        builder.Services.AddSingleton<DashboardView>();
+        builder.Services.AddSingleton<TimelineView>();
+        builder.Services.AddSingleton<SettingsView>();
+        builder.Services.AddSingleton<MainWindow>();
+        builder.Services.AddSingleton<TrayIconService>();
+        return builder.Build();
+    }
+
+    private void OnDispatcherUnhandledException(
+        object sender,
+        System.Windows.Threading.DispatcherUnhandledExceptionEventArgs args)
+    {
+        _bootstrapLogger?.Error(args.Exception, "Unhandled dispatcher exception.");
+        MessageBox.Show(args.Exception.Message, "LiveQs 发生错误", MessageBoxButton.OK, MessageBoxImage.Error);
+        args.Handled = true;
+    }
+
+    private static void WriteStartupFailure(Exception exception)
+    {
+        try
+        {
+            var directory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LiveQs", "Windows");
+            Directory.CreateDirectory(directory);
+            File.AppendAllText(
+                Path.Combine(directory, "startup-error.log"),
+                $"[{TimeProvider.System.GetLocalNow():O}]\n{exception}\n\n");
+        }
+        catch (Exception)
+        {
+            // Startup can fail before the logger exists, including when the data directory is unwritable.
+            // Preserve the original exception for the error dialog.
+        }
+    }
+
     public async void RequestExit()
     {
-        if (_lifecycle is not null) await _lifecycle.RequestExitAsync();
-        else Shutdown();
+        if (_lifecycle is not null)
+        {
+            await _lifecycle.RequestExitAsync();
+        }
+        else
+        {
+            Shutdown();
+        }
     }
 
     protected override void OnExit(ExitEventArgs args)
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+        DispatcherUnhandledException -= OnDispatcherUnhandledException;
         _lifecycle?.Dispose();
         _lifecycle = null;
         if (_host is not null)
         {
-            try { _host.Dispose(); }
-            catch (ObjectDisposedException) { }
+            try
+            {
+                _host.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
         }
         _singleInstance?.Dispose();
         _singleInstance = null;
@@ -143,16 +180,22 @@ public partial class LiveQsApplication : System.Windows.Application
             false,
             false);
 
-        var desiredSource = isLight ? LightThemeUri : DarkThemeUri;
+        var desiredSource = isLight ? _lightThemeUri : _darkThemeUri;
         var dictionaries = Resources.MergedDictionaries;
         var currentPalette = dictionaries.FirstOrDefault(dictionary =>
             dictionary.Source?.OriginalString.EndsWith("Theme.Light.xaml", StringComparison.OrdinalIgnoreCase) == true ||
             dictionary.Source?.OriginalString.EndsWith("Theme.Dark.xaml", StringComparison.OrdinalIgnoreCase) == true);
         if (currentPalette?.Source?.OriginalString.EndsWith(desiredSource.OriginalString, StringComparison.OrdinalIgnoreCase) == true)
+        {
             return;
+        }
 
         var paletteIndex = currentPalette is null ? 0 : dictionaries.IndexOf(currentPalette);
-        if (currentPalette is not null) dictionaries.Remove(currentPalette);
+        if (currentPalette is not null)
+        {
+            dictionaries.Remove(currentPalette);
+        }
+
         dictionaries.Insert(paletteIndex, new ResourceDictionary { Source = desiredSource });
     }
 }

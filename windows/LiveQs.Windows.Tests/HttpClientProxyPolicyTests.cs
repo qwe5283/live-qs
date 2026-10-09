@@ -12,13 +12,17 @@ namespace LiveQs.Windows.Tests;
 /// update channel deliberately keeps the system default so release fetches
 /// from GitHub can still benefit from such accelerators.
 /// </summary>
-public sealed class HttpClientProxyPolicyTests
+public sealed class HttpClientProxyPolicyTests : IDisposable
 {
+    private readonly TestDataPaths _paths = new();
+
+    public void Dispose() => _paths.Dispose();
+
     [Fact]
     public void CloudSyncClient_BypassesSystemProxy()
     {
         using var provider = BuildProvider();
-        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("cloud-sync");
+        using var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("cloud-sync");
 
         var handler = Assert.IsAssignableFrom<SocketsHttpHandler>(TerminalHandler(client));
 
@@ -31,7 +35,7 @@ public sealed class HttpClientProxyPolicyTests
     public void UpdateClients_KeepDefaultSystemProxy(string clientName)
     {
         using var provider = BuildProvider();
-        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient(clientName);
+        using var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient(clientName);
 
         var handler = Assert.IsAssignableFrom<SocketsHttpHandler>(TerminalHandler(client));
 
@@ -39,8 +43,8 @@ public sealed class HttpClientProxyPolicyTests
         Assert.Null(handler.Proxy);
     }
 
-    private static ServiceProvider BuildProvider() =>
-        new ServiceCollection().AddLiveQsInfrastructure(new UpdateTestPaths()).BuildServiceProvider();
+    private ServiceProvider BuildProvider() =>
+        new ServiceCollection().AddLiveQsInfrastructure(_paths).BuildServiceProvider();
 
     /// <summary>Walks the factory pipeline down to the primary handler.</summary>
     private static HttpMessageHandler TerminalHandler(HttpClient client)

@@ -11,9 +11,9 @@ namespace LiveQs.Windows.Infrastructure.Update;
 /// </summary>
 public sealed class UpdateStateStore(IAppPaths paths) : IUpdateStateStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
 
-    private static readonly VerifiedPackage Empty = new(null, null, null);
+    private static readonly VerifiedPackage _empty = new(null, null, null);
 
     private string FilePath => Path.Combine(paths.DataDirectory, "update-state.json");
 
@@ -22,17 +22,17 @@ public sealed class UpdateStateStore(IAppPaths paths) : IUpdateStateStore
         try
         {
             var json = await File.ReadAllTextAsync(FilePath, cancellationToken);
-            return JsonSerializer.Deserialize<VerifiedPackage>(json, JsonOptions) ?? Empty;
+            return JsonSerializer.Deserialize<VerifiedPackage>(json, _jsonOptions) ?? _empty;
         }
         catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException or JsonException)
         {
-            return Empty;
+            return _empty;
         }
     }
 
     public async Task SaveAsync(VerifiedPackage verified, CancellationToken cancellationToken = default)
     {
-        var json = JsonSerializer.Serialize(verified, JsonOptions);
+        var json = JsonSerializer.Serialize(verified, _jsonOptions);
         await File.WriteAllTextAsync(FilePath, json, cancellationToken);
     }
 }

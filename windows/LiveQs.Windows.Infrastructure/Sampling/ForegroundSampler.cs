@@ -22,10 +22,16 @@ public sealed class ForegroundSampler : IForegroundSampler
     public ActivitySample? Capture(AppSettings settings)
     {
         var handle = NativeMethods.GetForegroundWindow();
-        if (handle == nint.Zero) return null;
+        if (handle == nint.Zero)
+        {
+            return null;
+        }
 
         _ = NativeMethods.GetWindowThreadProcessId(handle, out var processId);
-        if (processId == 0) return null;
+        if (processId == 0)
+        {
+            return null;
+        }
 
         var processName = "unknown.exe";
         var displayName = "未知应用";
@@ -47,7 +53,11 @@ public sealed class ForegroundSampler : IForegroundSampler
         var rawTitle = ReadWindowTitle(handle);
         var titleHash = string.IsNullOrWhiteSpace(rawTitle) ? "" : Sha256(rawTitle.Trim().ToLowerInvariant());
         var visibleTitle = settings.WindowTitleMode == WindowTitleMode.Original ? rawTitle : "";
-        if (settings.WindowTitleMode == WindowTitleMode.None) titleHash = "";
+        if (settings.WindowTitleMode == WindowTitleMode.None)
+        {
+            titleHash = "";
+        }
+
         var idleSeconds = GetIdleSeconds();
         var battery = GetBattery();
 
@@ -68,8 +78,14 @@ public sealed class ForegroundSampler : IForegroundSampler
 
     private static string TryGetExecutablePath(Process process)
     {
-        try { return process.MainModule?.FileName ?? ""; }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException) { return ""; }
+        try
+        {
+            return process.MainModule?.FileName ?? "";
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
+        {
+            return "";
+        }
     }
 
     private static string GetDisplayName(string processName, string path)
@@ -80,9 +96,14 @@ public sealed class ForegroundSampler : IForegroundSampler
             {
                 var info = FileVersionInfo.GetVersionInfo(path);
                 var value = info.FileDescription ?? info.ProductName;
-                if (!string.IsNullOrWhiteSpace(value)) return value.Trim();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value.Trim();
+                }
             }
-            catch (FileNotFoundException) { }
+            catch (FileNotFoundException)
+            {
+            }
         }
         return Path.GetFileNameWithoutExtension(processName);
     }
@@ -90,7 +111,11 @@ public sealed class ForegroundSampler : IForegroundSampler
     private static string ReadWindowTitle(nint handle)
     {
         var length = Math.Min(NativeMethods.GetWindowTextLength(handle), 1024);
-        if (length <= 0) return "";
+        if (length <= 0)
+        {
+            return "";
+        }
+
         var chars = new char[length + 1];
         var copied = NativeMethods.GetWindowText(handle, chars, chars.Length);
         return copied <= 0 ? "" : new string(chars, 0, copied).Trim();
@@ -99,17 +124,29 @@ public sealed class ForegroundSampler : IForegroundSampler
     private static double GetIdleSeconds()
     {
         var info = new NativeMethods.LastInputInfo { Size = (uint)Marshal.SizeOf<NativeMethods.LastInputInfo>() };
-        if (!NativeMethods.GetLastInputInfo(ref info)) return 0;
+        if (!NativeMethods.GetLastInputInfo(ref info))
+        {
+            return 0;
+        }
+
         var elapsed = unchecked((uint)Environment.TickCount - info.Time);
         return elapsed / 1000d;
     }
 
     private static bool IsFullscreen(nint handle)
     {
-        if (!NativeMethods.GetWindowRect(handle, out var window)) return false;
+        if (!NativeMethods.GetWindowRect(handle, out var window))
+        {
+            return false;
+        }
+
         var monitorHandle = NativeMethods.MonitorFromWindow(handle, NativeMethods.MonitorDefaultToNearest);
         var monitor = new NativeMethods.MonitorInfo { Size = (uint)Marshal.SizeOf<NativeMethods.MonitorInfo>() };
-        if (monitorHandle == nint.Zero || !NativeMethods.GetMonitorInfo(monitorHandle, ref monitor)) return false;
+        if (monitorHandle == nint.Zero || !NativeMethods.GetMonitorInfo(monitorHandle, ref monitor))
+        {
+            return false;
+        }
+
         const int tolerance = 2;
         return window.Left <= monitor.Monitor.Left + tolerance && window.Top <= monitor.Monitor.Top + tolerance &&
                window.Right >= monitor.Monitor.Right - tolerance && window.Bottom >= monitor.Monitor.Bottom - tolerance;
@@ -118,7 +155,9 @@ public sealed class ForegroundSampler : IForegroundSampler
     private static (int? Percent, bool? Charging) GetBattery()
     {
         if (!NativeMethods.GetSystemPowerStatus(out var status) || status.BatteryFlag is 128 or byte.MaxValue)
+        {
             return (null, null);
+        }
 
         int? percent = status.BatteryLifePercent == byte.MaxValue ? null : status.BatteryLifePercent;
         bool? charging = status.AcLineStatus == byte.MaxValue ? null : status.AcLineStatus == 1;

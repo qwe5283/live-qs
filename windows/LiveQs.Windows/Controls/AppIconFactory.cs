@@ -15,17 +15,17 @@ public enum TrayIconState
 
 public static class AppIconFactory
 {
-    private static readonly Uri IconUri = new("pack://application:,,,/Assets/LiveQs.ico", UriKind.Absolute);
-    private static readonly Lazy<BitmapSource> BaseIcon = new(LoadBaseIcon);
+    private static readonly Uri _iconUri = new("pack://application:,,,/Assets/LiveQs.ico", UriKind.Absolute);
+    private static readonly Lazy<BitmapSource> _baseIcon = new(LoadBaseIcon);
     private static readonly Lazy<IReadOnlyDictionary<TrayIconState, ImageSource>> TrayIcons = new(CreateTrayIcons);
 
-    public static ImageSource CreateApplicationIcon() => BaseIcon.Value;
+    public static ImageSource CreateApplicationIcon() => _baseIcon.Value;
 
     public static ImageSource CreateTrayIcon(TrayIconState state) => TrayIcons.Value[state];
 
     private static BitmapSource LoadBaseIcon()
     {
-        var resource = Application.GetResourceStream(IconUri)
+        var resource = Application.GetResourceStream(_iconUri)
             ?? throw new InvalidOperationException("The embedded LiveQs icon resource could not be loaded.");
         using (resource.Stream)
         {
@@ -60,9 +60,11 @@ public static class AppIconFactory
         RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.HighQuality);
         using (var context = visual.RenderOpen())
         {
-            context.DrawImage(BaseIcon.Value, new Rect(0, 0, size, size));
+            context.DrawImage(_baseIcon.Value, new Rect(0, 0, size, size));
             if (statusColor is { } color)
+            {
                 context.DrawEllipse(new SolidColorBrush(color), new Pen(Brushes.White, 1.5), new Point(52, 13), 10, 10);
+            }
         }
 
         var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);

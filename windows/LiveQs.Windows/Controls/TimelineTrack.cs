@@ -28,12 +28,30 @@ public sealed class TimelineTrack : Panel
     public static readonly DependencyProperty SelectPositionCommandProperty = DependencyProperty.Register(
         nameof(SelectPositionCommand), typeof(ICommand), typeof(TimelineTrack));
 
-    public IEnumerable? ItemsSource { get => (IEnumerable?)GetValue(ItemsSourceProperty); set => SetValue(ItemsSourceProperty, value); }
-    public Brush TrackBrush { get => (Brush)GetValue(TrackBrushProperty); set => SetValue(TrackBrushProperty, value); }
-    public Brush SelectionBrush { get => (Brush)GetValue(SelectionBrushProperty); set => SetValue(SelectionBrushProperty, value); }
-    public double SelectionStart { get => (double)GetValue(SelectionStartProperty); set => SetValue(SelectionStartProperty, value); }
-    public double SelectionEnd { get => (double)GetValue(SelectionEndProperty); set => SetValue(SelectionEndProperty, value); }
-    public ICommand? SelectPositionCommand { get => (ICommand?)GetValue(SelectPositionCommandProperty); set => SetValue(SelectPositionCommandProperty, value); }
+    public IEnumerable? ItemsSource
+    {
+        get => (IEnumerable?)GetValue(ItemsSourceProperty); set => SetValue(ItemsSourceProperty, value);
+    }
+    public Brush TrackBrush
+    {
+        get => (Brush)GetValue(TrackBrushProperty); set => SetValue(TrackBrushProperty, value);
+    }
+    public Brush SelectionBrush
+    {
+        get => (Brush)GetValue(SelectionBrushProperty); set => SetValue(SelectionBrushProperty, value);
+    }
+    public double SelectionStart
+    {
+        get => (double)GetValue(SelectionStartProperty); set => SetValue(SelectionStartProperty, value);
+    }
+    public double SelectionEnd
+    {
+        get => (double)GetValue(SelectionEndProperty); set => SetValue(SelectionEndProperty, value);
+    }
+    public ICommand? SelectPositionCommand
+    {
+        get => (ICommand?)GetValue(SelectPositionCommandProperty); set => SetValue(SelectPositionCommandProperty, value);
+    }
 
     public TimelineTrack()
     {
@@ -43,7 +61,11 @@ public sealed class TimelineTrack : Panel
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        foreach (UIElement child in Children) child.Measure(availableSize);
+        foreach (UIElement child in Children)
+        {
+            child.Measure(availableSize);
+        }
+
         return new Size(0, double.IsNaN(Height) ? 20 : Height);
     }
 
@@ -73,9 +95,17 @@ public sealed class TimelineTrack : Panel
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs args)
     {
         base.OnMouseLeftButtonDown(args);
-        if (ActualWidth <= 0) return;
+        if (ActualWidth <= 0)
+        {
+            return;
+        }
+
         var fraction = Math.Clamp(args.GetPosition(this).X / ActualWidth, 0, 1);
-        if (SelectPositionCommand?.CanExecute(fraction) != true) return;
+        if (SelectPositionCommand?.CanExecute(fraction) != true)
+        {
+            return;
+        }
+
         SelectPositionCommand.Execute(fraction);
         args.Handled = true;
     }
@@ -103,11 +133,17 @@ public sealed class TimelineTrack : Panel
         track.InvalidateMeasure();
     }
 
-    private static void OnSelectionChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args) => ((TimelineTrack)sender).UpdateSelection();
+    private static void OnSelectionChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args) => ((TimelineTrack)sender).UpdateSelection();
 
     private void UpdateSelection()
     {
-        if (_selection is not null) Children.Remove(_selection);
+        if (_selection is not null)
+        {
+            Children.Remove(_selection);
+        }
+
         _selection = null;
         if (SelectionEnd > SelectionStart)
         {

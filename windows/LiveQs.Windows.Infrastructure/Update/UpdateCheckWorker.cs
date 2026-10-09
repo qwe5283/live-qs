@@ -59,7 +59,10 @@ public sealed class UpdateCheckWorker(
         }
 
         var manifest = await FetchManifestAsync(settings, cancellationToken);
-        if (manifest is null) return; // the diagnosable failure status is already published
+        if (manifest is null)
+        {
+            return; // the diagnosable failure status is already published
+        }
 
         var decision = UpdateEvaluator.Evaluate(UpdateComponents.Windows, appVersion.CurrentVersion, manifest);
         if (decision.Kind == UpdateDecisionKind.UpToDate)
@@ -113,7 +116,10 @@ public sealed class UpdateCheckWorker(
             return null;
         }
 
-        if (UpdateManifestParser.TryParse(manifestText, out var manifest, out var errors)) return manifest;
+        if (UpdateManifestParser.TryParse(manifestText, out var manifest, out var errors))
+        {
+            return manifest;
+        }
 
         statusService.Update(new UpdateStatus(
             UpdateCheckState.Failed,
@@ -124,7 +130,10 @@ public sealed class UpdateCheckWorker(
         return null;
     }
 
-    private async Task VerifyAndKeepPackageAsync(AppSettings settings, UpdateManifest manifest, CancellationToken cancellationToken)
+    private async Task VerifyAndKeepPackageAsync(
+        AppSettings settings,
+        UpdateManifest manifest,
+        CancellationToken cancellationToken)
     {
         var verified = await stateStore.GetAsync(cancellationToken);
         if (verified.Version == manifest.Version &&
@@ -186,7 +195,12 @@ public sealed class UpdateCheckWorker(
 
     private async Task Delay(CancellationToken token, TimeSpan duration)
     {
-        try { await Task.Delay(duration, timeProvider, token); }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        try
+        {
+            await Task.Delay(duration, timeProvider, token);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
     }
 }

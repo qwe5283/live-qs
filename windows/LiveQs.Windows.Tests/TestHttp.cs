@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text;
-using LiveQs.Windows.Core.Abstractions;
 
 namespace LiveQs.Windows.Tests;
 
@@ -8,11 +7,19 @@ namespace LiveQs.Windows.Tests;
 internal sealed class RecordingHandler : HttpMessageHandler
 {
     public Func<string, string> ResponseFactory { get; set; } = _ => """{"results":[]}""";
-    public HttpRequestMessage? Request { get; private set; }
-    public string? Body { get; private set; }
+    public HttpRequestMessage? Request
+    {
+        get; private set;
+    }
+    public string? Body
+    {
+        get; private set;
+    }
     public List<string> Bodies { get; } = new();
 
-    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
     {
         Request = request;
         Body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
@@ -26,5 +33,5 @@ internal sealed class RecordingHandler : HttpMessageHandler
 
 internal sealed class SingleClientFactory(HttpMessageHandler handler) : IHttpClientFactory
 {
-    public HttpClient CreateClient(string name) => new(handler);
+    public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
 }

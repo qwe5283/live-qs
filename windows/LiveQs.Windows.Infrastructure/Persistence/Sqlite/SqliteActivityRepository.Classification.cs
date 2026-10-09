@@ -1,5 +1,4 @@
 using System.Text.Json;
-using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Contracts;
 
 namespace LiveQs.Windows.Infrastructure.Persistence.Sqlite;
@@ -13,7 +12,11 @@ public sealed partial class SqliteActivityRepository
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT json FROM classification_cache WHERE id = 1;";
         var json = await command.ExecuteScalarAsync(cancellationToken) as string;
-        if (string.IsNullOrWhiteSpace(json) || json == "{}") return null;
+        if (string.IsNullOrWhiteSpace(json) || json == "{}")
+        {
+            return null;
+        }
+
         try
         {
             return JsonSerializer.Deserialize<ClassificationRuleSet>(json, ContractJson.Options);
@@ -25,7 +28,10 @@ public sealed partial class SqliteActivityRepository
         }
     }
 
-    public async Task SaveCachedRuleSetAsync(ClassificationRuleSet ruleSet, DateTimeOffset fetchedAt, CancellationToken cancellationToken = default)
+    public async Task SaveCachedRuleSetAsync(
+        ClassificationRuleSet ruleSet,
+        DateTimeOffset fetchedAt,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();

@@ -51,7 +51,7 @@ public sealed class HeartbeatTests
         var client = new HeartbeatClient(new BadRequestClientFactory());
 
         await Assert.ThrowsAsync<HttpRequestException>(() => client.SendAsync(
-            new HeartbeatState(DateTimeOffset.UtcNow, "app.exe", string.Empty, true),
+            new HeartbeatState(TestClock.DefaultInstant, "app.exe", string.Empty, true),
             new AppSettings { CloudSyncEnabled = true, ServerBaseUrl = "http://127.0.0.1:8787", DeviceToken = "lqdev_t" }));
     }
 
@@ -65,7 +65,7 @@ public sealed class HeartbeatTests
         var client = new StubHeartbeatClient();
         var worker = new HeartbeatWorker(
             sampler, new StubSettingsStore(Settings(active: true, paused: false, token: "lqdev_test_token")),
-            client, TimeProvider.System, NullLogger<HeartbeatWorker>.Instance);
+            client, new TestClock(), NullLogger<HeartbeatWorker>.Instance);
 
         await worker.RunOnceAsync(CancellationToken.None);
 
@@ -90,7 +90,7 @@ public sealed class HeartbeatTests
                  })
         {
             var worker = new HeartbeatWorker(
-                sampler, new StubSettingsStore(settings), client, TimeProvider.System, NullLogger<HeartbeatWorker>.Instance);
+                sampler, new StubSettingsStore(settings), client, new TestClock(), NullLogger<HeartbeatWorker>.Instance);
             await worker.RunOnceAsync(CancellationToken.None);
         }
 
@@ -104,7 +104,7 @@ public sealed class HeartbeatTests
         var worker = new HeartbeatWorker(
             new StubSampler(ActiveSample()),
             new StubSettingsStore(Settings(active: true, paused: false, token: "lqdev_test_token")),
-            client, TimeProvider.System, NullLogger<HeartbeatWorker>.Instance);
+            client, new TestClock(), NullLogger<HeartbeatWorker>.Instance);
 
         await worker.RunOnceAsync(CancellationToken.None); // must not throw; the next cadence retries
 
@@ -131,9 +131,13 @@ public sealed class HeartbeatTests
 
     private sealed class StubSettingsStore(AppSettings settings) : ISettingsStore
     {
-        public Task SaveApplicationRuleAsync(ApplicationRule rule, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SaveApplicationRuleAsync(
+            ApplicationRule rule,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<AppSettings> GetSettingsAsync(CancellationToken cancellationToken = default) => Task.FromResult(settings);
-        public Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SaveSettingsAsync(
+            AppSettings settings,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class StubHeartbeatClient : IHeartbeatClient
@@ -149,7 +153,10 @@ public sealed class HeartbeatTests
 
     private sealed class FailingHeartbeatClient : IHeartbeatClient
     {
-        public int CallCount { get; private set; }
+        public int CallCount
+        {
+            get; private set;
+        }
 
         public Task SendAsync(HeartbeatState state, AppSettings settings, CancellationToken cancellationToken = default)
         {
@@ -161,11 +168,16 @@ public sealed class HeartbeatTests
     private sealed class BadRequestClientFactory : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) =>
-            new(new BadRequestHandler()) { BaseAddress = new Uri("http://127.0.0.1:8787/") };
+            new(new BadRequestHandler())
+            {
+                BaseAddress = new Uri("http://127.0.0.1:8787/")
+            };
 
         private sealed class BadRequestHandler : HttpMessageHandler
         {
-            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            protected override Task<HttpResponseMessage> SendAsync(
+                HttpRequestMessage request,
+                CancellationToken cancellationToken)
                 => Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
                 {
                     Content = new StringContent("""{"error":{"code":"invalid_request","message":"bad"}}"""),

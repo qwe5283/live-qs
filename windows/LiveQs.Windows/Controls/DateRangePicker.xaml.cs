@@ -14,9 +14,9 @@ public partial class DateRangePicker : UserControl
         nameof(StartDate), typeof(DateTime?), typeof(DateRangePicker), new PropertyMetadata(null, OnRangeChanged));
     public static readonly DependencyProperty EndDateProperty = DependencyProperty.Register(
         nameof(EndDate), typeof(DateTime?), typeof(DateRangePicker), new PropertyMetadata(null, OnRangeChanged));
-    private static readonly DependencyPropertyKey DisplayTextPropertyKey = DependencyProperty.RegisterReadOnly(
+    private static readonly DependencyPropertyKey _displayTextPropertyKey = DependencyProperty.RegisterReadOnly(
         nameof(DisplayText), typeof(string), typeof(DateRangePicker), new PropertyMetadata("选择日期范围"));
-    public static readonly DependencyProperty DisplayTextProperty = DisplayTextPropertyKey.DependencyProperty;
+    public static readonly DependencyProperty DisplayTextProperty = _displayTextPropertyKey.DependencyProperty;
     private DateTime? _anchor;
     private DateTime? _previewEnd;
     private DateTime _keyboardDate;
@@ -48,8 +48,11 @@ public partial class DateRangePicker : UserControl
     private static void OnRangeChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
         var picker = (DateRangePicker)sender;
-        picker.SetValue(DisplayTextPropertyKey, DateRangeText.Format(picker.StartDate, picker.EndDate, DateTime.Today.Year));
-        if (picker.RangePopup is not null) picker.RangePopup.IsOpen = false;
+        picker.SetValue(_displayTextPropertyKey, DateRangeText.Format(picker.StartDate, picker.EndDate, DateTime.Today.Year));
+        if (picker.RangePopup is not null)
+        {
+            picker.RangePopup.IsOpen = false;
+        }
     }
 
     private void OnPickerClick(object sender, RoutedEventArgs args) => RangePopup.IsOpen = !RangePopup.IsOpen;
@@ -71,12 +74,19 @@ public partial class DateRangePicker : UserControl
     {
         _anchor = null;
         _previewEnd = null;
-        if (_returnFocus) PickerButton.Focus();
+        if (_returnFocus)
+        {
+            PickerButton.Focus();
+        }
     }
 
     private void OnCalendarMouseDown(object sender, MouseButtonEventArgs args)
     {
-        if (FindDay(args.OriginalSource as DependencyObject) is not { DataContext: DateTime date } day || !day.IsEnabled) return;
+        if (FindDay(args.OriginalSource as DependencyObject) is not { DataContext: DateTime date } day || !day.IsEnabled)
+        {
+            return;
+        }
+
         args.Handled = true;
         day.Focus();
         SelectDate(date.Date);
@@ -84,12 +94,21 @@ public partial class DateRangePicker : UserControl
 
     private void OnCalendarMouseUp(object sender, MouseButtonEventArgs args)
     {
-        if (FindDay(args.OriginalSource as DependencyObject) is not null) args.Handled = true;
+        if (FindDay(args.OriginalSource as DependencyObject) is not null)
+        {
+            args.Handled = true;
+        }
     }
 
     private void OnCalendarMouseMove(object sender, MouseEventArgs args)
     {
-        if (_anchor is not { } anchor || FindDay(args.OriginalSource as DependencyObject) is not { DataContext: DateTime end } day || !day.IsEnabled || _previewEnd == end.Date) return;
+        if (_anchor is not { } anchor ||
+            FindDay(args.OriginalSource as DependencyObject) is not { DataContext: DateTime end } day ||
+            !day.IsEnabled || _previewEnd == end.Date)
+        {
+            return;
+        }
+
         _previewEnd = end.Date;
         ShowSelection(anchor, end.Date);
     }
@@ -104,7 +123,10 @@ public partial class DateRangePicker : UserControl
             ShowSelection(date, date);
             SelectionHint.Text = $"{date:M月d日} 起 · 选择结束日期";
             if (RangeCalendar.DisplayDate.Month != date.Month || RangeCalendar.DisplayDate.Year != date.Year)
+            {
                 RangeCalendar.DisplayDate = date;
+            }
+
             return;
         }
 
@@ -123,7 +145,11 @@ public partial class DateRangePicker : UserControl
 
     private void OnPopupKeyDown(object sender, KeyEventArgs args)
     {
-        if (args.Key != Key.Escape) return;
+        if (args.Key != Key.Escape)
+        {
+            return;
+        }
+
         args.Handled = true;
         _returnFocus = true;
         RangePopup.IsOpen = false;
@@ -131,7 +157,12 @@ public partial class DateRangePicker : UserControl
 
     private void OnCalendarKeyDown(object sender, KeyEventArgs args)
     {
-        if (RangeCalendar.DisplayMode != CalendarMode.Month || FindDay(Keyboard.FocusedElement as DependencyObject) is not { DataContext: DateTime focused }) return;
+        if (RangeCalendar.DisplayMode != CalendarMode.Month ||
+            FindDay(Keyboard.FocusedElement as DependencyObject) is not { DataContext: DateTime focused })
+        {
+            return;
+        }
+
         if (args.Key is Key.Enter or Key.Space)
         {
             args.Handled = true;
@@ -156,18 +187,34 @@ public partial class DateRangePicker : UserControl
                 _ => null,
             };
         }
-        catch (ArgumentOutOfRangeException) { args.Handled = true; return; }
-        if (next is not { } date) return;
+        catch (ArgumentOutOfRangeException)
+        {
+            args.Handled = true;
+            return;
+        }
+        if (next is not { } date)
+        {
+            return;
+        }
+
         args.Handled = true;
         _keyboardDate = date.Date;
         RangeCalendar.DisplayDate = _keyboardDate;
-        if (_anchor is { } anchor) ShowSelection(anchor, _keyboardDate);
+        if (_anchor is { } anchor)
+        {
+            ShowSelection(anchor, _keyboardDate);
+        }
+
         Dispatcher.BeginInvoke(FocusKeyboardDate, DispatcherPriority.Input);
     }
 
     private void FocusKeyboardDate()
     {
-        if (!RangePopup.IsOpen) return;
+        if (!RangePopup.IsOpen)
+        {
+            return;
+        }
+
         RangeCalendar.UpdateLayout();
         FindDays(RangeCalendar).FirstOrDefault(day => day.DataContext is DateTime date && date.Date == _keyboardDate)?.Focus();
     }
@@ -176,7 +223,11 @@ public partial class DateRangePicker : UserControl
     {
         while (child is not null)
         {
-            if (child is CalendarDayButton day) return day;
+            if (child is CalendarDayButton day)
+            {
+                return day;
+            }
+
             child = child is Visual ? VisualTreeHelper.GetParent(child) : LogicalTreeHelper.GetParent(child);
         }
         return null;
@@ -187,14 +238,15 @@ public partial class DateRangePicker : UserControl
         for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
         {
             var child = VisualTreeHelper.GetChild(parent, index);
-            if (child is CalendarDayButton day) yield return day;
-            foreach (var descendant in FindDays(child)) yield return descendant;
+            if (child is CalendarDayButton day)
+            {
+                yield return day;
+            }
+
+            foreach (var descendant in FindDays(child))
+            {
+                yield return descendant;
+            }
         }
     }
-}
-
-public sealed class DateRangeSelectedEventArgs(DateTime startDate, DateTime endDate) : EventArgs
-{
-    public DateTime StartDate { get; } = startDate;
-    public DateTime EndDate { get; } = endDate;
 }

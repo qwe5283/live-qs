@@ -1,5 +1,4 @@
 using LiveQs.Windows.Core.Abstractions;
-using LiveQs.Windows.Core.Settings;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -28,8 +27,14 @@ public sealed class HeartbeatWorker(
         while (!stoppingToken.IsCancellationRequested)
         {
             await RunOnceAsync(stoppingToken);
-            try { await Task.Delay(HeartbeatInterval, timeProvider, stoppingToken); }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            try
+            {
+                await Task.Delay(HeartbeatInterval, timeProvider, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 
@@ -42,9 +47,17 @@ public sealed class HeartbeatWorker(
         try
         {
             var settings = await settingsStore.GetSettingsAsync(cancellationToken);
-            if (!settings.CloudSyncEnabled || settings.SamplingPaused || string.IsNullOrWhiteSpace(settings.DeviceToken)) return;
+            if (!settings.CloudSyncEnabled || settings.SamplingPaused || string.IsNullOrWhiteSpace(settings.DeviceToken))
+            {
+                return;
+            }
+
             var sample = sampler.Capture(settings);
-            if (sample is null) return;
+            if (sample is null)
+            {
+                return;
+            }
+
             await client.SendAsync(
                 new HeartbeatState(sample.CapturedAt, sample.AppId, sample.AppName, sample.IsAfk),
                 settings,

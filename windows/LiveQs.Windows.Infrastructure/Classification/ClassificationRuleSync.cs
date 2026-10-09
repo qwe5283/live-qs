@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
-using System.Net.Http;
 using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Settings;
+using LiveQs.Windows.Infrastructure.Http;
 using Microsoft.Extensions.Logging;
 
 namespace LiveQs.Windows.Infrastructure.Classification;
@@ -25,7 +25,10 @@ public sealed class ClassificationRuleSync(
 
     private DateTimeOffset _lastFetchUtc = DateTimeOffset.MinValue;
 
-    public async Task<Core.Contracts.ClassificationRuleSet?> RefreshAsync(AppSettings settings, CancellationToken cancellationToken = default, bool forceRefresh = false)
+    public async Task<Core.Contracts.ClassificationRuleSet?> RefreshAsync(
+        AppSettings settings,
+        CancellationToken cancellationToken = default,
+        bool forceRefresh = false)
     {
         var now = timeProvider.GetUtcNow();
         if (!forceRefresh && now - _lastFetchUtc < RefreshInterval)
@@ -36,19 +39,18 @@ public sealed class ClassificationRuleSync(
 
         try
         {
-            var client = httpClientFactory.CreateClient("cloud-sync");
-            client.BaseAddress = new Uri($"{settings.ServerBaseUrl.TrimEnd('/')}/");
-            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", settings.DeviceToken);
+            using var client = CloudApiClient.Create(httpClientFactory, settings);
+            using var deadline = HttpRequestDeadline.Create(client, cancellationToken);
 
             using var response = await client.GetAsync(
-                "api/v1/classification/ruleset", HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                "api/v1/classification/ruleset", HttpCompletionOption.ResponseHeadersRead, deadline.Token);
             if (!response.IsSuccessStatusCode)
             {
                 logger.LogWarning("Classification rule refresh returned {StatusCode}; keeping the cached rule set.", (int)response.StatusCode);
                 return await ruleStore.GetCachedRuleSetAsync(cancellationToken);
             }
             var ruleSet = await response.Content.ReadFromJsonAsync<Core.Contracts.ClassificationRuleSet>(
-                Core.Contracts.ContractJson.Options, cancellationToken);
+                Core.Contracts.ContractJson.Options, deadline.Token);
             if (ruleSet is null)
             {
                 logger.LogWarning("Classification rule refresh returned an empty document; keeping the cached rule set.");
@@ -57,7 +59,8 @@ public sealed class ClassificationRuleSync(
             await ruleStore.SaveCachedRuleSetAsync(ruleSet, now, cancellationToken);
             return ruleSet;
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidOperationException or UriFormatException)
+        catch (Exception exception) when (
+            exception is HttpRequestException or TaskCanceledException or InvalidOperationException or UriFormatException)
         {
             logger.LogWarning(exception, "Classification rule refresh failed; keeping the cached rule set for offline execution.");
             return await ruleStore.GetCachedRuleSetAsync(cancellationToken);

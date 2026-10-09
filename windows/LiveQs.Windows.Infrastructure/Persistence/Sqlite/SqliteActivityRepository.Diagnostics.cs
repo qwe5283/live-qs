@@ -14,7 +14,11 @@ public sealed partial class SqliteActivityRepository
     /// <summary>Recent errors kept for diagnostics; older entries are pruned on insert.</summary>
     internal const int MaxSyncErrorEntries = 20;
 
-    public async Task RecordSyncErrorAsync(string code, string message, DateTimeOffset occurredAt, CancellationToken cancellationToken = default)
+    public async Task RecordSyncErrorAsync(
+        string code,
+        string message,
+        DateTimeOffset occurredAt,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = connection.BeginTransaction();
@@ -34,7 +38,9 @@ public sealed partial class SqliteActivityRepository
         transaction.Commit();
     }
 
-    public async Task<IReadOnlyList<SyncErrorEntry>> GetRecentSyncErrorsAsync(int limit, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<SyncErrorEntry>> GetRecentSyncErrorsAsync(
+        int limit,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();

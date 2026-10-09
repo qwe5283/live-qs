@@ -5,7 +5,10 @@ namespace LiveQs.Windows.Infrastructure.Persistence.Sqlite;
 
 public sealed partial class SqliteActivityRepository
 {
-    public async Task<IReadOnlyList<SyncQueueItem>> GetPendingSyncAsync(int limit, DateTimeOffset now, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<SyncQueueItem>> GetPendingSyncAsync(
+        int limit,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -35,16 +38,25 @@ public sealed partial class SqliteActivityRepository
         return result;
     }
 
-    public async Task MarkSyncedAsync(IEnumerable<long> segmentIds, DateTimeOffset syncedAt, CancellationToken cancellationToken = default)
+    public async Task MarkSyncedAsync(
+        IEnumerable<SyncRevision> revisions,
+        DateTimeOffset syncedAt,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
         using var transaction = connection.BeginTransaction();
-        foreach (var id in segmentIds)
+        foreach (var revision in revisions)
         {
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            command.CommandText = "DELETE FROM sync_queue WHERE segment_id = $id;";
-            command.Parameters.AddWithValue("$id", id);
+            // Sampling may have advanced the segment while this revision was in flight.
+            command.CommandText = """
+                DELETE FROM sync_queue
+                WHERE segment_id = $id
+                  AND EXISTS (SELECT 1 FROM activity_segments WHERE id = $id AND sync_version = $version);
+                """;
+            command.Parameters.AddWithValue("$id", revision.SegmentId);
+            command.Parameters.AddWithValue("$version", revision.Version);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
         await using var state = connection.CreateCommand();
@@ -55,7 +67,11 @@ public sealed partial class SqliteActivityRepository
         transaction.Commit();
     }
 
-    public async Task MarkSyncFailedAsync(IEnumerable<long> segmentIds, string error, DateTimeOffset nextAttemptAt, CancellationToken cancellationToken = default)
+    public async Task MarkSyncFailedAsync(
+        IEnumerable<long> segmentIds,
+        string error,
+        DateTimeOffset nextAttemptAt,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
         using var transaction = connection.BeginTransaction();
@@ -78,11 +94,15 @@ public sealed partial class SqliteActivityRepository
         transaction.Commit();
     }
 
-    public async Task MarkPermanentAsync(IEnumerable<long> segmentIds, string error, DateTimeOffset at, CancellationToken cancellationToken = default)
+    public async Task MarkPermanentAsync(
+        IEnumerable<SyncRevision> revisions,
+        string error,
+        DateTimeOffset at,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
         using var transaction = connection.BeginTransaction();
-        foreach (var id in segmentIds)
+        foreach (var revision in revisions)
         {
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
@@ -90,12 +110,14 @@ public sealed partial class SqliteActivityRepository
                 UPDATE sync_queue
                 SET permanent = 1, next_attempt_utc = $at,
                     last_error = $error, updated_utc = $now
-                WHERE segment_id = $id;
+                WHERE segment_id = $id
+                  AND EXISTS (SELECT 1 FROM activity_segments WHERE id = $id AND sync_version = $version);
                 """;
             command.Parameters.AddWithValue("$at", UtcText(at));
             command.Parameters.AddWithValue("$error", error.Length > 500 ? error[..500] : error);
             command.Parameters.AddWithValue("$now", UtcText(_timeProvider.GetUtcNow()));
-            command.Parameters.AddWithValue("$id", id);
+            command.Parameters.AddWithValue("$id", revision.SegmentId);
+            command.Parameters.AddWithValue("$version", revision.Version);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
         transaction.Commit();

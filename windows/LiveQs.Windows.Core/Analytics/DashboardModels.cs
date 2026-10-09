@@ -1,5 +1,3 @@
-using LiveQs.Windows.Core.Activity;
-
 namespace LiveQs.Windows.Core.Analytics;
 
 public sealed record AppUsage(

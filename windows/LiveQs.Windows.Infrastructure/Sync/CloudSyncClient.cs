@@ -1,12 +1,11 @@
 using System.Globalization;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Net.Http;
 using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Classification;
 using LiveQs.Windows.Core.Reclassification;
 using LiveQs.Windows.Core.Settings;
 using LiveQs.Windows.Core.Sync;
+using LiveQs.Windows.Infrastructure.Http;
 
 namespace LiveQs.Windows.Infrastructure.Sync;
 
@@ -25,14 +24,22 @@ public sealed class CloudSyncClient(
     IHttpClientFactory httpClientFactory,
     ISyncQueueStore syncQueue,
     IClassificationRuleStore classificationRuleStore,
-    TimeProvider timeProvider) : ISyncClient
+    TimeProvider timeProvider,
+    IAppVersion appVersion) : ISyncClient
 {
     /// <summary>The contract limits one batch to 100 items.</summary>
     private const int MaxBatchSize = 100;
 
-    public async Task<IReadOnlyList<SyncOutcome>> UploadAsync(IReadOnlyList<SyncQueueItem> items, AppSettings settings, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SyncOutcome>> UploadAsync(
+        IReadOnlyList<SyncQueueItem> items,
+        AppSettings settings,
+        CancellationToken cancellationToken)
     {
-        if (items.Count == 0) return [];
+        if (items.Count == 0)
+        {
+            return [];
+        }
+
         var installId = await syncQueue.GetInstallIdAsync(cancellationToken);
         var cachedRuleSet = await classificationRuleStore.GetCachedRuleSetAsync(cancellationToken);
         var classificationSecret = await classificationRuleStore.GetClassificationSecretAsync(cancellationToken);
@@ -57,7 +64,11 @@ public sealed class CloudSyncClient(
         AppSettings settings,
         CancellationToken cancellationToken)
     {
-        if (decisions.Count == 0) return [];
+        if (decisions.Count == 0)
+        {
+            return [];
+        }
+
         var installId = await syncQueue.GetInstallIdAsync(cancellationToken);
         var outcomes = new List<SyncOutcome>(decisions.Count);
         foreach (var chunk in decisions.Chunk(MaxBatchSize))
@@ -70,7 +81,11 @@ public sealed class CloudSyncClient(
                 var outcome = uploaded[index];
                 var decision = chunk[index];
                 outcomes.Add(outcome);
-                if (outcome.Kind != SyncOutcomeKind.Acknowledged) continue;
+                if (outcome.Kind != SyncOutcomeKind.Acknowledged)
+                {
+                    continue;
+                }
+
                 if (outcome.Status == Core.Contracts.EventAcknowledgementStatus.StaleRevision)
                 {
                     // A manual Owner correction (or any newer revision) wins:
@@ -78,7 +93,8 @@ public sealed class CloudSyncClient(
                     // later upload can ever fight the human interpretation,
                     // and records the attempted interpretation so the next
                     // pass treats this segment as settled.
-                    await syncQueue.RecordUploadOutcomeAsync(decision.Segment.SegmentId, decision.Outcome, cancellationToken);
+                    await syncQueue.RecordUploadOutcomeAsync(
+                        new SyncRevision(decision.Segment.SegmentId, decision.Segment.SyncVersion - 1), decision.Outcome, cancellationToken);
                 }
                 else
                 {
@@ -96,19 +112,21 @@ public sealed class CloudSyncClient(
         string installId,
         CancellationToken cancellationToken)
     {
-        var client = httpClientFactory.CreateClient("cloud-sync");
-        client.BaseAddress = new Uri($"{settings.ServerBaseUrl.TrimEnd('/')}/");
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.DeviceToken);
+        using var client = CloudApiClient.Create(httpClientFactory, settings);
 
         var observedAt = timeProvider.GetUtcNow();
         var events = entries.Select(entry => ToEnvelope(
-            entry.Item, settings, installId, observedAt, entry.Outcome)).ToArray();
+            entry.Item, settings, installId, observedAt, appVersion.CurrentVersion, entry.Outcome)).ToArray();
         using var response = await client.PostAsJsonAsync(
             "api/v1/events/batch", new Core.Contracts.EventBatchRequest { Events = events }, Core.Contracts.ContractJson.Options, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (body.Length > 300) body = body[..300];
+            if (body.Length > 300)
+            {
+                body = body[..300];
+            }
+
             throw new HttpRequestException($"云端返回 {(int)response.StatusCode}: {body}", null, response.StatusCode);
         }
 
@@ -122,9 +140,13 @@ public sealed class CloudSyncClient(
             .ToArray();
         for (var index = 0; index < outcomes.Length; index++)
         {
-            if (outcomes[index].Kind != SyncOutcomeKind.Acknowledged) continue;
+            if (outcomes[index].Kind != SyncOutcomeKind.Acknowledged)
+            {
+                continue;
+            }
+
             var (item, computed) = entries[index];
-            await syncQueue.RecordUploadOutcomeAsync(item.SegmentId, computed, cancellationToken);
+            await syncQueue.RecordUploadOutcomeAsync(item.Revision, computed, cancellationToken);
         }
         return outcomes;
     }
@@ -138,34 +160,36 @@ public sealed class CloudSyncClient(
         Core.Contracts.ClassificationRuleSet? cachedRuleSet,
         string classificationSecret)
     {
-        if (item.IsAfk) return null;
+        if (item.IsAfk)
+        {
+            return null;
+        }
+
         return ClassificationEngine.Classify(
             cachedRuleSet, "windows", item.AppId, item.WindowTitle, classificationSecret);
     }
 
-    private static SyncOutcome MapOutcome(SyncQueueItem item, Core.Contracts.EventAcknowledgement acknowledgement) => acknowledgement.Status switch
-    {
-        // accepted: the revision is stored; duplicate: the exact revision was
-        // already stored; stale_revision: a newer revision already won. In all
-        // three cases the uploaded revision is acknowledged and the outbox
-        // entry may be removed.
-        Core.Contracts.EventAcknowledgementStatus.Accepted or Core.Contracts.EventAcknowledgementStatus.Duplicate or Core.Contracts.EventAcknowledgementStatus.StaleRevision
-            => new SyncOutcome(item, SyncOutcomeKind.Acknowledged, null, acknowledgement.Status),
-        _ => new SyncOutcome(item, SyncOutcomeKind.Rejected, DescribeError(acknowledgement), acknowledgement.Status, StableErrorCode(acknowledgement)),
-    };
-
-    private static string DescribeError(Core.Contracts.EventAcknowledgement acknowledgement) => acknowledgement.Error is { } error
-        ? $"{error.Code}: {error.Message}"
-        : "rejected";
-
-    private static string StableErrorCode(Core.Contracts.EventAcknowledgement acknowledgement) =>
-        acknowledgement.Error is { } error ? error.Code : "rejected";
+    private static SyncOutcome MapOutcome(
+        SyncQueueItem item,
+        Core.Contracts.EventAcknowledgement acknowledgement) => acknowledgement.Status switch
+        {
+            // accepted: the revision is stored; duplicate: the exact revision was
+            // already stored; stale_revision: a newer revision already won. In all
+            // three cases the uploaded revision is acknowledged and the outbox
+            // entry may be removed.
+            Core.Contracts.EventAcknowledgementStatus.Accepted or Core.Contracts.EventAcknowledgementStatus.Duplicate or Core.Contracts.EventAcknowledgementStatus.StaleRevision
+                => new SyncOutcome(item, SyncOutcomeKind.Acknowledged, null, acknowledgement.Status),
+            _ => new SyncOutcome(
+                item, SyncOutcomeKind.Rejected, acknowledgement.Error?.Message ?? "The event was rejected.",
+                acknowledgement.Status, acknowledgement.Error?.Code ?? "rejected"),
+        };
 
     internal static Core.Contracts.VersionedEvent ToEnvelope(
         SyncQueueItem item,
         AppSettings settings,
         string installId,
         DateTimeOffset observedAt,
+        string collectorVersion,
         ClassificationOutcome? classification = null)
     {
         var payload = new Core.Contracts.Payload
@@ -180,7 +204,11 @@ public sealed class CloudSyncClient(
                 Unit = Core.Contracts.DurationUnit.Ms,
             },
         };
-        if (!string.IsNullOrWhiteSpace(item.AppName)) payload.ApplicationLabel = item.AppName;
+        if (!string.IsNullOrWhiteSpace(item.AppName))
+        {
+            payload.ApplicationLabel = item.AppName;
+        }
+
         if (classification is { } outcome)
         {
             // Explainable labels only: subject, rule id, rule version,
@@ -206,8 +234,8 @@ public sealed class CloudSyncClient(
                 RecordId = $"segment-{item.SegmentId.ToString(CultureInfo.InvariantCulture)}",
             },
             Device = new Core.Contracts.Device { Id = settings.DeviceId, Platform = Core.Contracts.Platform.Windows },
-            StartAt = WireInstant(item.StartedAt),
-            EndAt = WireInstant(item.EndedAt),
+            StartAt = ContractTime.Format(item.StartedAt),
+            EndAt = ContractTime.Format(item.EndedAt),
             CaptureTimezone = LocalIanaName(),
             CaptureOffsetMinutes = (int)Math.Round(TimeZoneInfo.Local.GetUtcOffset(item.StartedAt).TotalMinutes),
             PrivacyLevel = Core.Contracts.PrivacyLevel.Normal,
@@ -215,26 +243,15 @@ public sealed class CloudSyncClient(
             FinalizationState = item.Finalized ? Core.Contracts.FinalizationState.Final : Core.Contracts.FinalizationState.Checkpoint,
             Provenance = new Core.Contracts.Provenance
             {
-                CollectorVersion = CollectorVersion(),
-                ObservedAt = WireInstant(observedAt),
+                CollectorVersion = collectorVersion,
+                ObservedAt = ContractTime.Format(observedAt),
             },
             Invalidated = false,
             Payload = payload,
         };
     }
 
-    private static string WireInstant(DateTimeOffset value) =>
-        value.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
-
     private static string LocalIanaName() =>
         TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var ianaId) ? ianaId : "UTC";
 
-    private static string CollectorVersion()
-    {
-        var version = typeof(CloudSyncClient).Assembly.GetName().Version;
-        var major = version?.Major ?? 0;
-        var minor = version?.Minor ?? 0;
-        var build = version is null || version.Build < 0 ? 0 : version.Build;
-        return FormattableString.Invariant($"{major}.{minor}.{build}");
-    }
 }

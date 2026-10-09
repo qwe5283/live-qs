@@ -51,7 +51,7 @@ public sealed class CoreTests
     {
         var localNoon = new DateTime(2026, 7, 23, 12, 30, 0);
         var utcNow = new DateTimeOffset(localNoon, TimeZoneInfo.Local.GetUtcOffset(localNoon)).ToUniversalTime();
-        var clock = new FixedTimeProvider(utcNow);
+        var clock = new TestClock(utcNow);
 
         var range = DateRange.Today(clock);
 
@@ -59,9 +59,4 @@ public sealed class CoreTests
         Assert.Equal(new DateTime(2026, 7, 24), range.End.LocalDateTime.Date);
     }
 
-    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => utcNow;
-        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Local;
-    }
 }

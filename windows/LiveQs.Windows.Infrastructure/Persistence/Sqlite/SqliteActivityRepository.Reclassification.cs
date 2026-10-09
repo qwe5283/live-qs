@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using LiveQs.Windows.Core.Classification;
 using LiveQs.Windows.Core.Sync;
@@ -9,10 +8,14 @@ public sealed partial class SqliteActivityRepository
 {
     private static ClassificationOutcome? ParseUploadOutcome(string? json)
     {
-        if (string.IsNullOrWhiteSpace(json)) return null;
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
         try
         {
-            return JsonSerializer.Deserialize<ClassificationOutcome>(json, JsonOptions);
+            return JsonSerializer.Deserialize<ClassificationOutcome>(json, _jsonOptions);
         }
         catch (JsonException)
         {
@@ -22,7 +25,7 @@ public sealed partial class SqliteActivityRepository
     }
 
     private static string? SerializeUploadOutcome(ClassificationOutcome? outcome) =>
-        outcome is null ? null : JsonSerializer.Serialize(outcome, JsonOptions);
+        outcome is null ? null : JsonSerializer.Serialize(outcome, _jsonOptions);
 
     /// <summary>
     /// The recorded upload outcome is what the device remembers the server
@@ -31,14 +34,21 @@ public sealed partial class SqliteActivityRepository
     /// untouched. When no outcome is recorded, the device is deliberately
     /// conservative: it may add a subject but never strip one.
     /// </summary>
-    public async Task RecordUploadOutcomeAsync(long segmentId, ClassificationOutcome? outcome, CancellationToken cancellationToken = default)
+    public async Task RecordUploadOutcomeAsync(
+        SyncRevision revision,
+        ClassificationOutcome? outcome,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE activity_segments SET upload_outcome = $outcome, updated_utc = $now WHERE id = $id;";
+        command.CommandText = """
+            UPDATE activity_segments SET upload_outcome = $outcome, updated_utc = $now
+            WHERE id = $id AND sync_version = $version;
+            """;
         command.Parameters.AddWithValue("$outcome", (object?)SerializeUploadOutcome(outcome) ?? DBNull.Value);
         command.Parameters.AddWithValue("$now", UtcText(_timeProvider.GetUtcNow()));
-        command.Parameters.AddWithValue("$id", segmentId);
+        command.Parameters.AddWithValue("$id", revision.SegmentId);
+        command.Parameters.AddWithValue("$version", revision.Version);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -47,7 +57,11 @@ public sealed partial class SqliteActivityRepository
     /// to the uploaded one so later passes and checkpoint streams never retry
     /// a lower revision, and the recorded outcome matches the new cloud state.
     /// </summary>
-    public async Task RecordReclassifiedAsync(long segmentId, int revision, ClassificationOutcome? outcome, CancellationToken cancellationToken = default)
+    public async Task RecordReclassifiedAsync(
+        long segmentId,
+        int revision,
+        ClassificationOutcome? outcome,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -74,8 +88,16 @@ public sealed partial class SqliteActivityRepository
         DateTimeOffset? from, DateTimeOffset? to, int limit, long afterSegmentId, CancellationToken cancellationToken = default)
     {
         var bounds = "";
-        if (from.HasValue) bounds += " AND s.started_utc >= $from";
-        if (to.HasValue) bounds += " AND s.started_utc < $to";
+        if (from.HasValue)
+        {
+            bounds += " AND s.started_utc >= $from";
+        }
+
+        if (to.HasValue)
+        {
+            bounds += " AND s.started_utc < $to";
+        }
+
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
@@ -91,8 +113,16 @@ public sealed partial class SqliteActivityRepository
             LIMIT $limit;
             """;
         command.Parameters.AddWithValue("$after", afterSegmentId);
-        if (from.HasValue) command.Parameters.AddWithValue("$from", UtcText(from.Value));
-        if (to.HasValue) command.Parameters.AddWithValue("$to", UtcText(to.Value));
+        if (from.HasValue)
+        {
+            command.Parameters.AddWithValue("$from", UtcText(from.Value));
+        }
+
+        if (to.HasValue)
+        {
+            command.Parameters.AddWithValue("$to", UtcText(to.Value));
+        }
+
         command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 500));
         var result = new List<SyncQueueItem>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);

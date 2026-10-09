@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
-using System.Windows.Media;
 using System.Windows.Threading;
 using LiveQs.Windows.Controls;
 using LiveQs.Windows.Core.Abstractions;
@@ -82,9 +81,15 @@ public sealed class TrayIconService(
         var application = System.Windows.Application.Current;
         var mainWindow = application.MainWindow;
         application.MainWindow = _trayHostWindow;
-        try { _icon.Register(); }
+        try
+        {
+            _icon.Register();
+        }
         finally { application.MainWindow = mainWindow; }
-        if (!_icon.IsRegistered) logger.LogWarning("The tray icon could not be registered with Windows Explorer.");
+        if (!_icon.IsRegistered)
+        {
+            logger.LogWarning("The tray icon could not be registered with Windows Explorer.");
+        }
 
         syncStatusService.Changed += OnSyncStatusChanged;
         updateStatusService.Changed += OnUpdateStatusChanged;
@@ -98,11 +103,18 @@ public sealed class TrayIconService(
 
     private async Task TogglePauseAsync()
     {
-        if (_pauseItem is null) return;
+        if (_pauseItem is null)
+        {
+            return;
+        }
+
         try
         {
             var settings = await settingsStore.GetSettingsAsync();
-            await settingsStore.SaveSettingsAsync(settings with { SamplingPaused = _pauseItem.IsChecked });
+            await settingsStore.SaveSettingsAsync(settings with
+            {
+                SamplingPaused = _pauseItem.IsChecked
+            });
             _samplingPaused = _pauseItem.IsChecked;
             ApplyTrayState(syncStatusService.Current);
             await RefreshAsync();
@@ -118,7 +130,11 @@ public sealed class TrayIconService(
 
     private async Task RefreshAsync()
     {
-        if (_pauseItem is null || _icon is null || _isRefreshing) return;
+        if (_pauseItem is null || _icon is null || _isRefreshing)
+        {
+            return;
+        }
+
         _isRefreshing = true;
         try
         {
@@ -154,7 +170,10 @@ public sealed class TrayIconService(
 
     private void ApplyTrayState(SyncStatus syncStatus)
     {
-        if (_icon is null) return;
+        if (_icon is null)
+        {
+            return;
+        }
 
         var state = ResolveIconState(_samplingPaused, _cloudSyncEnabled, syncStatus.LastError, _updateAvailable);
         var tooltip = state switch
@@ -190,9 +209,14 @@ public sealed class TrayIconService(
 
     private void OpenDataDirectory()
     {
-        try { Process.Start(new ProcessStartInfo("explorer.exe", $"\"{paths.DataDirectory}\"") { UseShellExecute = true }); }
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{paths.DataDirectory}\"") { UseShellExecute = true });
+        }
         catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
-        { System.Windows.MessageBox.Show(exception.Message, "无法打开目录"); }
+        {
+            System.Windows.MessageBox.Show(exception.Message, "无法打开目录");
+        }
     }
 
     private static void ConfigureTrayHostWindow(Window window)
@@ -207,7 +231,11 @@ public sealed class TrayIconService(
 
     public void Dispose()
     {
-        if (_icon is null) return;
+        if (_icon is null)
+        {
+            return;
+        }
+
         syncStatusService.Changed -= OnSyncStatusChanged;
         updateStatusService.Changed -= OnUpdateStatusChanged;
         _refreshTimer?.Stop();

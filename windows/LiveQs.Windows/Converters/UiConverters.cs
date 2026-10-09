@@ -7,12 +7,19 @@ namespace LiveQs.Windows.Converters;
 
 public sealed class BooleanToVisibilityConverter : IValueConverter
 {
-    public bool Invert { get; set; }
+    public bool Invert
+    {
+        get; set;
+    }
 
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         var visible = value is true;
-        if (Invert) visible = !visible;
+        if (Invert)
+        {
+            visible = !visible;
+        }
+
         return visible ? Visibility.Visible : Visibility.Collapsed;
     }
 

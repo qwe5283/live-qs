@@ -100,5 +100,5 @@ public sealed class ActiveTimeDistributionTests
         new DateTimeOffset(start, zone.GetUtcOffset(start)), new DateTimeOffset(end, zone.GetUtcOffset(end)));
 
     private static ActivitySegment Segment(DateTimeOffset start, DateTimeOffset end, bool afk = false) =>
-        new(1, start, end, "editor.exe", "Editor", "", afk, false, false, "工作", "#007AFF");
+        new(start.UtcTicks, start, end, "editor.exe", "Editor", "", afk, false, false, "工作", "#007AFF");
 }

@@ -38,7 +38,10 @@ public sealed class ApplicationLifecycleService : IDisposable
         _singleInstance.AttachActivationHandler(HandleActivationRequest);
     }
 
-    public bool IsExiting { get; private set; }
+    public bool IsExiting
+    {
+        get; private set;
+    }
 
     public async Task StartAsync(bool background)
     {
@@ -63,21 +66,34 @@ public sealed class ApplicationLifecycleService : IDisposable
 
     public async Task RequestExitAsync()
     {
-        if (IsExiting) return;
+        if (IsExiting)
+        {
+            return;
+        }
+
         IsExiting = true;
         _logger.Information("LiveQs is shutting down.");
         _trayIcon.Dispose();
         _window.Close();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        try { await _host.StopAsync(timeout.Token); }
-        catch (OperationCanceledException) { }
+        try
+        {
+            await _host.StopAsync(timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
         DisposeHost();
         _application.Shutdown();
     }
 
     private void HandleActivationRequest()
     {
-        if (IsExiting) return;
+        if (IsExiting)
+        {
+            return;
+        }
+
         if (!_started)
         {
             _activationPending = true;
@@ -90,7 +106,11 @@ public sealed class ApplicationLifecycleService : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
+
         _disposed = true;
         _trayIcon.Dispose();
         DisposeHost();
@@ -98,7 +118,11 @@ public sealed class ApplicationLifecycleService : IDisposable
 
     private void DisposeHost()
     {
-        if (_hostDisposed) return;
+        if (_hostDisposed)
+        {
+            return;
+        }
+
         _hostDisposed = true;
         _host.Dispose();
     }

@@ -1,9 +1,6 @@
-using System.Net;
-using System.Text;
 using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Settings;
 using LiveQs.Windows.Core.Update;
-using LiveQs.Windows.Infrastructure.Configuration;
 using LiveQs.Windows.Infrastructure.Persistence.Sqlite;
 using LiveQs.Windows.Infrastructure.Update;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -14,16 +11,35 @@ namespace LiveQs.Windows.Tests;
 internal sealed class StubUpdateCheckClient : IUpdateCheckClient
 {
     public Func<string> ManifestFactory { get; set; } = () => UpdateManifestText("windows", "0.2.0");
-    public Exception? FetchFailure { get; set; }
-    public Exception? DownloadFailure { get; set; }
-    public Func<string, UpdateDownloadResult>? DownloadHandler { get; set; }
-    public int FetchCount { get; private set; }
-    public int DownloadCount { get; private set; }
+    public Exception? FetchFailure
+    {
+        get; set;
+    }
+    public Exception? DownloadFailure
+    {
+        get; set;
+    }
+    public Func<string, UpdateDownloadResult>? DownloadHandler
+    {
+        get; set;
+    }
+    public int FetchCount
+    {
+        get; private set;
+    }
+    public int DownloadCount
+    {
+        get; private set;
+    }
 
     public Task<string> FetchManifestAsync(string manifestUrl, CancellationToken cancellationToken = default)
     {
         FetchCount++;
-        if (FetchFailure is not null) throw FetchFailure;
+        if (FetchFailure is not null)
+        {
+            throw FetchFailure;
+        }
+
         return Task.FromResult(ManifestFactory());
     }
 
@@ -31,13 +47,25 @@ internal sealed class StubUpdateCheckClient : IUpdateCheckClient
         string downloadUrl, string destinationDirectory, string expectedSha256, CancellationToken cancellationToken = default)
     {
         DownloadCount++;
-        if (DownloadFailure is not null) throw DownloadFailure;
-        if (DownloadHandler is { } handler) return Task.FromResult(handler(destinationDirectory));
+        if (DownloadFailure is not null)
+        {
+            throw DownloadFailure;
+        }
+
+        if (DownloadHandler is { } handler)
+        {
+            return Task.FromResult(handler(destinationDirectory));
+        }
+
         Directory.CreateDirectory(destinationDirectory);
         var packagePath = Path.Combine(destinationDirectory, "LiveQs.Windows-0.2.0-win-x64.zip");
         File.WriteAllText(packagePath, "package");
         string sha256;
-        using (var stream = File.OpenRead(packagePath)) sha256 = UpdateArtifactHash.Compute(stream);
+        using (var stream = File.OpenRead(packagePath))
+        {
+            sha256 = UpdateArtifactHash.Compute(stream);
+        }
+
         return Task.FromResult(new UpdateDownloadResult(packagePath, sha256));
     }
 
@@ -56,7 +84,9 @@ internal sealed class StubUpdateCheckClient : IUpdateCheckClient
 
 public sealed class UpdateWorkerTests : IDisposable
 {
-    private readonly UpdateTestPaths _paths = new();
+    public void Dispose() => _paths.Dispose();
+
+    private readonly TestDataPaths _paths = new();
     private readonly DateTimeOffset _now = new(2026, 9, 4, 12, 0, 0, TimeSpan.Zero);
     private readonly StubUpdateCheckClient _client = new();
     private readonly UpdateStatusService _statusService = new();
@@ -277,13 +307,17 @@ public sealed class UpdateWorkerTests : IDisposable
         Func<AppSettings, AppSettings>? configure = null,
         string currentVersion = "0.1.0")
     {
-        var repository = new SqliteActivityRepository(_paths, TimeProvider.System);
+        var repository = new SqliteActivityRepository(_paths, new TestClock());
         await repository.InitializeAsync();
         var settings = (await repository.GetSettingsAsync()) with
         {
             UpdateManifestUrl = "https://example.com/liveqs-windows-update.json",
         };
-        if (configure is not null) settings = configure(settings);
+        if (configure is not null)
+        {
+            settings = configure(settings);
+        }
+
         await repository.SaveSettingsAsync(settings);
         return new UpdateCheckWorker(
             repository,
@@ -292,36 +326,8 @@ public sealed class UpdateWorkerTests : IDisposable
             _statusService,
             new StubAppVersion(currentVersion),
             _paths,
-            new FixedTimeProvider(_now),
+            new TestClock(_now),
             NullLogger<UpdateCheckWorker>.Instance);
     }
 
-    public void Dispose()
-    {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        if (Directory.Exists(_paths.DataDirectory)) Directory.Delete(_paths.DataDirectory, true);
-    }
-}
-
-internal sealed class StubAppVersion(string version) : IAppVersion
-{
-    public string CurrentVersion { get; } = version;
-}
-
-internal sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
-{
-    public override DateTimeOffset GetUtcNow() => now;
-}
-
-internal sealed class UpdateTestPaths : IAppPaths
-{
-    public UpdateTestPaths()
-    {
-        DataDirectory = Path.Combine(Path.GetTempPath(), "LiveQs.Tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(DataDirectory);
-    }
-
-    public string DataDirectory { get; }
-    public string DatabasePath => Path.Combine(DataDirectory, "test.db");
-    public string LogPath => Path.Combine(DataDirectory, "test.log");
 }

@@ -1,4 +1,3 @@
-using Microsoft.Win32;
 using System.Windows;
 
 namespace LiveQs.Windows.Services;
@@ -9,9 +8,13 @@ public sealed class WpfUserDialogService : IUserDialogService
     {
         var owner = Application.Current?.MainWindow;
         if (owner is null)
+        {
             MessageBox.Show(exception.Message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
         else
+        {
             MessageBox.Show(owner, exception.Message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     public bool ConfirmDeleteRange()

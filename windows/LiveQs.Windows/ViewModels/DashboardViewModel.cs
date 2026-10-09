@@ -10,7 +10,7 @@ namespace LiveQs.Windows.ViewModels;
 
 public sealed partial class DashboardViewModel : ViewModelBase
 {
-    private static readonly string[] TopAppColors = ["#007AFF", "#FF7A00", "#1DB954", "#8B5CF6", "#E94D73"];
+    private static readonly string[] _topAppColors = ["#007AFF", "#FF7A00", "#1DB954", "#8B5CF6", "#E94D73"];
     private readonly IActivityQueryService _queryService;
     private readonly IUserDialogService _dialogs;
     private readonly TimeProvider _timeProvider;
@@ -86,19 +86,34 @@ public sealed partial class DashboardViewModel : ViewModelBase
         {
             var start = (StartDate ?? Today).Date;
             var end = (EndDate ?? start).Date;
-            if (end < start) (start, end) = (end, start);
+            if (end < start)
+            {
+                (start, end) = (end, start);
+            }
+
             var range = DateRange.FromLocalDates(start, end);
             var snapshot = await Task.Run(() => _queryService.GetDashboardAsync(range, token), token);
-            if (version != Volatile.Read(ref _requestVersion) || token.IsCancellationRequested) return;
+            if (version != Volatile.Read(ref _requestVersion) || token.IsCancellationRequested)
+            {
+                return;
+            }
+
             ActiveBuckets = snapshot.ActiveBuckets;
             IsHourlyDistribution = start == end;
             DistributionText = IsHourlyDistribution ? "每小时活跃时长" : "每日活跃时长";
-            var apps = snapshot.Apps.Select((app, index) => index < TopAppColors.Length
-                ? app with { Color = TopAppColors[index] }
+            var apps = snapshot.Apps.Select((app, index) => index < _topAppColors.Length
+                ? app with
+                {
+                    Color = _topAppColors[index]
+                }
                 : app).ToArray();
             Apps.Clear();
-            foreach (var app in apps) Apps.Add(app);
-            TopApps = apps.Take(TopAppColors.Length).ToArray();
+            foreach (var app in apps)
+            {
+                Apps.Add(app);
+            }
+
+            TopApps = apps.Take(_topAppColors.Length).ToArray();
             ActiveText = DurationText.Format(snapshot.ActiveDuration);
             AfkText = DurationText.Format(snapshot.AfkDuration);
             AppCountText = snapshot.AppCount.ToString(System.Globalization.CultureInfo.CurrentCulture);
@@ -106,17 +121,26 @@ public sealed partial class DashboardViewModel : ViewModelBase
             HasSnapshot = true;
             QueryStatusText = DistributionText;
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
         catch (Exception exception)
         {
-            if (version != Volatile.Read(ref _requestVersion)) return;
+            if (version != Volatile.Read(ref _requestVersion))
+            {
+                return;
+            }
+
             HasQueryError = true;
             QueryStatusText = "查询失败，请重试或选择其他日期范围。";
             _dialogs.ShowError("查询失败", exception);
         }
         finally
         {
-            if (version == Volatile.Read(ref _requestVersion)) IsLoading = false;
+            if (version == Volatile.Read(ref _requestVersion))
+            {
+                IsLoading = false;
+            }
         }
     }
 
@@ -124,7 +148,11 @@ public sealed partial class DashboardViewModel : ViewModelBase
     {
         start = start.Date;
         end = end.Date;
-        if (end < start) (start, end) = (end, start);
+        if (end < start)
+        {
+            (start, end) = (end, start);
+        }
+
         PresetDays = end == Today && (end - start).Days + 1 is 1 or 7 or 30 ? (end - start).Days + 1 : 0;
         StartDate = start;
         EndDate = end;

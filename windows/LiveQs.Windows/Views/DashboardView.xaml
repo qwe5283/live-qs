@@ -1,10 +1,12 @@
-<UserControl x:Class="LiveQs.Windows.Views.DashboardView"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:controls="clr-namespace:LiveQs.Windows.Controls"
-             xmlns:converters="clr-namespace:LiveQs.Windows.Converters"
-             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-             MinWidth="720" MinHeight="520">
+<UserControl
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:LiveQs.Windows.Controls"
+    xmlns:converters="clr-namespace:LiveQs.Windows.Converters"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    x:Class="LiveQs.Windows.Views.DashboardView"
+    MinWidth="720"
+    MinHeight="520">
     <UserControl.Resources>
         <converters:BooleanToVisibilityConverter x:Key="VisibleWhenTrue" />
         <converters:BooleanToVisibilityConverter x:Key="VisibleWhenFalse" Invert="True" />
@@ -21,11 +23,17 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="SegmentSurface" Background="{TemplateBinding Background}"
-                                BorderBrush="Transparent" BorderThickness="1" CornerRadius="4"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                        <Border
+                            x:Name="SegmentSurface"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="Transparent"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}">
+                            <ContentPresenter
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                TextElement.Foreground="{TemplateBinding Foreground}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
@@ -40,7 +48,10 @@
                                 <Setter Property="Background" Value="{DynamicResource InputBrush}" />
                             </MultiTrigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="SegmentSurface" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter
+                                    TargetName="SegmentSurface"
+                                    Property="BorderBrush"
+                                    Value="{DynamicResource AccentBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -53,7 +64,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-
         <Grid x:Name="DashboardHeader" Margin="28,8,28,18" SizeChanged="OnHeaderSizeChanged">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -67,36 +77,71 @@
                 <TextBlock Text="统计" Style="{StaticResource PageTitle}" />
                 <TextBlock Text="{Binding QueryStatusText}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
             </StackPanel>
-            <Grid x:Name="RangeFilters" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="16,0,0,0">
+            <Grid
+                x:Name="RangeFilters"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Right"
+                Margin="16,0,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <controls:DateRangePicker x:Name="DateRangeSelector" StartDate="{Binding StartDate, Mode=OneWay}"
-                                          EndDate="{Binding EndDate, Mode=OneWay}" RangeSelected="OnRangeSelected"
-                                          VerticalAlignment="Center" Margin="0,0,12,0" />
-                <Border x:Name="PresetSegments" Grid.Column="1" Background="{DynamicResource SidebarBrush}"
-                        CornerRadius="6" Padding="3" VerticalAlignment="Center">
+                <controls:DateRangePicker
+                    x:Name="DateRangeSelector"
+                    StartDate="{Binding StartDate, Mode=OneWay}"
+                    EndDate="{Binding EndDate, Mode=OneWay}"
+                    RangeSelected="OnRangeSelected"
+                    VerticalAlignment="Center"
+                    Margin="0,0,12,0" />
+                <Border
+                    x:Name="PresetSegments"
+                    Grid.Column="1"
+                    Background="{DynamicResource SidebarBrush}"
+                    CornerRadius="6"
+                    Padding="3"
+                    VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" AutomationProperties.Name="快捷日期范围">
-                        <RadioButton GroupName="DashboardRange" Style="{StaticResource RangeSegment}"
-                                     AutomationProperties.Name="今天" IsChecked="{Binding IsTodayRange, Mode=OneWay}" Command="{Binding TodayCommand}">
-                            <TextBlock Text="今天" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+                        <RadioButton
+                            GroupName="DashboardRange"
+                            Style="{StaticResource RangeSegment}"
+                            AutomationProperties.Name="今天"
+                            IsChecked="{Binding IsTodayRange, Mode=OneWay}"
+                            Command="{Binding TodayCommand}">
+                            <TextBlock
+                                Text="今天"
+                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
                         </RadioButton>
-                        <RadioButton GroupName="DashboardRange" Style="{StaticResource RangeSegment}" Margin="2,0"
-                                     AutomationProperties.Name="近 7 天" IsChecked="{Binding IsWeekRange, Mode=OneWay}" Command="{Binding WeekCommand}">
-                            <TextBlock Text="近 7 天" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+                        <RadioButton
+                            GroupName="DashboardRange"
+                            Style="{StaticResource RangeSegment}"
+                            Margin="2,0"
+                            AutomationProperties.Name="近 7 天"
+                            IsChecked="{Binding IsWeekRange, Mode=OneWay}"
+                            Command="{Binding WeekCommand}">
+                            <TextBlock
+                                Text="近 7 天"
+                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
                         </RadioButton>
-                        <RadioButton GroupName="DashboardRange" Style="{StaticResource RangeSegment}"
-                                     AutomationProperties.Name="近 30 天" IsChecked="{Binding IsMonthRange, Mode=OneWay}" Command="{Binding MonthCommand}">
-                            <TextBlock Text="近 30 天" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+                        <RadioButton
+                            GroupName="DashboardRange"
+                            Style="{StaticResource RangeSegment}"
+                            AutomationProperties.Name="近 30 天"
+                            IsChecked="{Binding IsMonthRange, Mode=OneWay}"
+                            Command="{Binding MonthCommand}">
+                            <TextBlock
+                                Text="近 30 天"
+                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
                         </RadioButton>
                     </StackPanel>
                 </Border>
             </Grid>
         </Grid>
-
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                      Visibility="{Binding HasSnapshot, Converter={StaticResource VisibleWhenTrue}}">
+        <ScrollViewer
+            Grid.Row="1"
+            VerticalScrollBarVisibility="Auto"
+            HorizontalScrollBarVisibility="Disabled"
+            Visibility="{Binding HasSnapshot, Converter={StaticResource VisibleWhenTrue}}">
             <StackPanel Margin="28,0,28,28">
                 <Grid Margin="0,0,0,16">
                     <Grid.ColumnDefinitions>
@@ -109,7 +154,11 @@
                     <Border Grid.Column="0" Style="{StaticResource Surface}" Padding="18,15">
                         <StackPanel>
                             <TextBlock Text="活跃时间" Style="{StaticResource MutedText}" />
-                            <TextBlock Text="{Binding ActiveText}" FontSize="23" FontWeight="SemiBold" Margin="0,6,0,0" />
+                            <TextBlock
+                                Text="{Binding ActiveText}"
+                                FontSize="23"
+                                FontWeight="SemiBold"
+                                Margin="0,6,0,0" />
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="2" Style="{StaticResource Surface}" Padding="18,15">
@@ -121,11 +170,14 @@
                     <Border Grid.Column="4" Style="{StaticResource Surface}" Padding="18,15">
                         <StackPanel>
                             <TextBlock Text="使用应用" Style="{StaticResource MutedText}" />
-                            <TextBlock Text="{Binding AppCountText}" FontSize="23" FontWeight="SemiBold" Margin="0,6,0,0" />
+                            <TextBlock
+                                Text="{Binding AppCountText}"
+                                FontSize="23"
+                                FontWeight="SemiBold"
+                                Margin="0,6,0,0" />
                         </StackPanel>
                     </Border>
                 </Grid>
-
                 <Grid Visibility="{Binding IsEmpty, Converter={StaticResource VisibleWhenFalse}}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -145,15 +197,25 @@
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <TextBlock Text="活跃时间占比" Style="{StaticResource SectionTitle}" />
-                            <TextBlock Grid.Row="1" Text="{Binding DistributionText}" Style="{StaticResource MutedText}" Margin="0,6,0,0" />
-                            <ScrollViewer Grid.Row="2" Margin="0,14,0,0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                                <controls:ActiveTimeChart ItemsSource="{Binding ActiveBuckets}" IsHourly="{Binding IsHourlyDistribution}"
-                                                          BarBrush="{DynamicResource AccentBrush}" TextBrush="{DynamicResource SecondaryTextBrush}"
-                                                          GridBrush="{DynamicResource BorderBrush}" />
+                            <TextBlock
+                                Grid.Row="1"
+                                Text="{Binding DistributionText}"
+                                Style="{StaticResource MutedText}"
+                                Margin="0,6,0,0" />
+                            <ScrollViewer
+                                Grid.Row="2"
+                                Margin="0,14,0,0"
+                                HorizontalScrollBarVisibility="Auto"
+                                VerticalScrollBarVisibility="Disabled">
+                                <controls:ActiveTimeChart
+                                    ItemsSource="{Binding ActiveBuckets}"
+                                    IsHourly="{Binding IsHourlyDistribution}"
+                                    BarBrush="{DynamicResource AccentBrush}"
+                                    TextBrush="{DynamicResource SecondaryTextBrush}"
+                                    GridBrush="{DynamicResource BorderBrush}" />
                             </ScrollViewer>
                         </Grid>
                     </Border>
-
                     <Border Grid.Column="2" Style="{StaticResource Surface}" Padding="20" MinHeight="390">
                         <Grid>
                             <Grid.RowDefinitions>
@@ -165,32 +227,53 @@
                             <Grid Grid.Row="1" Margin="20">
                                 <controls:DonutChart x:Name="ApplicationShareChart" ItemsSource="{Binding TopApps}" />
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <TextBlock Text="总计" Style="{StaticResource MutedText}" HorizontalAlignment="Center" />
-                                    <TextBlock Text="{Binding ActiveText}" FontSize="18" FontWeight="SemiBold" Margin="0,3,0,0" />
+                                    <TextBlock
+                                        Text="总计"
+                                        Style="{StaticResource MutedText}"
+                                        HorizontalAlignment="Center" />
+                                    <TextBlock
+                                        Text="{Binding ActiveText}"
+                                        FontSize="18"
+                                        FontWeight="SemiBold"
+                                        Margin="0,3,0,0" />
                                 </StackPanel>
                             </Grid>
                             <StackPanel Grid.Row="2">
                                 <ItemsControl ItemsSource="{Binding TopApps}">
                                     <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal" Margin="0,3,12,3">
-                                                <Ellipse Width="8" Height="8" Fill="{Binding Color}" VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding AppName}" Margin="5,0,0,0" FontSize="12" MaxWidth="90" TextTrimming="CharacterEllipsis" />
+                                                <Ellipse
+                                                    Width="8"
+                                                    Height="8"
+                                                    Fill="{Binding Color}"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Text="{Binding AppName}"
+                                                    Margin="5,0,0,0"
+                                                    FontSize="12"
+                                                    MaxWidth="90"
+                                                    TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                                 <StackPanel Orientation="Horizontal" Margin="0,3,12,3">
-                                    <Ellipse Width="8" Height="8" Fill="{Binding TrackBrush, ElementName=ApplicationShareChart}" VerticalAlignment="Center" />
+                                    <Ellipse
+                                        Width="8"
+                                        Height="8"
+                                        Fill="{Binding TrackBrush, ElementName=ApplicationShareChart}"
+                                        VerticalAlignment="Center" />
                                     <TextBlock Text="其他" Margin="5,0,0,0" FontSize="12" />
                                 </StackPanel>
                             </StackPanel>
                         </Grid>
                     </Border>
-
                     <Border Grid.Row="2" Grid.ColumnSpan="3" Style="{StaticResource Surface}" Padding="20">
                         <Grid>
                             <Grid.RowDefinitions>
@@ -202,17 +285,49 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Grid Margin="0,0,0,16">
-                                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="50" /></Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="50" />
+                                            </Grid.ColumnDefinitions>
                                             <StackPanel Orientation="Horizontal">
-                                                <Image Width="20" Height="20" Source="{Binding ExecutablePath, Converter={StaticResource ApplicationIcon}}"
-                                                       VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" />
-                                                <TextBlock Text="{Binding AppName}" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" MaxWidth="230" TextTrimming="CharacterEllipsis" />
+                                                <Image
+                                                    Width="20"
+                                                    Height="20"
+                                                    Source="{Binding ExecutablePath, Converter={StaticResource ApplicationIcon}}"
+                                                    VerticalAlignment="Center"
+                                                    RenderOptions.BitmapScalingMode="HighQuality" />
+                                                <TextBlock
+                                                    Text="{Binding AppName}"
+                                                    FontWeight="SemiBold"
+                                                    Margin="8,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    MaxWidth="230"
+                                                    TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
-                                            <TextBlock Grid.Column="1" Text="{Binding Duration, Converter={StaticResource DurationText}}" Foreground="{DynamicResource SecondaryTextBrush}" Margin="12,0" />
-                                            <TextBlock Grid.Column="2" Text="{Binding Share, Converter={StaticResource ShareText}}" HorizontalAlignment="Right" />
-                                            <ProgressBar Grid.Row="1" Grid.ColumnSpan="3" Maximum="100" Value="{Binding Share, Converter={StaticResource SharePercent}}"
-                                                         Foreground="{Binding Color}" Background="{DynamicResource BorderBrush}" BorderThickness="0" Height="6" Margin="0,8,0,0" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                Text="{Binding Duration, Converter={StaticResource DurationText}}"
+                                                Foreground="{DynamicResource SecondaryTextBrush}"
+                                                Margin="12,0" />
+                                            <TextBlock
+                                                Grid.Column="2"
+                                                Text="{Binding Share, Converter={StaticResource ShareText}}"
+                                                HorizontalAlignment="Right" />
+                                            <ProgressBar
+                                                Grid.Row="1"
+                                                Grid.ColumnSpan="3"
+                                                Maximum="100"
+                                                Value="{Binding Share, Converter={StaticResource SharePercent}}"
+                                                Foreground="{Binding Color}"
+                                                Background="{DynamicResource BorderBrush}"
+                                                BorderThickness="0"
+                                                Height="6"
+                                                Margin="0,8,0,0" />
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -220,25 +335,43 @@
                         </Grid>
                     </Border>
                 </Grid>
-
-                <Border Style="{StaticResource Surface}" Padding="40" MinHeight="260"
-                        Visibility="{Binding IsEmpty, Converter={StaticResource VisibleWhenTrue}}">
+                <Border
+                    Style="{StaticResource Surface}"
+                    Padding="40"
+                    MinHeight="260"
+                    Visibility="{Binding IsEmpty, Converter={StaticResource VisibleWhenTrue}}">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="DataPie24" FontSize="34" Foreground="{DynamicResource MutedTextBrush}" HorizontalAlignment="Center" />
+                        <ui:SymbolIcon
+                            Symbol="DataPie24"
+                            FontSize="34"
+                            Foreground="{DynamicResource MutedTextBrush}"
+                            HorizontalAlignment="Center" />
                         <TextBlock Text="这个日期范围还没有活动数据" FontSize="16" FontWeight="SemiBold" Margin="0,14,0,0" />
                         <TextBlock Text="后台采样开启后，统计会自动出现在这里。" Style="{StaticResource MutedText}" Margin="0,6,0,0" />
                     </StackPanel>
                 </Border>
             </StackPanel>
         </ScrollViewer>
-        <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="28"
-                    Visibility="{Binding HasSnapshot, Converter={StaticResource VisibleWhenFalse}}">
-            <ui:ProgressRing IsIndeterminate="True" Width="28" Height="28" Margin="0,0,0,14"
-                             Visibility="{Binding IsLoading, Converter={StaticResource VisibleWhenTrue}}" />
+        <StackPanel
+            Grid.Row="1"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Margin="28"
+            Visibility="{Binding HasSnapshot, Converter={StaticResource VisibleWhenFalse}}">
+            <ui:ProgressRing
+                IsIndeterminate="True"
+                Width="28"
+                Height="28"
+                Margin="0,0,0,14"
+                Visibility="{Binding IsLoading, Converter={StaticResource VisibleWhenTrue}}" />
             <TextBlock Text="{Binding QueryStatusText}" Style="{StaticResource MutedText}" />
-            <Button Content="重试" Style="{StaticResource SecondaryButton}" Command="{Binding LoadCommand}"
-                    HorizontalAlignment="Center" Margin="0,14,0,0"
-                    Visibility="{Binding HasQueryError, Converter={StaticResource VisibleWhenTrue}}" />
+            <Button
+                Content="重试"
+                Style="{StaticResource SecondaryButton}"
+                Command="{Binding LoadCommand}"
+                HorizontalAlignment="Center"
+                Margin="0,14,0,0"
+                Visibility="{Binding HasQueryError, Converter={StaticResource VisibleWhenTrue}}" />
         </StackPanel>
     </Grid>
 </UserControl>

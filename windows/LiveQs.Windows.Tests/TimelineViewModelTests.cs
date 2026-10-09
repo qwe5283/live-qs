@@ -12,6 +12,29 @@ namespace LiveQs.Windows.Tests;
 public sealed class TimelineViewModelTests
 {
     [Fact]
+    public async Task FailedDateQuery_DoesNotPresentThePreviousDatesRecords()
+    {
+        var date = new DateTime(2026, 10, 9);
+        var range = DateRange.FromLocalDates(date, date);
+        var query = new FailingQuery(new ActivitySegment(
+            1, range.Start, range.Start.AddMinutes(1), "app", "Application", "", false, false, false, "", "#007AFF"));
+        var dialogs = new RecordingDialogs();
+        var model = new TimelineViewModel(query, dialogs, NullLogger<TimelineViewModel>.Instance, new TestClock());
+        model.SelectedDate = date;
+        await model.RefreshAsync();
+        Assert.Single(model.Rows);
+
+        query.Fail = true;
+        model.SelectedDate = date.AddDays(1);
+        await model.LoadCommand.ExecuteAsync(null);
+
+        Assert.Empty(model.Rows);
+        Assert.False(model.IsLoading);
+        Assert.True(model.HasQueryError);
+        Assert.Equal(1, dialogs.ErrorCount);
+    }
+
+    [Fact]
     public async Task LoadingEarlierRecords_MergesThePartialEpisodeAndRetainsItsExpandedSelection()
     {
         var start = new DateTimeOffset(2026, 10, 9, 10, 0, 0, TimeSpan.Zero);
@@ -59,11 +82,15 @@ public sealed class TimelineViewModelTests
     }
 
     private static TimelineViewModel Model(IActivityQueryService query) => new(
-        query, new Dialogs(), NullLogger<TimelineViewModel>.Instance, TimeProvider.System);
+        query, new Dialogs(), NullLogger<TimelineViewModel>.Instance, new TestClock());
 
     private sealed class Query(ActivitySegment[] records) : IActivityQueryService
     {
-        public Task<TimelinePage> GetTimelinePageAsync(DateRange range, int pageSize, TimelineCursor? cursor = null, CancellationToken cancellationToken = default)
+        public Task<TimelinePage> GetTimelinePageAsync(
+            DateRange range,
+            int pageSize,
+            TimelineCursor? cursor = null,
+            CancellationToken cancellationToken = default)
         {
             var ordered = records.Where(record => record.StartedAt < range.End && record.EndedAt > range.Start)
                 .OrderByDescending(record => record.StartedAt).ThenByDescending(record => record.Id)
@@ -74,8 +101,12 @@ public sealed class TimelineViewModelTests
             return Task.FromResult(new TimelinePage(items, more ? new TimelineCursor(items[^1].StartedAt, items[^1].Id) : null, more));
         }
 
-        public Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(DateRange range, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<DashboardSnapshot> GetDashboardAsync(DateRange range, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(
+            DateRange range,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DashboardSnapshot> GetDashboardAsync(
+            DateRange range,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<ApplicationRule>> GetApplicationRulesAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
@@ -85,23 +116,70 @@ public sealed class TimelineViewModelTests
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Complete { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public async Task<TimelinePage> GetTimelinePageAsync(DateRange range, int pageSize, TimelineCursor? cursor = null, CancellationToken cancellationToken = default)
+        public async Task<TimelinePage> GetTimelinePageAsync(
+            DateRange range,
+            int pageSize,
+            TimelineCursor? cursor = null,
+            CancellationToken cancellationToken = default)
         {
-            if (Interlocked.Increment(ref _calls) != 1) return new TimelinePage([], null, false);
+            if (Interlocked.Increment(ref _calls) != 1)
+            {
+                return new TimelinePage([], null, false);
+            }
+
             Started.SetResult();
             await Complete.Task;
             return new TimelinePage([new ActivitySegment(1, range.Start, range.Start.AddMinutes(1), "old", "Old", "", false, false, false, "", "#007AFF")], null, false);
         }
 
-        public Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(DateRange range, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<DashboardSnapshot> GetDashboardAsync(DateRange range, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(
+            DateRange range,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DashboardSnapshot> GetDashboardAsync(
+            DateRange range,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<ApplicationRule>> GetApplicationRulesAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class Dialogs : IUserDialogService
     {
-        public void ShowError(string title, Exception exception) => throw new InvalidOperationException(title, exception);
+        public void ShowError(
+            string title,
+            Exception exception) => throw new InvalidOperationException(title, exception);
         public bool ConfirmDeleteRange() => false;
         public string? SelectExportPath(string defaultFileName) => null;
+    }
+
+    private sealed class RecordingDialogs : IUserDialogService
+    {
+        public int ErrorCount
+        {
+            get; private set;
+        }
+        public void ShowError(string title, Exception exception) => ErrorCount++;
+        public bool ConfirmDeleteRange() => false;
+        public string? SelectExportPath(string defaultFileName) => null;
+    }
+
+    private sealed class FailingQuery(ActivitySegment record) : IActivityQueryService
+    {
+        public bool Fail
+        {
+            get; set;
+        }
+        public Task<TimelinePage> GetTimelinePageAsync(
+            DateRange range,
+            int pageSize,
+            TimelineCursor? cursor = null,
+            CancellationToken cancellationToken = default) =>
+            Fail ? throw new IOException("Query failed.") : Task.FromResult(new TimelinePage([record], null, false));
+
+        public Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(
+            DateRange range,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DashboardSnapshot> GetDashboardAsync(
+            DateRange range,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ApplicationRule>> GetApplicationRulesAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

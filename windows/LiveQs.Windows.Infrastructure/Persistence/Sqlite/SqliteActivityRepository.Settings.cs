@@ -21,7 +21,10 @@ public sealed partial class SqliteActivityRepository
         var result = new List<ApplicationRule>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
+        {
             result.Add(new ApplicationRule(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetBoolean(3)));
+        }
+
         return result;
     }
 
@@ -50,16 +53,30 @@ public sealed partial class SqliteActivityRepository
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT json FROM app_settings WHERE id = 1;";
         var json = await command.ExecuteScalarAsync(cancellationToken) as string;
-        if (string.IsNullOrWhiteSpace(json)) return new AppSettings();
-        try { return (JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings()).Normalize(); }
-        catch (JsonException) { return new AppSettings(); }
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new AppSettings();
+        }
+
+        try
+        {
+            return (JsonSerializer.Deserialize<AppSettings>(json, _jsonOptions) ?? new AppSettings()).Normalize();
+        }
+        catch (JsonException)
+        {
+            return new AppSettings();
+        }
     }
 
     public async Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {
         var normalized = settings.Normalize();
         var error = normalized.Validate();
-        if (error is not null) throw new ArgumentException(error, nameof(settings));
+        if (error is not null)
+        {
+            throw new ArgumentException(error, nameof(settings));
+        }
+
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
@@ -67,7 +84,7 @@ public sealed partial class SqliteActivityRepository
             VALUES(1, $json, $now)
             ON CONFLICT(id) DO UPDATE SET json = excluded.json, updated_utc = excluded.updated_utc;
             """;
-        command.Parameters.AddWithValue("$json", JsonSerializer.Serialize(normalized, JsonOptions));
+        command.Parameters.AddWithValue("$json", JsonSerializer.Serialize(normalized, _jsonOptions));
         command.Parameters.AddWithValue("$now", UtcText(_timeProvider.GetUtcNow()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

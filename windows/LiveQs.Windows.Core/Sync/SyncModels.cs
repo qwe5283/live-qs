@@ -25,7 +25,12 @@ public sealed record SyncQueueItem(
     bool IsFullscreen,
     int SyncVersion,
     bool Finalized,
-    ClassificationOutcome? UploadOutcome = null);
+    ClassificationOutcome? UploadOutcome = null)
+{
+    public SyncRevision Revision => new(SegmentId, SyncVersion);
+}
+
+public readonly record struct SyncRevision(long SegmentId, int Version);
 
 public enum SyncOutcomeKind
 {
@@ -48,9 +53,14 @@ public enum SyncOutcomeKind
 public sealed record SyncOutcome(
     SyncQueueItem Item,
     SyncOutcomeKind Kind,
-    string? Error,
+    string? ErrorMessage,
     Contracts.EventAcknowledgementStatus Status = Contracts.EventAcknowledgementStatus.Accepted,
-    string? ErrorCode = null);
+    string? ErrorCode = null)
+{
+    public string DisplayError => ErrorCode is null
+        ? ErrorMessage ?? "rejected"
+        : $"{ErrorCode}: {ErrorMessage ?? "The event was rejected."}";
+}
 
 public sealed record SyncStatus(
     bool Enabled,

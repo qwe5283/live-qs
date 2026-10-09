@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Nodes;
 using LiveQs.Windows.Core.Update;
 
 namespace LiveQs.Windows.Tests;
@@ -57,19 +58,24 @@ public sealed class UpdateTests
         Assert.Equal("0.1.0", manifest.MinCompatibleVersion);
     }
 
+    public static TheoryData<string> InvalidManifests => new()
+    {
+        InvalidManifest("manifest_version", "2"),
+        InvalidManifest("manifest_version", "\"1\""),
+        InvalidManifest("version", "\"0.2\""),
+        InvalidManifest("released_at", "\"yesterday\""),
+        InvalidManifest("component", "\"Windows\""),
+        InvalidManifest("download_url", "\"ftp://a/b\""),
+        InvalidManifest("sha256", "\"NOT-A-HASH\""),
+        InvalidManifest("min_compatible_version", "\"0.3.0\""),
+        InvalidManifest("notes", "\"extra\""),
+        InvalidManifest("min_compatible_version", null),
+        "not json at all",
+        "42",
+    };
+
     [Theory]
-    [InlineData("""{"manifest_version": 2, "component": "windows", "version": "0.2.0", "released_at": "2026-09-04T08:00:00Z", "download_url": "https://a/b", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "min_compatible_version": "0.1.0"}""")]
-    [InlineData("""{"manifest_version": "1", "component": "windows", "version": "0.2.0", "released_at": "2026-09-04T08:00:00Z", "download_url": "https://a/b", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "min_compatible_version": "0.1.0"}""")]
-    [InlineData("""{"manifest_version": 1, "component": "windows", "version": "0.2", "released_at": "2026-09-04T08:00:00Z", "download_url": "https://a/b", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "min_compatible_version": "0.1.0"}""")]
-    [InlineData("""{"manifest_version": 1, "component": "Windows", "version": "0.2.0", "released_at": "2026-09-04T08:00:00Z", "download_url": "https://a/b", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "min_compatible_version": "0.1.0"}""")]
-    [InlineData("""{"manifest_version": 1, "component": "windows", "version": "0.2.0", "released_at": "yesterday", "download_url": "https://a/b", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "min_compatible_version": "0.1.0"}""")]
-    [InlineData("""{"manifest_version": 1, "component": "windows", "version": "0.2.0", "released_at": "2026-09-04T08:00:00Z", "download_url": "ftp://a/b", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "min_compatible_version": "0.1.0"}""")]
-    [InlineData("""{"manifest_version": 1, "component": "windows", "version": "0.2.0", "released_at": "2026-09-04T08:00:00Z", "download_url": "https://a/b", "sha256": "NOT-A-HASH", "min_compatible_version": "0.1.0"}""")]
-    [InlineData("""{"manifest_version": 1, "component": "windows", "version": "0.2.0", "released_at": "2026-09-04T08:00:00Z", "download_url": "https://a/b", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "min_compatible_version": "0.3.0"}""")]
-    [InlineData("""{"manifest_version": 1, "component": "windows", "version": "0.2.0", "released_at": "2026-09-04T08:00:00Z", "download_url": "https://a/b", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "min_compatible_version": "0.1.0", "notes": "extra"}""")]
-    [InlineData("""{"manifest_version": 1, "component": "windows", "version": "0.2.0", "released_at": "2026-09-04T08:00:00Z", "download_url": "https://a/b", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}""")]
-    [InlineData("not json at all")]
-    [InlineData("42")]
+    [MemberData(nameof(InvalidManifests))]
     public void TryParse_RejectsInvalidManifestsWithDiagnosableErrors(string json)
     {
         var parsed = UpdateManifestParser.TryParse(json, out var manifest, out var errors);
@@ -97,7 +103,10 @@ public sealed class UpdateTests
     [InlineData("0.3.1", "0.2.0", "0.1.0")]
     [InlineData("0.2.0", "0.2.0", "0.2.0")]
     [InlineData("0.1.0", "0.0.9", "0.0.9")]
-    public void Evaluate_NeverOffersADowngradeOrReinstall(string currentVersion, string manifestVersion, string minCompatible)
+    public void Evaluate_NeverOffersADowngradeOrReinstall(
+        string currentVersion,
+        string manifestVersion,
+        string minCompatible)
     {
         var manifest = Parse(ManifestJson("windows", manifestVersion, minCompatible));
 
@@ -158,6 +167,20 @@ public sealed class UpdateTests
         var hash = UpdateArtifactHash.Compute(stream);
 
         Assert.Matches("^[0-9a-f]{64}$", hash);
+    }
+
+    private static string InvalidManifest(string field, string? valueJson)
+    {
+        var manifest = JsonNode.Parse(ValidManifestJson)!.AsObject();
+        if (valueJson is null)
+        {
+            manifest.Remove(field);
+        }
+        else
+        {
+            manifest[field] = JsonNode.Parse(valueJson);
+        }
+        return manifest.ToJsonString();
     }
 
     private static UpdateManifest Parse(string json)

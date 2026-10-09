@@ -8,7 +8,10 @@ namespace LiveQs.Windows.Views;
 
 public partial class TimelineView : System.Windows.Controls.UserControl
 {
-    public TimelineViewModel ViewModel { get; }
+    public TimelineViewModel ViewModel
+    {
+        get;
+    }
     private ScrollViewer? _scrollViewer;
     private double? _savedOffset;
 
@@ -20,26 +23,38 @@ public partial class TimelineView : System.Windows.Controls.UserControl
         ViewModel.PropertyChanging += (_, args) =>
         {
             if (args.PropertyName == nameof(TimelineViewModel.Rows) && ViewModel.IsLoadingMore)
+            {
                 _savedOffset = _scrollViewer?.VerticalOffset;
+            }
         };
         ViewModel.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName != nameof(TimelineViewModel.Rows) || _savedOffset is not { } offset) return;
+            if (args.PropertyName != nameof(TimelineViewModel.Rows) || _savedOffset is not { } offset)
+            {
+                return;
+            }
+
             _savedOffset = null;
             var date = ViewModel.SelectedDate;
             Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
             {
-                if (ViewModel.SelectedDate == date) _scrollViewer?.ScrollToVerticalOffset(offset);
+                if (ViewModel.SelectedDate == date)
+                {
+                    _scrollViewer?.ScrollToVerticalOffset(offset);
+                }
             });
         };
     }
 
     public Task RefreshAsync() => ViewModel.RefreshAsync();
 
-    private void TimelineList_ScrollChanged(object sender, ScrollChangedEventArgs args)
+    private void OnTimelineScrollChanged(object sender, ScrollChangedEventArgs args)
     {
         if (args.ExtentHeight <= args.ViewportHeight || args.VerticalOffset < args.ExtentHeight - args.ViewportHeight - 240)
+        {
             return;
+        }
+
         ViewModel.LoadMoreCommand.Execute(null);
     }
 
@@ -48,8 +63,15 @@ public partial class TimelineView : System.Windows.Controls.UserControl
         for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
         {
             var child = VisualTreeHelper.GetChild(parent, index);
-            if (child is ScrollViewer viewer) return viewer;
-            if (FindScrollViewer(child) is { } nested) return nested;
+            if (child is ScrollViewer viewer)
+            {
+                return viewer;
+            }
+
+            if (FindScrollViewer(child) is { } nested)
+            {
+                return nested;
+            }
         }
         return null;
     }

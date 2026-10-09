@@ -22,7 +22,10 @@ public static partial class UpdateSemver
         var second = Parse(right);
         for (var index = 0; index < 3; index++)
         {
-            if (first[index] != second[index]) return first[index] < second[index] ? -1 : 1;
+            if (first[index] != second[index])
+            {
+                return first[index] < second[index] ? -1 : 1;
+            }
         }
         return 0;
     }
@@ -30,7 +33,11 @@ public static partial class UpdateSemver
     private static int[] Parse(string value)
     {
         var match = CorePattern().Match(value);
-        if (!match.Success) throw new FormatException($"The value is not a core semver version: {value}");
+        if (!match.Success)
+        {
+            throw new FormatException($"The value is not a core semver version: {value}");
+        }
+
         return
         [
             int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture),

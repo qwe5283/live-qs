@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Threading;
 using LiveQs.Windows.Controls;
 using LiveQs.Windows.Core.Abstractions;
@@ -43,7 +42,11 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     public void RestoreAndActivate()
     {
         Show();
-        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
         Activate();
         Topmost = true;
         Topmost = false;
@@ -56,15 +59,28 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         _statusTimer.Start();
     }
 
-    private async void Navigation_Click(object sender, RoutedEventArgs args)
+    private async void OnNavigationClick(object sender, RoutedEventArgs args)
     {
-        if (sender is not Button { Tag: string page }) return;
+        if (sender is not Button { Tag: string page })
+        {
+            return;
+        }
+
         SelectPage(page);
         try
         {
-            if (page == "statistics") await _dashboard.RefreshAsync();
-            else if (page == "timeline") await _timeline.RefreshAsync();
-            else await _settings.RefreshAsync();
+            if (page == "statistics")
+            {
+                await _dashboard.RefreshAsync();
+            }
+            else if (page == "timeline")
+            {
+                await _timeline.RefreshAsync();
+            }
+            else
+            {
+                await _settings.RefreshAsync();
+            }
         }
         catch (Exception exception)
         {
@@ -128,7 +144,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         }
     }
 
-    private void OnSyncStatusChanged(object? sender, SyncStatus status) => Dispatcher.Invoke(() => ApplySyncStatus(status));
+    private void OnSyncStatusChanged(
+        object? sender,
+        SyncStatus status) => Dispatcher.Invoke(() => ApplySyncStatus(status));
 
     private void ApplySyncStatus(SyncStatus status)
     {
@@ -141,10 +159,20 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private void OnClosing(object? sender, CancelEventArgs args)
     {
         var app = (LiveQsApplication)System.Windows.Application.Current;
-        if (app.IsExiting) return;
+        if (app.IsExiting)
+        {
+            return;
+        }
+
         args.Cancel = true;
-        if (_closeToTray) Hide();
-        else Dispatcher.BeginInvoke(app.RequestExit);
+        if (_closeToTray)
+        {
+            Hide();
+        }
+        else
+        {
+            Dispatcher.BeginInvoke(app.RequestExit);
+        }
     }
 
     private void OnClosed(object? sender, EventArgs args)

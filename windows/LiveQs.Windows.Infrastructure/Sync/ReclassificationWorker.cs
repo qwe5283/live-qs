@@ -52,8 +52,14 @@ public sealed class ReclassificationWorker(
                 logger.LogError(exception, "Reclassification pass failed; local collection remains active.");
             }
 
-            try { await Task.Delay(PollInterval, timeProvider, stoppingToken); }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            try
+            {
+                await Task.Delay(PollInterval, timeProvider, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 
@@ -64,10 +70,16 @@ public sealed class ReclassificationWorker(
     public async Task RunOnceAsync(CancellationToken cancellationToken)
     {
         var settings = await settingsStore.GetSettingsAsync(cancellationToken);
-        if (!settings.CloudSyncEnabled) return;
+        if (!settings.CloudSyncEnabled)
+        {
+            return;
+        }
 
         var assignment = await reclassificationClient.GetAssignmentAsync(settings, cancellationToken);
-        if (assignment is null) return;
+        if (assignment is null)
+        {
+            return;
+        }
 
         var ruleSet = await EnsureTargetRuleSetAsync(assignment, settings, cancellationToken);
         if (ruleSet is null)
@@ -115,7 +127,11 @@ public sealed class ReclassificationWorker(
             cancellationToken.ThrowIfCancellationRequested();
             var candidates = await syncQueue.GetReclassificationCandidatesAsync(
                 assignment.From, assignment.To, PageSize, after, cancellationToken);
-            if (candidates.Count == 0) break;
+            if (candidates.Count == 0)
+            {
+                break;
+            }
+
             after = candidates.Max(item => item.SegmentId);
 
             var decisions = new List<ReclassificationDecision>(candidates.Count);
@@ -127,8 +143,14 @@ public sealed class ReclassificationWorker(
                 var recomputed = ClassificationEngine.Classify(
                     ruleSet, "windows", segment.AppId, segment.WindowTitle, classificationSecret);
                 var decision = ReclassificationPlanner.Decide(segment, recomputed);
-                if (decision.Action == ReclassificationAction.SubmitRevision) decisions.Add(decision);
-                else unchanged += 1;
+                if (decision.Action == ReclassificationAction.SubmitRevision)
+                {
+                    decisions.Add(decision);
+                }
+                else
+                {
+                    unchanged += 1;
+                }
             }
 
             if (decisions.Count > 0)

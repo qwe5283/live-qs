@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Data;
@@ -12,14 +11,25 @@ namespace LiveQs.Windows.Converters;
 public sealed class ApplicationIconConverter : IValueConverter
 {
     private const uint ShgfiIcon = 0x00000100;
-    private static readonly ImageSource FallbackIcon = CreateFallbackIcon();
+    private static readonly ImageSource _fallbackIcon = CreateFallbackIcon();
     private readonly Dictionary<string, ImageSource> _icons = new(StringComparer.OrdinalIgnoreCase);
 
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
-        if (value is not string path || string.IsNullOrWhiteSpace(path)) return FallbackIcon;
-        if (_icons.TryGetValue(path, out var cached)) return cached;
-        if (!File.Exists(path)) return FallbackIcon;
+        if (value is not string path || string.IsNullOrWhiteSpace(path))
+        {
+            return _fallbackIcon;
+        }
+
+        if (_icons.TryGetValue(path, out var cached))
+        {
+            return cached;
+        }
+
+        if (!File.Exists(path))
+        {
+            return _fallbackIcon;
+        }
 
         var info = new ShellFileInfo();
         try
@@ -27,7 +37,9 @@ public sealed class ApplicationIconConverter : IValueConverter
             // SHGFI_ICON returns a caller-owned HICON; copy it before releasing the handle.
             if (SHGetFileInfo(path, 0, ref info, (uint)Marshal.SizeOf<ShellFileInfo>(), ShgfiIcon) == nint.Zero
                 || info.Icon == nint.Zero)
-                return FallbackIcon;
+            {
+                return _fallbackIcon;
+            }
 
             var image = Imaging.CreateBitmapSourceFromHIcon(info.Icon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
             image.Freeze();
@@ -36,11 +48,14 @@ public sealed class ApplicationIconConverter : IValueConverter
         }
         catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or ExternalException)
         {
-            return FallbackIcon;
+            return _fallbackIcon;
         }
         finally
         {
-            if (info.Icon != nint.Zero) DestroyIcon(info.Icon);
+            if (info.Icon != nint.Zero)
+            {
+                DestroyIcon(info.Icon);
+            }
         }
     }
 
@@ -80,7 +95,12 @@ public sealed class ApplicationIconConverter : IValueConverter
     }
 
     [DllImport("shell32.dll", EntryPoint = "SHGetFileInfoW", CharSet = CharSet.Unicode)]
-    private static extern nint SHGetFileInfo(string path, uint attributes, ref ShellFileInfo info, uint size, uint flags);
+    private static extern nint SHGetFileInfo(
+        string path,
+        uint attributes,
+        ref ShellFileInfo info,
+        uint size,
+        uint flags);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

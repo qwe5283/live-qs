@@ -1,10 +1,8 @@
-using System.Globalization;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Settings;
 using LiveQs.Windows.Core.Sync;
+using LiveQs.Windows.Infrastructure.Http;
 
 namespace LiveQs.Windows.Infrastructure.Sync;
 
@@ -17,19 +15,20 @@ namespace LiveQs.Windows.Infrastructure.Sync;
 /// </summary>
 public sealed class DiagnosticsClient(IHttpClientFactory httpClientFactory) : IDiagnosticsClient
 {
-    public async Task PushAsync(SyncDiagnosticsSnapshot snapshot, AppSettings settings, CancellationToken cancellationToken = default)
+    public async Task PushAsync(
+        SyncDiagnosticsSnapshot snapshot,
+        AppSettings settings,
+        CancellationToken cancellationToken = default)
     {
-        var client = httpClientFactory.CreateClient("cloud-sync");
-        client.BaseAddress = new Uri($"{settings.ServerBaseUrl.TrimEnd('/')}/");
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.DeviceToken);
+        using var client = CloudApiClient.Create(httpClientFactory, settings);
 
         var report = new Core.Contracts.SyncDiagnosticsReport
         {
             Platform = Core.Contracts.Platform.Windows,
             DeviceName = settings.DeviceId,
-            CollectedAt = WireInstant(snapshot.CollectedAt),
-            LastSuccessfulUploadAt = WireInstant(snapshot.LastSuccessfulUploadAt),
-            OldestPendingAt = WireInstant(snapshot.OldestPendingAt),
+            CollectedAt = ContractTime.Format(snapshot.CollectedAt),
+            LastSuccessfulUploadAt = ContractTime.Format(snapshot.LastSuccessfulUploadAt),
+            OldestPendingAt = ContractTime.Format(snapshot.OldestPendingAt),
             PendingCount = snapshot.PendingCount,
             PermanentFailureCount = snapshot.PermanentFailureCount,
             RecentErrors = snapshot.RecentErrors.Select(ToContract).ToArray(),
@@ -46,13 +45,7 @@ public sealed class DiagnosticsClient(IHttpClientFactory httpClientFactory) : ID
     {
         Code = entry.Code,
         Message = entry.Message,
-        OccurredAt = WireInstant(entry.OccurredAt),
+        OccurredAt = ContractTime.Format(entry.OccurredAt),
     };
 
-    private static string WireInstant(DateTimeOffset value) =>
-        value.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
-
-    private static string? WireInstant(DateTimeOffset? value) => value is null
-        ? null
-        : WireInstant(value.Value);
 }

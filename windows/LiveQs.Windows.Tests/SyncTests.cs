@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Activity;
@@ -15,24 +14,45 @@ namespace LiveQs.Windows.Tests;
 /// <summary>Scripted ISyncClient: returns canned outcomes or throws, counting upload calls.</summary>
 internal sealed class StubSyncClient : ISyncClient
 {
-    public IReadOnlyList<SyncOutcome>? Outcomes { get; set; }
-    public Exception? Failure { get; set; }
-    public int CallCount { get; private set; }
+    public IReadOnlyList<SyncOutcome>? Outcomes
+    {
+        get; set;
+    }
+    public Exception? Failure
+    {
+        get; set;
+    }
+    public int CallCount
+    {
+        get; private set;
+    }
 
-    public Task<IReadOnlyList<SyncOutcome>> UploadAsync(IReadOnlyList<SyncQueueItem> items, AppSettings settings, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<SyncOutcome>> UploadAsync(
+        IReadOnlyList<SyncQueueItem> items,
+        AppSettings settings,
+        CancellationToken cancellationToken)
     {
         CallCount++;
-        if (Failure is not null) throw Failure;
+        if (Failure is not null)
+        {
+            throw Failure;
+        }
+
         return Task.FromResult(Outcomes ?? (IReadOnlyList<SyncOutcome>)Array.Empty<SyncOutcome>());
     }
 
-    public Task<IReadOnlyList<SyncOutcome>> UploadReclassificationAsync(IReadOnlyList<ReclassificationDecision> decisions, AppSettings settings, CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<SyncOutcome>> UploadReclassificationAsync(
+        IReadOnlyList<ReclassificationDecision> decisions,
+        AppSettings settings,
+        CancellationToken cancellationToken) =>
         throw new NotSupportedException("Reclassification is not exercised by the outbox tests.");
 }
 
 public sealed class SyncTests : IDisposable
 {
-    private readonly TestPaths _paths = new();
+    public void Dispose() => _paths.Dispose();
+
+    private readonly TestDataPaths _paths = new();
 
     [Fact]
     public async Task Client_PostsContractBatchWithoutRawContext()
@@ -40,12 +60,12 @@ public sealed class SyncTests : IDisposable
         var repository = await CreateRepositoryAsync();
         var settings = CloudSettings();
         await repository.SaveSettingsAsync(settings);
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow.AddMinutes(-5)), TimeSpan.FromSeconds(10));
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow), TimeSpan.FromSeconds(10));
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant.AddMinutes(-5)), TimeSpan.FromSeconds(10));
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant), TimeSpan.FromSeconds(10));
 
         var handler = new RecordingHandler { ResponseFactory = body => AckResponse(body, "accepted") };
-        var client = new CloudSyncClient(new SingleClientFactory(handler), repository, repository, TimeProvider.System);
-        var items = await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1));
+        var client = new CloudSyncClient(new SingleClientFactory(handler), repository, repository, new TestClock(), new StubAppVersion("0.1.0"));
+        var items = await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddMinutes(1));
 
         var outcomes = await client.UploadAsync(items, settings, CancellationToken.None);
 
@@ -62,6 +82,7 @@ public sealed class SyncTests : IDisposable
         Assert.Equal(2, first.Revision); // the finalized interval carries its final revision
         Assert.Equal(LiveQs.Windows.Core.Contracts.FinalizationState.Final, first.FinalizationState);
         Assert.Equal(10_000, first.Payload.Duration!.Value);
+        Assert.Equal("0.1.0", first.Provenance.CollectorVersion);
         Assert.Matches(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", first.StartAt);
         Assert.All(outcomes, outcome => Assert.Equal(SyncOutcomeKind.Acknowledged, outcome.Kind));
     }
@@ -75,9 +96,9 @@ public sealed class SyncTests : IDisposable
         for (var index = 0; index < 4; index++)
         {
             await repository.RecordSampleAsync(
-                Sample(DateTimeOffset.UtcNow.AddMinutes(index), appId: $"app{index}.exe"), TimeSpan.FromSeconds(10));
+                Sample(TestClock.DefaultInstant.AddMinutes(index), appId: $"app{index}.exe"), TimeSpan.FromSeconds(10));
         }
-        var items = await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1));
+        var items = await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddMinutes(1));
         Assert.Equal(4, items.Count);
 
         var acks = new[] { "accepted", "duplicate", "stale_revision", "rejected" };
@@ -90,7 +111,11 @@ public sealed class SyncTests : IDisposable
                 using var document = System.Text.Json.JsonDocument.Parse(body);
                 foreach (var _ in document.RootElement.GetProperty("events").EnumerateArray())
                 {
-                    if (index > 0) builder.Append(',');
+                    if (index > 0)
+                    {
+                        builder.Append(',');
+                    }
+
                     var status = acks[index];
                     builder.Append(status == "rejected"
                         ? """{"event_id":"00000000-0000-0000-0000-000000000000","revision":1,"status":"rejected","error":{"code":"invalid_event","message":"bad payload"}}"""
@@ -101,14 +126,14 @@ public sealed class SyncTests : IDisposable
                 return builder.ToString();
             },
         };
-        var client = new CloudSyncClient(new SingleClientFactory(handler), repository, repository, TimeProvider.System);
+        var client = new CloudSyncClient(new SingleClientFactory(handler), repository, repository, new TestClock(), new StubAppVersion("0.1.0"));
 
         var outcomes = await client.UploadAsync(items, settings, CancellationToken.None);
 
         Assert.Equal(
             new[] { SyncOutcomeKind.Acknowledged, SyncOutcomeKind.Acknowledged, SyncOutcomeKind.Acknowledged, SyncOutcomeKind.Rejected },
             outcomes.Select(outcome => outcome.Kind).ToArray());
-        Assert.Equal("invalid_event: bad payload", outcomes[3].Error);
+        Assert.Equal("invalid_event: bad payload", outcomes[3].DisplayError);
     }
 
     [Fact]
@@ -120,13 +145,13 @@ public sealed class SyncTests : IDisposable
         for (var index = 0; index < 101; index++)
         {
             await repository.RecordSampleAsync(
-                Sample(DateTimeOffset.UtcNow.AddMinutes(index), appId: $"app{index}.exe"), TimeSpan.FromSeconds(10));
+                Sample(TestClock.DefaultInstant.AddMinutes(index), appId: $"app{index}.exe"), TimeSpan.FromSeconds(10));
         }
-        var items = await repository.GetPendingSyncAsync(500, DateTimeOffset.UtcNow.AddMinutes(200));
+        var items = await repository.GetPendingSyncAsync(500, TestClock.DefaultInstant.AddMinutes(200));
         Assert.Equal(101, items.Count);
 
         var handler = new RecordingHandler { ResponseFactory = body => AckResponse(body, "accepted") };
-        var client = new CloudSyncClient(new SingleClientFactory(handler), repository, repository, TimeProvider.System);
+        var client = new CloudSyncClient(new SingleClientFactory(handler), repository, repository, new TestClock(), new StubAppVersion("0.1.0"));
 
         var outcomes = await client.UploadAsync(items, settings, CancellationToken.None);
 
@@ -141,8 +166,8 @@ public sealed class SyncTests : IDisposable
     {
         var repository = await CreateRepositoryAsync();
         await repository.SaveSettingsAsync(CloudSettings());
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow), TimeSpan.FromSeconds(10));
-        var item = Assert.Single(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1)));
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant), TimeSpan.FromSeconds(10));
+        var item = Assert.Single(await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddMinutes(1)));
         var statusService = new SyncStatusService();
 
         var client = new StubSyncClient { Outcomes = new[] { new SyncOutcome(item, SyncOutcomeKind.Acknowledged, null) } };
@@ -159,8 +184,8 @@ public sealed class SyncTests : IDisposable
     {
         var repository = await CreateRepositoryAsync();
         await repository.SaveSettingsAsync(CloudSettings());
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow), TimeSpan.FromSeconds(10));
-        var item = Assert.Single(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1)));
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant), TimeSpan.FromSeconds(10));
+        var item = Assert.Single(await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddMinutes(1)));
         var statusService = new SyncStatusService();
 
         var client = new StubSyncClient
@@ -170,7 +195,7 @@ public sealed class SyncTests : IDisposable
         var worker = CreateWorker(repository, client, statusService);
 
         await worker.RunOnceAsync(CancellationToken.None);
-        Assert.Empty(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1)));
+        Assert.Empty(await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddMinutes(1)));
 
         await worker.RunOnceAsync(CancellationToken.None);
         Assert.Equal(1, client.CallCount); // no pending items remain, so no retry happened
@@ -182,8 +207,8 @@ public sealed class SyncTests : IDisposable
     {
         var repository = await CreateRepositoryAsync();
         await repository.SaveSettingsAsync(CloudSettings());
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow), TimeSpan.FromSeconds(10));
-        var item = Assert.Single(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1)));
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant), TimeSpan.FromSeconds(10));
+        var item = Assert.Single(await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddMinutes(1)));
         var statusService = new SyncStatusService();
 
         var client = new StubSyncClient { Outcomes = new[] { new SyncOutcome(item, SyncOutcomeKind.Acknowledged, null) } };
@@ -199,23 +224,26 @@ public sealed class SyncTests : IDisposable
     {
         var repository = await CreateRepositoryAsync();
         await repository.SaveSettingsAsync(CloudSettings());
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow), TimeSpan.FromSeconds(10));
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant), TimeSpan.FromSeconds(10));
         var statusService = new SyncStatusService();
         var client = new StubSyncClient { Failure = new HttpRequestException("connection refused") };
         var worker = CreateWorker(repository, client, statusService);
 
         await worker.RunOnceAsync(CancellationToken.None);
 
-        Assert.Empty(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(-1)));
-        Assert.Single(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddHours(2)));
+        Assert.Empty(await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddMinutes(-1)));
+        Assert.Single(await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddHours(2)));
     }
 
     [Fact]
     public async Task Worker_DisabledSyncNeverCallsTheClient()
     {
         var repository = await CreateRepositoryAsync();
-        await repository.SaveSettingsAsync(CloudSettings() with { CloudSyncEnabled = false });
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow), TimeSpan.FromSeconds(10));
+        await repository.SaveSettingsAsync(CloudSettings() with
+        {
+            CloudSyncEnabled = false
+        });
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant), TimeSpan.FromSeconds(10));
         var client = new StubSyncClient { Outcomes = Array.Empty<SyncOutcome>() };
         var worker = CreateWorker(repository, client, new SyncStatusService());
 
@@ -224,13 +252,19 @@ public sealed class SyncTests : IDisposable
         Assert.Equal(0, client.CallCount);
     }
 
-    private static SyncWorker CreateWorker(SqliteActivityRepository repository, StubSyncClient client, SyncStatusService statusService) =>
-        new(repository, repository, client, statusService, new NoopRuleSync(repository), new StubDiagnosticsClient(), TimeProvider.System, NullLogger<SyncWorker>.Instance);
+    private static SyncWorker CreateWorker(
+        SqliteActivityRepository repository,
+        StubSyncClient client,
+        SyncStatusService statusService) =>
+        new(repository, repository, client, statusService, new NoopRuleSync(repository), new StubDiagnosticsClient(), new TestClock(), NullLogger<SyncWorker>.Instance);
 
     /// <summary>Refresh stub: the worker's rule refresh never interferes with outbox assertions.</summary>
     private sealed class NoopRuleSync(SqliteActivityRepository repository) : IClassificationRuleSync
     {
-        public Task<ClassificationRuleSet?> RefreshAsync(AppSettings settings, CancellationToken cancellationToken = default, bool forceRefresh = false) =>
+        public Task<ClassificationRuleSet?> RefreshAsync(
+            AppSettings settings,
+            CancellationToken cancellationToken = default,
+            bool forceRefresh = false) =>
             repository.GetCachedRuleSetAsync(cancellationToken);
     }
 
@@ -253,7 +287,11 @@ public sealed class SyncTests : IDisposable
         var builder = new StringBuilder("""{"results":[""");
         for (var index = 0; index < count; index++)
         {
-            if (index > 0) builder.Append(',');
+            if (index > 0)
+            {
+                builder.Append(',');
+            }
+
             builder.Append($$"""{"event_id":"00000000-0000-0000-0000-000000000000","revision":1,"status":"{{status}}"}""");
         }
         builder.Append("]}");
@@ -268,27 +306,11 @@ public sealed class SyncTests : IDisposable
 
     private async Task<SqliteActivityRepository> CreateRepositoryAsync()
     {
-        var repository = new SqliteActivityRepository(_paths, TimeProvider.System);
+        var repository = new SqliteActivityRepository(_paths, new TestClock());
         await repository.InitializeAsync();
         return repository;
     }
 
-    public void Dispose()
-    {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        if (Directory.Exists(_paths.DataDirectory)) Directory.Delete(_paths.DataDirectory, true);
-    }
 
-    private sealed class TestPaths : IAppPaths
-    {
-        public TestPaths()
-        {
-            DataDirectory = Path.Combine(Path.GetTempPath(), "LiveQs.Tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(DataDirectory);
-        }
 
-        public string DataDirectory { get; }
-        public string DatabasePath => Path.Combine(DataDirectory, "test.db");
-        public string LogPath => Path.Combine(DataDirectory, "test.log");
-    }
 }

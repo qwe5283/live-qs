@@ -10,14 +10,24 @@ public sealed class UpdateStatusService : IUpdateStatusService
 
     public UpdateStatus Current
     {
-        get { lock (_gate) return _current; }
+        get
+        {
+            lock (_gate)
+            {
+                return _current;
+            }
+        }
     }
 
     public event EventHandler<UpdateStatus>? Changed;
 
     public void Update(UpdateStatus status)
     {
-        lock (_gate) _current = status;
+        lock (_gate)
+        {
+            _current = status;
+        }
+
         Changed?.Invoke(this, status);
     }
 }

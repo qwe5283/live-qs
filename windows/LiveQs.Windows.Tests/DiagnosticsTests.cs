@@ -1,10 +1,7 @@
 using System.Net;
-using System.Net.Http;
-using System.Text;
 using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Activity;
 using LiveQs.Windows.Core.Contracts;
-using LiveQs.Windows.Core.Reclassification;
 using LiveQs.Windows.Core.Settings;
 using LiveQs.Windows.Core.Sync;
 using LiveQs.Windows.Infrastructure.Persistence.Sqlite;
@@ -18,7 +15,10 @@ internal sealed class StubDiagnosticsClient : IDiagnosticsClient
 {
     public List<SyncDiagnosticsSnapshot> Snapshots { get; } = [];
 
-    public Task PushAsync(SyncDiagnosticsSnapshot snapshot, AppSettings settings, CancellationToken cancellationToken = default)
+    public Task PushAsync(
+        SyncDiagnosticsSnapshot snapshot,
+        AppSettings settings,
+        CancellationToken cancellationToken = default)
     {
         Snapshots.Add(snapshot);
         return Task.CompletedTask;
@@ -33,9 +33,9 @@ internal sealed class StubDiagnosticsClient : IDiagnosticsClient
 /// </summary>
 public sealed class DiagnosticsTests : IDisposable
 {
-    private readonly TestPaths _paths = new();
+    public void Dispose() => _paths.Dispose();
 
-    // ---------- error describer ----------
+    private readonly TestDataPaths _paths = new();
 
     [Fact]
     public void Describer_MapsTransportFailuresToStableCodesAndSafeSummaries()
@@ -58,15 +58,13 @@ public sealed class DiagnosticsTests : IDisposable
         Assert.Equal("sync_failed", SyncErrorDescriber.Describe(new Exception()).Code);
     }
 
-    // ---------- repository ring buffer and overview ----------
-
     [Fact]
     public async Task ErrorRingBufferKeepsNewestTwentyEntriesNewestFirst()
     {
         var repository = await CreateRepositoryAsync();
         for (var index = 0; index < 25; index++)
         {
-            await repository.RecordSyncErrorAsync("network_error", $"e{index}", DateTimeOffset.UtcNow.AddSeconds(index));
+            await repository.RecordSyncErrorAsync("network_error", $"e{index}", TestClock.DefaultInstant.AddSeconds(index));
         }
 
         var recent = await repository.GetRecentSyncErrorsAsync(10);
@@ -83,7 +81,7 @@ public sealed class DiagnosticsTests : IDisposable
     public async Task OverviewReportsPendingPermanentOldestAndCollectionFromStorage()
     {
         var repository = await CreateRepositoryAsync();
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow), TimeSpan.FromSeconds(10));
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant), TimeSpan.FromSeconds(10));
 
         // A freshly recorded sample is immediately in the outbox, waiting for
         // its first upload attempt.
@@ -94,33 +92,31 @@ public sealed class DiagnosticsTests : IDisposable
         Assert.NotNull(empty.LastCollectionAt);
         Assert.Null(empty.LastSuccessfulUploadAt);
 
-        var item = Assert.Single(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1)));
-        await repository.MarkSyncFailedAsync([item.SegmentId], "connection refused", DateTimeOffset.UtcNow.AddHours(1));
-        await repository.MarkPermanentAsync([item.SegmentId], "invalid_event: bad", DateTimeOffset.UtcNow);
+        var item = Assert.Single(await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddMinutes(1)));
+        await repository.MarkSyncFailedAsync([item.SegmentId], "connection refused", TestClock.DefaultInstant.AddHours(1));
+        await repository.MarkPermanentAsync([item.Revision], "invalid_event: bad", TestClock.DefaultInstant);
         // A permanent dead letter counts separately from the retryable outbox.
         var overview = await repository.GetSyncOverviewAsync();
         Assert.Equal(0, overview.PendingCount);
         Assert.Equal(1, overview.PermanentFailureCount);
         Assert.Equal(item.StartedAt, overview.OldestPendingAt);
 
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow.AddMinutes(2), appId: "other.exe"), TimeSpan.FromSeconds(10));
-        var second = (await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(3))).Single(entry => entry.SegmentId != item.SegmentId);
-        await repository.MarkSyncedAsync([second.SegmentId], DateTimeOffset.UtcNow);
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant.AddMinutes(2), appId: "other.exe"), TimeSpan.FromSeconds(10));
+        var second = (await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddMinutes(3))).Single(entry => entry.SegmentId != item.SegmentId);
+        await repository.MarkSyncedAsync([second.Revision], TestClock.DefaultInstant);
         var afterAck = await repository.GetSyncOverviewAsync();
         Assert.Equal(0, afterAck.PendingCount);
         Assert.Equal(1, afterAck.PermanentFailureCount);
         Assert.NotNull(afterAck.LastSuccessfulUploadAt);
     }
 
-    // ---------- worker snapshots per state-machine transition ----------
-
     [Fact]
     public async Task Worker_SuccessPassPushesDrainedSnapshotWithPersistedLastUpload()
     {
         var repository = await CreateRepositoryAsync();
         await repository.SaveSettingsAsync(CloudSettings());
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow), TimeSpan.FromSeconds(10));
-        var item = Assert.Single(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1)));
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant), TimeSpan.FromSeconds(10));
+        var item = Assert.Single(await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddMinutes(1)));
         var diagnostics = new StubDiagnosticsClient();
         var worker = CreateWorker(repository, new StubSyncClient { Outcomes = [new SyncOutcome(item, SyncOutcomeKind.Acknowledged, null)] }, diagnostics);
 
@@ -139,7 +135,7 @@ public sealed class DiagnosticsTests : IDisposable
     {
         var repository = await CreateRepositoryAsync();
         await repository.SaveSettingsAsync(CloudSettings());
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow), TimeSpan.FromSeconds(10));
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant), TimeSpan.FromSeconds(10));
         var diagnostics = new StubDiagnosticsClient();
         var worker = CreateWorker(repository, new StubSyncClient { Failure = new HttpRequestException("connection refused") }, diagnostics);
 
@@ -152,7 +148,7 @@ public sealed class DiagnosticsTests : IDisposable
         Assert.Equal("network_error", error.Code);
         Assert.DoesNotContain("connection refused", error.Message, StringComparison.Ordinal);
         // The queue is scheduled for a later backoff attempt, not retried immediately.
-        Assert.Empty(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(-1)));
+        Assert.Empty(await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddMinutes(-1)));
     }
 
     [Fact]
@@ -160,19 +156,19 @@ public sealed class DiagnosticsTests : IDisposable
     {
         var repository = await CreateRepositoryAsync();
         await repository.SaveSettingsAsync(CloudSettings());
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow), TimeSpan.FromSeconds(10));
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant), TimeSpan.FromSeconds(10));
         var diagnostics = new StubDiagnosticsClient();
         var client = new StubSyncClient();
         var worker = CreateWorker(repository, client, diagnostics);
 
         // First pass: one accepted (partial success) and one permanently rejected.
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow.AddMinutes(1), appId: "other.exe"), TimeSpan.FromSeconds(10));
-        var items = await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(2));
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant.AddMinutes(1), appId: "other.exe"), TimeSpan.FromSeconds(10));
+        var items = await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddMinutes(2));
         var rejection = items[0];
         client.Outcomes =
         [
             new SyncOutcome(items[0], SyncOutcomeKind.Acknowledged, null),
-            new SyncOutcome(items[1], SyncOutcomeKind.Rejected, "invalid_event: duration must match the interval bounds.", EventAcknowledgementStatus.Rejected, "invalid_event"),
+            new SyncOutcome(items[1], SyncOutcomeKind.Rejected, "duration must match the interval bounds.", EventAcknowledgementStatus.Rejected, "invalid_event"),
         ];
         await worker.RunOnceAsync(CancellationToken.None);
 
@@ -196,8 +192,8 @@ public sealed class DiagnosticsTests : IDisposable
     {
         var repository = await CreateRepositoryAsync();
         await repository.SaveSettingsAsync(CloudSettings());
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow), TimeSpan.FromSeconds(10));
-        var item = Assert.Single(await repository.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddMinutes(1)));
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant), TimeSpan.FromSeconds(10));
+        var item = Assert.Single(await repository.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddMinutes(1)));
         var diagnostics = new StubDiagnosticsClient();
         var worker = CreateWorker(
             repository,
@@ -217,7 +213,7 @@ public sealed class DiagnosticsTests : IDisposable
     {
         var repository = await CreateRepositoryAsync();
         await repository.SaveSettingsAsync(CloudSettings());
-        await repository.RecordSampleAsync(Sample(DateTimeOffset.UtcNow), TimeSpan.FromSeconds(10));
+        await repository.RecordSampleAsync(Sample(TestClock.DefaultInstant), TimeSpan.FromSeconds(10));
         var beforeRestart = new StubDiagnosticsClient();
         var worker = CreateWorker(repository, new StubSyncClient { Failure = new HttpRequestException("offline") }, beforeRestart);
         await worker.RunOnceAsync(CancellationToken.None);
@@ -226,7 +222,7 @@ public sealed class DiagnosticsTests : IDisposable
         // A fresh worker over the same local store (process restart) rebuilds
         // the same diagnostics: the unacknowledged outbox entry and the error
         // history were persisted, nothing diagnostic lived in memory.
-        var restarted = new SqliteActivityRepository(_paths, TimeProvider.System);
+        var restarted = new SqliteActivityRepository(_paths, new TestClock());
         await restarted.InitializeAsync();
         await restarted.SaveSettingsAsync(CloudSettings());
         var afterRestart = new StubDiagnosticsClient();
@@ -244,20 +240,18 @@ public sealed class DiagnosticsTests : IDisposable
 
         // Once the backoff elapses (the clock advances past it), the restarted
         // worker drains the queue normally.
-        var item = Assert.Single(await restarted.GetPendingSyncAsync(10, DateTimeOffset.UtcNow.AddHours(2)));
+        var item = Assert.Single(await restarted.GetPendingSyncAsync(10, TestClock.DefaultInstant.AddHours(2)));
         var worker3 = CreateWorker(
             restarted,
             new StubSyncClient { Outcomes = [new SyncOutcome(item, SyncOutcomeKind.Acknowledged, null)] },
             afterRestart,
-            timeProvider: new FixedTimeProvider(DateTimeOffset.UtcNow.AddHours(2)));
+            timeProvider: new TestClock(TestClock.DefaultInstant.AddHours(2)));
         await worker3.RunOnceAsync(CancellationToken.None);
 
         var drained = afterRestart.Snapshots[^1];
         Assert.Equal(0, drained.PendingCount);
         Assert.NotNull(drained.LastSuccessfulUploadAt);
     }
-
-    // ---------- wire shape ----------
 
     [Fact]
     public async Task Client_PostsSnapshotWithoutSensitiveContent()
@@ -269,8 +263,8 @@ public sealed class DiagnosticsTests : IDisposable
 
         await client.PushAsync(
             new SyncDiagnosticsSnapshot(
-                DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, 2, 1,
-                [new SyncErrorEntry("invalid_event", "duration must match the interval bounds.", DateTimeOffset.UtcNow)]),
+                TestClock.DefaultInstant, TestClock.DefaultInstant, TestClock.DefaultInstant, 2, 1,
+                [new SyncErrorEntry("invalid_event", "duration must match the interval bounds.", TestClock.DefaultInstant)]),
             settings,
             CancellationToken.None);
 
@@ -291,18 +285,17 @@ public sealed class DiagnosticsTests : IDisposable
         StubSyncClient client,
         StubDiagnosticsClient diagnostics,
         TimeProvider? timeProvider = null) =>
-        new(repository, repository, client, new SyncStatusService(), new NoopRuleSync(repository), diagnostics, timeProvider ?? TimeProvider.System, NullLogger<SyncWorker>.Instance);
+        new(repository, repository, client, new SyncStatusService(), new NoopRuleSync(repository), diagnostics, timeProvider ?? new TestClock(), NullLogger<SyncWorker>.Instance);
 
     /// <summary>Clock pinned to a fixed instant so tests can jump past a backoff window.</summary>
-    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-    }
 
     /// <summary>Refresh stub: the worker's rule refresh never interferes with outbox assertions.</summary>
     private sealed class NoopRuleSync(SqliteActivityRepository repository) : IClassificationRuleSync
     {
-        public Task<ClassificationRuleSet?> RefreshAsync(AppSettings settings, CancellationToken cancellationToken = default, bool forceRefresh = false) =>
+        public Task<ClassificationRuleSet?> RefreshAsync(
+            AppSettings settings,
+            CancellationToken cancellationToken = default,
+            bool forceRefresh = false) =>
             repository.GetCachedRuleSetAsync(cancellationToken);
     }
 
@@ -320,27 +313,11 @@ public sealed class DiagnosticsTests : IDisposable
 
     private async Task<SqliteActivityRepository> CreateRepositoryAsync()
     {
-        var repository = new SqliteActivityRepository(_paths, TimeProvider.System);
+        var repository = new SqliteActivityRepository(_paths, new TestClock());
         await repository.InitializeAsync();
         return repository;
     }
 
-    public void Dispose()
-    {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        if (Directory.Exists(_paths.DataDirectory)) Directory.Delete(_paths.DataDirectory, true);
-    }
 
-    private sealed class TestPaths : IAppPaths
-    {
-        public TestPaths()
-        {
-            DataDirectory = Path.Combine(Path.GetTempPath(), "LiveQs.Tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(DataDirectory);
-        }
 
-        public string DataDirectory { get; }
-        public string DatabasePath => Path.Combine(DataDirectory, "test.db");
-        public string LogPath => Path.Combine(DataDirectory, "test.log");
-    }
 }

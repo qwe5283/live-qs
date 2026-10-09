@@ -6,14 +6,17 @@ namespace LiveQs.Windows.Tests;
 
 public sealed class TimelinePresentationTests
 {
-    private static readonly DateTimeOffset Day = new(2026, 10, 9, 0, 0, 0, TimeSpan.Zero);
-    private static readonly DateRange Range = new(Day, Day.AddDays(1));
+    private static readonly DateTimeOffset _day = new(2026, 10, 9, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateRange _range = new(_day, _day.AddDays(1));
 
     [Fact]
     public void ContinuousFullscreenVideo_RemainsOneHourWithOneRecord()
     {
-        var record = Segment(1, 0, 3600, "edge", "视频页面") with { IsFullscreen = true };
-        var episode = Assert.Single(TimelinePresentation.Build([record], Range));
+        var record = Segment(1, 0, 3600, "edge", "视频页面") with
+        {
+            IsFullscreen = true
+        };
+        var episode = Assert.Single(TimelinePresentation.Build([record], _range));
 
         Assert.Equal(TimeSpan.FromHours(1), episode.ActiveDuration);
         Assert.Equal(TimeSpan.FromHours(1), episode.Span);
@@ -26,7 +29,7 @@ public sealed class TimelinePresentationTests
     public void RapidDevelopmentSwitching_ProducesOneEpisodeWithCorrectAllocationAndChanges()
     {
         var records = DevelopmentRecords();
-        var episode = Assert.Single(TimelinePresentation.Build(records.Reverse(), Range));
+        var episode = Assert.Single(TimelinePresentation.Build(records.Reverse(), _range));
 
         Assert.Equal(84, episode.Slices.Count);
         Assert.Equal(48, episode.ApplicationSwitches);
@@ -42,7 +45,7 @@ public sealed class TimelinePresentationTests
     {
         var records = Enumerable.Range(0, 90).Select(index =>
             Segment(index + 1, index * 60, (index + 1) * 60, index % 2 == 0 ? "CODE" : "code", $"file-{index}.ts")).ToArray();
-        var episode = Assert.Single(TimelinePresentation.Build(records, Range));
+        var episode = Assert.Single(TimelinePresentation.Build(records, _range));
 
         Assert.Equal(90, episode.Slices.Count);
         Assert.Equal(89, episode.TitleChanges);
@@ -55,7 +58,7 @@ public sealed class TimelinePresentationTests
     {
         var episodes = TimelinePresentation.Build([
             Segment(1, 0, 600), Segment(2, 600, 1200) with { IsAfk = true }, Segment(3, 1200, 1800)
-        ], Range);
+        ], _range);
 
         Assert.Equal(3, episodes.Count);
         Assert.True(episodes[1].IsAfk);
@@ -67,7 +70,7 @@ public sealed class TimelinePresentationTests
     [Fact]
     public void MissingRecords_AreAVisibleGapRatherThanAfkOrUsage()
     {
-        var episodes = TimelinePresentation.Build([Segment(1, 0, 120), Segment(2, 300, 420)], Range);
+        var episodes = TimelinePresentation.Build([Segment(1, 0, 120), Segment(2, 300, 420)], _range);
         var gap = Assert.Single(episodes, episode => episode.IsGap);
 
         Assert.Equal(TimeSpan.FromMinutes(3), gap.Span);
@@ -79,25 +82,25 @@ public sealed class TimelinePresentationTests
     [Fact]
     public void ShortGaps_StayBlankWithinAnEpisodeAndDoNotIncreaseDuration()
     {
-        var episode = Assert.Single(TimelinePresentation.Build([Segment(1, 0, 60), Segment(2, 70, 130)], Range));
+        var episode = Assert.Single(TimelinePresentation.Build([Segment(1, 0, 60), Segment(2, 70, 130)], _range));
 
         Assert.Equal(TimeSpan.FromSeconds(130), episode.Span);
         Assert.Equal(TimeSpan.FromSeconds(120), episode.ObservedDuration);
-        Assert.Equal(Day.AddSeconds(60), episode.Slices[0].EndedAt);
-        Assert.Equal(Day.AddSeconds(70), episode.Slices[1].StartedAt);
+        Assert.Equal(_day.AddSeconds(60), episode.Slices[0].EndedAt);
+        Assert.Equal(_day.AddSeconds(70), episode.Slices[1].StartedAt);
     }
 
     [Fact]
     public void QueryClipping_PreservesTheOriginalRecord()
     {
         var record = Segment(1, -600, 600);
-        var episode = Assert.Single(TimelinePresentation.Build([record], Range));
+        var episode = Assert.Single(TimelinePresentation.Build([record], _range));
 
-        Assert.Equal(Day, episode.StartedAt);
+        Assert.Equal(_day, episode.StartedAt);
         Assert.Equal(TimeSpan.FromMinutes(10), episode.ActiveDuration);
         Assert.Same(record, episode.Slices[0].Record);
-        Assert.Equal(Day.AddMinutes(-10), episode.Slices[0].Record.StartedAt);
-        Assert.Empty(TimelinePresentation.Build([Segment(2, -120, -60), Segment(3, 86400, 86500)], Range));
+        Assert.Equal(_day.AddMinutes(-10), episode.Slices[0].Record.StartedAt);
+        Assert.Empty(TimelinePresentation.Build([Segment(2, -120, -60), Segment(3, 86400, 86500)], _range));
     }
 
     [Fact]
@@ -105,12 +108,23 @@ public sealed class TimelinePresentationTests
     {
         var first = Segment(1, 0, 600, "code");
         var second = Segment(2, 300, 1200, "edge");
-        var episodes = TimelinePresentation.Build([first, second], Range);
+        var episodes = TimelinePresentation.Build([first, second], _range);
 
         Assert.Equal(20, episodes.Sum(episode => episode.ActiveDuration.TotalMinutes));
         var slice = Assert.Single(episodes.SelectMany(episode => episode.Slices), slice => slice.Record.Id == 1);
-        Assert.Equal(Day.AddMinutes(5), slice.EndedAt);
-        Assert.Equal(Day.AddMinutes(10), slice.Record.EndedAt);
+        Assert.Equal(_day.AddMinutes(5), slice.EndedAt);
+        Assert.Equal(_day.AddMinutes(10), slice.Record.EndedAt);
+    }
+
+    [Fact]
+    public void SupersededEstimateBeforeQueryStart_RemainsOutsideTheProjection()
+    {
+        var records = new[] { Segment(1, -2, 8), Segment(2, -1, 0, "edge") };
+
+        var episodes = TimelinePresentation.Build(records, _range);
+
+        Assert.Empty(episodes);
+        Assert.Equal(_day.AddSeconds(8), records[0].EndedAt);
     }
 
     [Fact]
@@ -118,7 +132,7 @@ public sealed class TimelinePresentationTests
     {
         var episodes = TimelinePresentation.Build([
             Segment(1, 0, 60, "code"), Segment(2, 60, 660, "edge"), Segment(3, 660, 720, "code")
-        ], Range);
+        ], _range);
 
         Assert.Equal(3, episodes.Count);
         Assert.Equal("edge", Assert.Single(episodes[1].Applications).AppId);
@@ -129,7 +143,7 @@ public sealed class TimelinePresentationTests
     {
         var records = Enumerable.Range(0, 120).Select(index =>
             Segment(index + 1, index * 60, (index + 1) * 60, index % 2 == 0 ? "code" : "edge"));
-        var episodes = TimelinePresentation.Build(records, Range);
+        var episodes = TimelinePresentation.Build(records, _range);
 
         Assert.Equal(2, episodes.Count);
         Assert.All(episodes, episode => Assert.Equal(TimeSpan.FromHours(1), episode.Span));
@@ -140,8 +154,8 @@ public sealed class TimelinePresentationTests
     public void EarlierPages_ExtendTheSameEpisodeAndRemoveItsPartialMarker()
     {
         var records = DevelopmentRecords();
-        var partial = Assert.Single(TimelinePresentation.Build(records.Skip(42), Range, hasEarlierRecords: true));
-        var complete = Assert.Single(TimelinePresentation.Build(records.Skip(42).Concat(records.Take(42)), Range));
+        var partial = Assert.Single(TimelinePresentation.Build(records.Skip(42), _range, hasEarlierRecords: true));
+        var complete = Assert.Single(TimelinePresentation.Build(records.Skip(42).Concat(records.Take(42)), _range));
 
         Assert.True(partial.IsPartial);
         Assert.False(complete.IsPartial);
@@ -152,26 +166,26 @@ public sealed class TimelinePresentationTests
     [Fact]
     public void TimeSelection_OpensTheMatchingRawRecordsAndKeepsTheirTitles()
     {
-        var row = new TimelineEpisodeViewModel(Assert.Single(TimelinePresentation.Build(DevelopmentRecords(), Range)));
+        var row = new TimelineEpisodeViewModel(Assert.Single(TimelinePresentation.Build(DevelopmentRecords(), _range)));
         row.SelectPositionCommand.Execute(0.1d);
 
         Assert.True(row.IsExpanded);
         Assert.True(row.IsRawExpanded);
-        Assert.Equal(Day.AddMinutes(5), row.SelectedWindow!.StartedAt);
+        Assert.Equal(_day.AddMinutes(5), row.SelectedWindow!.StartedAt);
         Assert.Equal(7, row.RawRecords.Count);
         Assert.Contains(row.RawRecords, record => record.Title == "localhost:5173");
         Assert.Contains(row.RawRecords, record => record.Duration == "1分钟 20秒");
         Assert.Equal(1d / 12, row.SelectionStart, 10);
         Assert.Equal(1d / 6, row.SelectionEnd, 10);
         row.SelectPositionCommand.Execute(1d);
-        Assert.Equal(Day.AddMinutes(55), row.SelectedWindow!.StartedAt);
+        Assert.Equal(_day.AddMinutes(55), row.SelectedWindow!.StartedAt);
     }
 
     [Fact]
     public void OverlappingPageRecordsAndInvalidIntervals_DoNotDuplicateTheProjection()
     {
         var record = Segment(1, 0, 60);
-        var episode = Assert.Single(TimelinePresentation.Build([record, record, Segment(2, 60, 60)], Range));
+        var episode = Assert.Single(TimelinePresentation.Build([record, record, Segment(2, 60, 60)], _range));
 
         Assert.Single(episode.Slices);
         Assert.Equal(TimeSpan.FromMinutes(1), episode.ActiveDuration);
@@ -198,5 +212,5 @@ public sealed class TimelinePresentationTests
     }
 
     private static ActivitySegment Segment(long id, int start, int end, string app = "code", string title = "") =>
-        new(id, Day.AddSeconds(start), Day.AddSeconds(end), app, app, title, false, false, false, "未分类", "#007AFF");
+        new(id, _day.AddSeconds(start), _day.AddSeconds(end), app, app, title, false, false, false, "未分类", "#007AFF");
 }

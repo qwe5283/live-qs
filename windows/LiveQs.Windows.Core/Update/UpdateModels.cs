@@ -60,7 +60,10 @@ public sealed record UpdateDecision(
         manifest.Sha256,
         manifest.MinCompatibleVersion);
 
-    public static UpdateDecision UpToDate { get; } =
+    public static UpdateDecision UpToDate
+    {
+        get;
+    } =
         new(UpdateDecisionKind.UpToDate, UpdateCodes.ManifestVersionNotNewer);
 }
 

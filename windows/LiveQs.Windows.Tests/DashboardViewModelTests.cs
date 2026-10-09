@@ -11,7 +11,7 @@ namespace LiveQs.Windows.Tests;
 
 public sealed class DashboardViewModelTests
 {
-    private static readonly DateTime Today = new(2026, 10, 10);
+    private static readonly DateTime _today = new(2026, 10, 10);
 
     [Theory]
     [InlineData(1)]
@@ -21,11 +21,16 @@ public sealed class DashboardViewModelTests
     {
         var query = new Query();
         var model = Model(query);
-        var command = days switch { 1 => model.TodayCommand, 7 => model.WeekCommand, _ => model.MonthCommand };
+        var command = days switch
+        {
+            1 => model.TodayCommand,
+            7 => model.WeekCommand,
+            _ => model.MonthCommand
+        };
 
         await command.ExecuteAsync(null);
 
-        Assert.Equal(DateRange.FromLocalDates(Today.AddDays(1 - days), Today), Assert.Single(query.Ranges));
+        Assert.Equal(DateRange.FromLocalDates(_today.AddDays(1 - days), _today), Assert.Single(query.Ranges));
         Assert.Equal(days, model.PresetDays);
         Assert.Equal(days == 1, model.IsHourlyDistribution);
         Assert.True(model.HasSnapshot);
@@ -46,7 +51,11 @@ public sealed class DashboardViewModelTests
 
         await model.SelectRangeAsync(start, end);
 
-        if (start > end) (start, end) = (end, start);
+        if (start > end)
+        {
+            (start, end) = (end, start);
+        }
+
         Assert.Equal(DateRange.FromLocalDates(start, end), Assert.Single(query.Ranges));
         Assert.Equal(start, model.StartDate);
         Assert.Equal(end, model.EndDate);
@@ -69,7 +78,11 @@ public sealed class DashboardViewModelTests
         var calls = 0;
         var query = new Query((range, _) =>
         {
-            if (Interlocked.Increment(ref calls) != 1) return Task.FromResult(Snapshot(range, "Latest"));
+            if (Interlocked.Increment(ref calls) != 1)
+            {
+                return Task.FromResult(Snapshot(range, "Latest"));
+            }
+
             started.SetResult();
             return earlierResult.Task;
         });
@@ -78,8 +91,15 @@ public sealed class DashboardViewModelTests
         var earlier = model.WeekCommand.ExecuteAsync(null);
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await model.MonthCommand.ExecuteAsync(null);
-        if (failOlder) earlierResult.SetException(new InvalidOperationException("Obsolete query"));
-        else earlierResult.SetResult(Snapshot(query.Ranges.First(), "Earlier"));
+        if (failOlder)
+        {
+            earlierResult.SetException(new InvalidOperationException("Obsolete query"));
+        }
+        else
+        {
+            earlierResult.SetResult(Snapshot(query.Ranges.First(), "Earlier"));
+        }
+
         await earlier;
 
         Assert.Equal("Latest", Assert.Single(model.Apps).AppName);
@@ -125,7 +145,7 @@ public sealed class DashboardViewModelTests
         var model = Model(query, dialogs);
         await model.TodayCommand.ExecuteAsync(null);
         shouldFail = true;
-        await model.SelectRangeAsync(Today.AddDays(-4), Today.AddDays(-2));
+        await model.SelectRangeAsync(_today.AddDays(-4), _today.AddDays(-2));
         Assert.False(model.HasSnapshot);
         Assert.True(model.HasQueryError);
         Assert.Single(dialogs.Errors);
@@ -144,17 +164,19 @@ public sealed class DashboardViewModelTests
         var query = new Query();
         var model = new DashboardViewModel(query, new Dialogs(), clock);
         await model.WeekCommand.ExecuteAsync(null);
-        clock.Date = Today.AddDays(1);
+        clock.Date = _today.AddDays(1);
         await model.RefreshAsync();
-        Assert.Equal(DateRange.FromLocalDates(Today.AddDays(-5), Today.AddDays(1)), query.Ranges.Last());
-        await model.SelectRangeAsync(Today.AddDays(-4), Today.AddDays(-2));
+        Assert.Equal(DateRange.FromLocalDates(_today.AddDays(-5), _today.AddDays(1)), query.Ranges.Last());
+        await model.SelectRangeAsync(_today.AddDays(-4), _today.AddDays(-2));
         var custom = query.Ranges.Last();
-        clock.Date = Today.AddDays(2);
+        clock.Date = _today.AddDays(2);
         await model.RefreshAsync();
         Assert.Equal(custom, query.Ranges.Last());
     }
 
-    private static DashboardViewModel Model(Query query, Dialogs? dialogs = null) => new(query, dialogs ?? new Dialogs(), new Clock());
+    private static DashboardViewModel Model(
+        Query query,
+        Dialogs? dialogs = null) => new(query, dialogs ?? new Dialogs(), new Clock());
 
     private static DashboardSnapshot Snapshot(DateRange range, string name = "Application") => new(
         range.Start, range.End, TimeSpan.FromHours(1), TimeSpan.Zero, 1,
@@ -163,7 +185,10 @@ public sealed class DashboardViewModelTests
     private static async Task WaitForAsync(Func<bool> condition)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        while (!condition()) await Task.Delay(5, timeout.Token);
+        while (!condition())
+        {
+            await Task.Delay(5, timeout.Token);
+        }
     }
 
     private sealed class Query(Func<DateRange, CancellationToken, Task<DashboardSnapshot>>? handler = null) : IActivityQueryService
@@ -175,14 +200,20 @@ public sealed class DashboardViewModelTests
             return handler?.Invoke(range, cancellationToken) ?? Task.FromResult(Snapshot(range));
         }
 
-        public Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(DateRange range, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<TimelinePage> GetTimelinePageAsync(DateRange range, int pageSize, TimelineCursor? cursor = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(
+            DateRange range,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<TimelinePage> GetTimelinePageAsync(
+            DateRange range,
+            int pageSize,
+            TimelineCursor? cursor = null,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<ApplicationRule>> GetApplicationRulesAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class Clock : TimeProvider
     {
-        public DateTime Date { get; set; } = Today;
+        public DateTime Date { get; set; } = _today;
         public override DateTimeOffset GetUtcNow() => new DateTimeOffset(Date.AddHours(12), TimeZoneInfo.Local.GetUtcOffset(Date)).ToUniversalTime();
     }
 

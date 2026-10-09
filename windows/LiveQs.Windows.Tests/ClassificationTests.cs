@@ -223,7 +223,7 @@ public sealed class ClassificationTests : IDisposable
         // The secret is generated once and never rotates with rule updates.
         var secretBefore = await repository.GetClassificationSecretAsync();
         var ruleSet = RuleSet(CrossPlatformRuleSetJson);
-        await repository.SaveCachedRuleSetAsync(ruleSet, DateTimeOffset.UtcNow);
+        await repository.SaveCachedRuleSetAsync(ruleSet, TestClock.DefaultInstant);
         var cached = await repository.GetCachedRuleSetAsync();
         Assert.NotNull(cached);
         Assert.Equal(7, cached.RuleSetVersion);
@@ -238,7 +238,7 @@ public sealed class ClassificationTests : IDisposable
     {
         var repository = await CreateRepositoryAsync();
         var settings = new AppSettings { ServerBaseUrl = "http://127.0.0.1:8787", DeviceToken = "lqdev_token" };
-        var clock = new MutableTimeProvider();
+        var clock = new TestClock();
 
         var offlineSync = new ClassificationRuleSync(new SingleClientFactory(new FailingHandler()), repository, clock, NullLogger<ClassificationRuleSync>.Instance);
         var offline = await offlineSync.RefreshAsync(settings, CancellationToken.None);
@@ -270,7 +270,7 @@ public sealed class ClassificationTests : IDisposable
     {
         var handler = new RecordingGetHandler(CrossPlatformRuleSetJson);
         var repository = new FakeRuleStore();
-        var sync = new ClassificationRuleSync(new SingleClientFactory(handler), repository, new MutableTimeProvider(), NullLogger<ClassificationRuleSync>.Instance);
+        var sync = new ClassificationRuleSync(new SingleClientFactory(handler), repository, new TestClock(), NullLogger<ClassificationRuleSync>.Instance);
 
         _ = await sync.RefreshAsync(new AppSettings(), CancellationToken.None);
         var second = await sync.RefreshAsync(new AppSettings(), CancellationToken.None);
@@ -283,7 +283,7 @@ public sealed class ClassificationTests : IDisposable
     public async Task UploadEnvelope_CarriesExplainableLabelsAndNeverTheRawTitle()
     {
         var repository = await CreateRepositoryAsync();
-        await repository.SaveCachedRuleSetAsync(RuleSet(CrossPlatformRuleSetJson), DateTimeOffset.UtcNow);
+        await repository.SaveCachedRuleSetAsync(RuleSet(CrossPlatformRuleSetJson), TestClock.DefaultInstant);
         var settings = new AppSettings
         {
             CloudSyncEnabled = true,
@@ -291,12 +291,12 @@ public sealed class ClassificationTests : IDisposable
             DeviceToken = "lqdev_test_token",
             DeviceId = "device-1",
         };
-        var item = new SyncQueueItem(1, 0, DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow,
+        var item = new SyncQueueItem(1, 0, TestClock.DefaultInstant.AddMinutes(-1), TestClock.DefaultInstant,
             "msedge.exe", "Microsoft Edge", "哔哩哔哩 (゜-゜)つロ bilibili - Edge", "titlehash",
             IsAfk: false, IsAudioPlaying: false, IsFullscreen: false, SyncVersion: 3, Finalized: false);
 
         var outcome = CloudSyncClient.ClassifyItem(item, await repository.GetCachedRuleSetAsync(), await repository.GetClassificationSecretAsync());
-        var envelope = CloudSyncClient.ToEnvelope(item, settings, "install-guid", DateTimeOffset.UtcNow, outcome);
+        var envelope = CloudSyncClient.ToEnvelope(item, settings, "install-guid", TestClock.DefaultInstant, "0.1.0", outcome);
 
         Assert.Equal("svc.bilibili", envelope.Payload.SubjectId);
         Assert.NotNull(envelope.Payload.Classification);
@@ -311,7 +311,10 @@ public sealed class ClassificationTests : IDisposable
         Assert.Contains("\"subject_id\":\"svc.bilibili\"", json, StringComparison.Ordinal);
 
         // AFK intervals carry no subject: there is no activity to name.
-        var afkItem = item with { IsAfk = true };
+        var afkItem = item with
+        {
+            IsAfk = true
+        };
         Assert.Null(CloudSyncClient.ClassifyItem(afkItem, await repository.GetCachedRuleSetAsync(), await repository.GetClassificationSecretAsync()));
 
         // Without rules (fresh install, never fetched) nothing is inferred.
@@ -323,47 +326,42 @@ public sealed class ClassificationTests : IDisposable
         JsonSerializer.Deserialize<ClassificationRuleSet>(json, ContractJson.Options)
         ?? throw new InvalidOperationException("The golden rule set JSON must deserialize.");
 
-    private static async Task<SqliteActivityRepository> CreateRepositoryAsync()
+    private async Task<SqliteActivityRepository> CreateRepositoryAsync()
     {
-        var repository = new SqliteActivityRepository(new TestPaths(), TimeProvider.System);
+        var repository = new SqliteActivityRepository(_paths, new TestClock());
         await repository.InitializeAsync();
         return repository;
     }
 
-    public void Dispose()
-    {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        if (Directory.Exists(_paths.DataDirectory)) Directory.Delete(_paths.DataDirectory, true);
-    }
 
-    private readonly TestPaths _paths = new();
+    public void Dispose() => _paths.Dispose();
 
-    private sealed class TestPaths : IAppPaths
-    {
-        public TestPaths()
-        {
-            DataDirectory = Path.Combine(Path.GetTempPath(), "LiveQs.Tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(DataDirectory);
-        }
+    private readonly TestDataPaths _paths = new();
 
-        public string DataDirectory { get; }
-        public string DatabasePath => Path.Combine(DataDirectory, "test.db");
-        public string LogPath => Path.Combine(DataDirectory, "test.log");
-    }
 
     private sealed class FailingHandler : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
             throw new HttpRequestException("connection refused");
     }
 
     /// <summary>Records rule-set GET requests and replies with a canned JSON document.</summary>
     private sealed class RecordingGetHandler(string jsonResponse) : HttpMessageHandler
     {
-        public int RequestCount { get; private set; }
-        public HttpRequestMessage? Request { get; private set; }
+        public int RequestCount
+        {
+            get; private set;
+        }
+        public HttpRequestMessage? Request
+        {
+            get; private set;
+        }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
         {
             RequestCount++;
             Request = request;
@@ -377,12 +375,18 @@ public sealed class ClassificationTests : IDisposable
     /// <summary>In-memory rule store isolating refresh-cadence behavior from SQLite.</summary>
     private sealed class FakeRuleStore : IClassificationRuleStore
     {
-        public ClassificationRuleSet? Cached { get; private set; }
+        public ClassificationRuleSet? Cached
+        {
+            get; private set;
+        }
 
         public Task<ClassificationRuleSet?> GetCachedRuleSetAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(Cached);
 
-        public Task SaveCachedRuleSetAsync(ClassificationRuleSet ruleSet, DateTimeOffset fetchedAt, CancellationToken cancellationToken = default)
+        public Task SaveCachedRuleSetAsync(
+            ClassificationRuleSet ruleSet,
+            DateTimeOffset fetchedAt,
+            CancellationToken cancellationToken = default)
         {
             Cached = ruleSet;
             return Task.CompletedTask;
@@ -392,12 +396,4 @@ public sealed class ClassificationTests : IDisposable
             Task.FromResult(TestSecret);
     }
 
-    private sealed class MutableTimeProvider : TimeProvider
-    {
-        private DateTimeOffset _utcNow = new(2026, 9, 1, 8, 0, 0, TimeSpan.Zero);
-
-        public void Advance(TimeSpan delta) => _utcNow += delta;
-
-        public override DateTimeOffset GetUtcNow() => _utcNow;
-    }
 }

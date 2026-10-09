@@ -13,7 +13,10 @@ public sealed class AppPaths : IAppPaths
         Directory.CreateDirectory(DataDirectory);
     }
 
-    public string DataDirectory { get; }
+    public string DataDirectory
+    {
+        get;
+    }
     public string DatabasePath => Path.Combine(DataDirectory, "liveqs.db");
     public string LogPath => Path.Combine(DataDirectory, "liveqs.log");
 }

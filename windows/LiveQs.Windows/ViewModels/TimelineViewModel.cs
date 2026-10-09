@@ -34,6 +34,8 @@ public sealed partial class TimelineViewModel : ViewModelBase
     [ObservableProperty]
     private bool _hasMore;
     [ObservableProperty]
+    private bool _hasQueryError;
+    [ObservableProperty]
     private string _summary = "暂无活动";
 
     public TimelineViewModel(
@@ -63,10 +65,18 @@ public sealed partial class TimelineViewModel : ViewModelBase
         IsLoading = true;
         IsLoadingMore = false;
         HasMore = false;
+        HasQueryError = false;
+        Rows = [];
+        _segments = [];
+        IsEmpty = false;
+        Summary = "正在加载活动…";
         try
         {
             var result = await LoadPageInBackgroundAsync(_currentRange, null, [], cancellation.Token);
-            if (version != Volatile.Read(ref _requestVersion) || cancellation.IsCancellationRequested) return;
+            if (version != Volatile.Read(ref _requestVersion) || cancellation.IsCancellationRequested)
+            {
+                return;
+            }
 
             Rows = result.Rows;
             _segments = result.Segments;
@@ -75,10 +85,21 @@ public sealed partial class TimelineViewModel : ViewModelBase
             UpdateSummary();
             LogPage(date, result, false);
         }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception) when (version == Volatile.Read(ref _requestVersion))
+        {
+            HasQueryError = true;
+            Summary = "查询失败，请重试";
+            throw;
+        }
         finally
         {
-            if (version == Volatile.Read(ref _requestVersion)) IsLoading = false;
+            if (version == Volatile.Read(ref _requestVersion))
+            {
+                IsLoading = false;
+            }
         }
     }
 
@@ -97,14 +118,19 @@ public sealed partial class TimelineViewModel : ViewModelBase
     private async Task LoadMorePageAsync()
     {
         if (IsLoading || IsLoadingMore || !HasMore || _nextCursor is not { } cursor || _loadCancellation is not { } cancellation)
+        {
             return;
+        }
 
         var version = Volatile.Read(ref _requestVersion);
         IsLoadingMore = true;
         try
         {
             var result = await LoadPageInBackgroundAsync(_currentRange, cursor, _segments, cancellation.Token);
-            if (version != Volatile.Read(ref _requestVersion) || cancellation.IsCancellationRequested) return;
+            if (version != Volatile.Read(ref _requestVersion) || cancellation.IsCancellationRequested)
+            {
+                return;
+            }
 
             PreserveExpandedRows(result.Rows);
             Rows = result.Rows;
@@ -114,10 +140,15 @@ public sealed partial class TimelineViewModel : ViewModelBase
             UpdateSummary();
             LogPage((SelectedDate ?? Today).Date, result, true);
         }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
         finally
         {
-            if (version == Volatile.Read(ref _requestVersion)) IsLoadingMore = false;
+            if (version == Volatile.Read(ref _requestVersion))
+            {
+                IsLoadingMore = false;
+            }
         }
     }
 
@@ -172,17 +203,29 @@ public sealed partial class TimelineViewModel : ViewModelBase
         var expanded = new Dictionary<long, TimelineEpisodeViewModel>();
         foreach (var row in Rows.Where(row => row.IsExpanded))
         {
-            foreach (var slice in row.Data.Slices) expanded[slice.Record.Id] = row;
+            foreach (var slice in row.Data.Slices)
+            {
+                expanded[slice.Record.Id] = row;
+            }
         }
         foreach (var row in rows)
         {
-            var original = row.Data.Slices.Select(slice => expanded.GetValueOrDefault(slice.Record.Id)).FirstOrDefault(value => value is not null);
-            if (original is null) continue;
+            var original = row.Data.Slices
+                .Select(slice => expanded.GetValueOrDefault(slice.Record.Id))
+                .FirstOrDefault(value => value is not null);
+            if (original is null)
+            {
+                continue;
+            }
+
             row.IsExpanded = true;
             row.IsRawExpanded = original.IsRawExpanded;
             if (original.SelectedWindow is { } window)
-                row.SelectedWindow = row.Windows.FirstOrDefault(candidate => candidate.StartedAt <= window.StartedAt && candidate.EndedAt > window.StartedAt)
+            {
+                row.SelectedWindow = row.Windows.FirstOrDefault(candidate =>
+                    candidate.StartedAt <= window.StartedAt && candidate.EndedAt > window.StartedAt)
                     ?? row.SelectedWindow;
+            }
         }
     }
 
@@ -196,7 +239,8 @@ public sealed partial class TimelineViewModel : ViewModelBase
 
     private void LogPage(DateTime date, TimelinePageResult result, bool append) =>
         _logger.LogInformation(
-            "Timeline page loaded for {Date}: {Count} rows, append={Append}, query={QueryMilliseconds} ms, mapping={MappingMilliseconds} ms, hasMore={HasMore}.",
+            "Timeline page loaded for {Date}: {Count} rows, append={Append}, " +
+            "query={QueryMilliseconds} ms, mapping={MappingMilliseconds} ms, hasMore={HasMore}.",
             date.ToString("yyyy-MM-dd"),
             result.PageCount,
             append,
@@ -206,7 +250,10 @@ public sealed partial class TimelineViewModel : ViewModelBase
 
     private async Task RunAsync(Func<Task> action)
     {
-        try { await action(); }
+        try
+        {
+            await action();
+        }
         catch (Exception exception)
         {
             _logger.LogWarning(exception, "Timeline operation failed.");

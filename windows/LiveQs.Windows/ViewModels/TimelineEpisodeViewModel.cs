@@ -7,12 +7,15 @@ namespace LiveQs.Windows.ViewModels;
 
 public sealed partial class TimelineEpisodeViewModel : ObservableObject
 {
-    public TimelineEpisode Data { get; }
+    public TimelineEpisode Data
+    {
+        get;
+    }
     public string Title => Data.IsGap ? "无活动记录" : Data.IsAfk ? "离开电脑" :
         Data.Applications.Count == 1 ? Data.Applications[0].AppName : "多应用活动";
-    public string StartTime => LocalTime(Data.StartedAt);
-    public string EndTime => LocalTime(Data.EndedAt);
-    public string MiddleTime => LocalTime(Data.StartedAt + Data.Span / 2);
+    public string StartTime => FormatLocalTime(Data.StartedAt);
+    public string EndTime => FormatLocalTime(Data.EndedAt);
+    public string MiddleTime => FormatLocalTime(Data.StartedAt + Data.Span / 2);
     public string TimeRange => FormatRange(Data.StartedAt, Data.EndedAt);
     public bool HasDetails => !Data.IsGap;
     public bool HasActiveApplications => !Data.IsGap && !Data.IsAfk;
@@ -32,9 +35,18 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
         Data.Slices.Any(slice => slice.Record.IsFullscreen) ? "含全屏记录" : "",
         Data.Slices.Any(slice => slice.Record.IsAudioPlaying) ? "含音频播放" : "",
     }.Where(value => value.Length > 0));
-    public IReadOnlyList<TimelineMark> Marks { get; }
-    public IReadOnlyList<TimelineApplicationRow> Applications { get; }
-    public IReadOnlyList<TimelineWindow> Windows { get; }
+    public IReadOnlyList<TimelineMark> Marks
+    {
+        get;
+    }
+    public IReadOnlyList<TimelineApplicationRow> Applications
+    {
+        get;
+    }
+    public IReadOnlyList<TimelineWindow> Windows
+    {
+        get;
+    }
 
     [ObservableProperty]
     private bool _isExpanded;
@@ -54,26 +66,60 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
     public TimelineEpisodeViewModel(TimelineEpisode data)
     {
         Data = data;
-        Marks = data.Slices.Where(slice => slice.Duration > TimeSpan.Zero).Select(slice => new TimelineMark(
-            Fraction(slice.StartedAt), Fraction(slice.EndedAt), slice.Record.Color,
-            $"{slice.Record.AppName} · {FormatRange(slice.StartedAt, slice.EndedAt)} · {DurationText.Format(slice.Duration)}")).ToArray();
-        Applications = data.Applications.Select(application => new TimelineApplicationRow(
-            application.AppId, application.AppName, application.Color, DurationText.Format(application.Duration),
-            data.Slices.Where(slice => string.Equals(slice.Record.AppId, application.AppId, StringComparison.OrdinalIgnoreCase) && slice.Duration > TimeSpan.Zero)
-                .Select(slice => new TimelineMark(Fraction(slice.StartedAt), Fraction(slice.EndedAt), application.Color,
-                    $"{application.AppName} · {FormatRange(slice.StartedAt, slice.EndedAt)}")).ToArray())).ToArray();
-        var windows = new List<TimelineWindow>();
-        if (!data.IsGap)
+        Marks = data.Slices
+            .Where(slice => slice.Duration > TimeSpan.Zero)
+            .Select(CreateActivityMark)
+            .ToArray();
+        Applications = data.Applications.Select(CreateApplicationRow).ToArray();
+        Windows = CreateInspectionWindows();
+        SelectedWindow = Windows.LastOrDefault();
+    }
+
+    private TimelineMark CreateActivityMark(ActivitySlice slice) => new(
+        GetPositionFraction(slice.StartedAt),
+        GetPositionFraction(slice.EndedAt),
+        slice.Record.Color,
+        $"{slice.Record.AppName} · {FormatRange(slice.StartedAt, slice.EndedAt)} · {DurationText.Format(slice.Duration)}");
+
+    private TimelineApplicationRow CreateApplicationRow(TimelineApplication application)
+    {
+        var marks = Data.Slices
+            .Where(slice => slice.Duration > TimeSpan.Zero &&
+                string.Equals(slice.Record.AppId, application.AppId, StringComparison.OrdinalIgnoreCase))
+            .Select(slice => new TimelineMark(
+                GetPositionFraction(slice.StartedAt),
+                GetPositionFraction(slice.EndedAt),
+                application.Color,
+                $"{application.AppName} · {FormatRange(slice.StartedAt, slice.EndedAt)}"))
+            .ToArray();
+        return new TimelineApplicationRow(
+            application.AppId,
+            application.AppName,
+            application.Color,
+            DurationText.Format(application.Duration),
+            marks);
+    }
+
+    private IReadOnlyList<TimelineWindow> CreateInspectionWindows()
+    {
+        if (Data.IsGap)
         {
-            for (var start = data.StartedAt; start < data.EndedAt; start += TimeSpan.FromMinutes(5))
-            {
-                var end = start + TimeSpan.FromMinutes(5);
-                if (end > data.EndedAt) end = data.EndedAt;
-                windows.Add(new TimelineWindow(start, end, FormatRange(start, end)));
-            }
+            return [];
         }
-        Windows = windows;
-        SelectedWindow = windows.LastOrDefault();
+
+        var windows = new List<TimelineWindow>();
+        var windowDuration = TimeSpan.FromMinutes(5);
+        for (var start = Data.StartedAt; start < Data.EndedAt; start += windowDuration)
+        {
+            var end = start + windowDuration;
+            if (end > Data.EndedAt)
+            {
+                end = Data.EndedAt;
+            }
+
+            windows.Add(new TimelineWindow(start, end, FormatRange(start, end)));
+        }
+        return windows;
     }
 
     [RelayCommand]
@@ -93,29 +139,45 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
 
     partial void OnSelectedWindowChanged(TimelineWindow? value)
     {
-        if (value is null) return;
-        SelectionStart = Fraction(value.StartedAt);
-        SelectionEnd = Fraction(value.EndedAt);
-        RawRecords = Data.Slices.Where(slice => slice.Record.StartedAt < value.EndedAt && slice.Record.EndedAt > value.StartedAt)
-            .OrderByDescending(slice => slice.Record.StartedAt).ThenByDescending(slice => slice.Record.Id)
-            .Select(slice => new TimelineRawRow(slice.Record.Id, FormatRange(slice.Record.StartedAt, slice.Record.EndedAt),
-                slice.Record.AppName, string.IsNullOrWhiteSpace(slice.Record.WindowTitle) ? "未保留窗口标题" : slice.Record.WindowTitle,
-                ExactDuration(slice.Record.Duration), string.Join(" · ", new[]
-                {
-                    slice.Record.IsAfk ? "AFK" : "活跃",
-                    slice.Record.IsFullscreen ? "全屏" : "",
-                    slice.Record.IsAudioPlaying ? "音频播放" : "",
-                    slice.Record.Category,
-                }.Where(flag => !string.IsNullOrWhiteSpace(flag))))).ToArray();
+        if (value is null)
+        {
+            return;
+        }
+
+        SelectionStart = GetPositionFraction(value.StartedAt);
+        SelectionEnd = GetPositionFraction(value.EndedAt);
+        RawRecords = Data.Slices
+            .Select(slice => slice.Record)
+            .Where(record => record.StartedAt < value.EndedAt && record.EndedAt > value.StartedAt)
+            .OrderByDescending(record => record.StartedAt)
+            .ThenByDescending(record => record.Id)
+            .Select(CreateRawRow)
+            .ToArray();
         RawSummary = $"{value.Label} · {RawRecords.Count} 条原始记录";
     }
 
-    private double Fraction(DateTimeOffset at) => Data.Span.Ticks > 0
+    private static TimelineRawRow CreateRawRow(ActivitySegment record) => new(
+        record.Id,
+        FormatRange(record.StartedAt, record.EndedAt),
+        record.AppName,
+        string.IsNullOrWhiteSpace(record.WindowTitle) ? "未保留窗口标题" : record.WindowTitle,
+        FormatExactDuration(record.Duration),
+        FormatRecordFlags(record));
+
+    private static string FormatRecordFlags(ActivitySegment record) => string.Join(" · ", new[]
+    {
+        record.IsAfk ? "AFK" : "活跃",
+        record.IsFullscreen ? "全屏" : "",
+        record.IsAudioPlaying ? "音频播放" : "",
+        record.Category,
+    }.Where(flag => !string.IsNullOrWhiteSpace(flag)));
+
+    private double GetPositionFraction(DateTimeOffset at) => Data.Span.Ticks > 0
         ? Math.Clamp((double)(at - Data.StartedAt).Ticks / Data.Span.Ticks, 0, 1) : 0;
 
-    private static string LocalTime(DateTimeOffset at) => at.ToLocalTime().ToString("HH:mm");
+    private static string FormatLocalTime(DateTimeOffset at) => at.ToLocalTime().ToString("HH:mm");
 
-    private static string ExactDuration(TimeSpan duration) => duration.TotalMinutes >= 1 && duration.Seconds > 0
+    private static string FormatExactDuration(TimeSpan duration) => duration.TotalMinutes >= 1 && duration.Seconds > 0
         ? $"{DurationText.Format(duration)} {duration.Seconds}秒" : DurationText.Format(duration);
 
     private static string FormatRange(DateTimeOffset start, DateTimeOffset end)
@@ -129,8 +191,3 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
         return $"{localStart.ToString(startFormat)} – {localEnd.ToString(endFormat)}";
     }
 }
-
-public sealed record TimelineMark(double Start, double End, string Color, string Description);
-public sealed record TimelineApplicationRow(string AppId, string Name, string Color, string Duration, IReadOnlyList<TimelineMark> Marks);
-public sealed record TimelineWindow(DateTimeOffset StartedAt, DateTimeOffset EndedAt, string Label);
-public sealed record TimelineRawRow(long Id, string TimeRange, string AppName, string Title, string Duration, string Flags);

@@ -1,6 +1,6 @@
 using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Infrastructure.Classification;
-using LiveQs.Windows.Infrastructure.Configuration;
+using LiveQs.Windows.Infrastructure.Http;
 using LiveQs.Windows.Infrastructure.Maintenance;
 using LiveQs.Windows.Infrastructure.Persistence.Sqlite;
 using LiveQs.Windows.Infrastructure.Sampling;
@@ -49,7 +49,7 @@ public static class ServiceCollectionExtensions
         // the release manifest from GitHub is exactly the traffic such
         // accelerators exist to help with, so it must not bypass them. This
         // asymmetry is a product constraint, not an oversight.
-        services.AddHttpClient("cloud-sync", client => client.Timeout = TimeSpan.FromSeconds(15))
+        services.AddHttpClient(CloudApiClient.ClientName, client => client.Timeout = TimeSpan.FromSeconds(15))
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { UseProxy = false });
         services.AddHttpClient("update-check", client => client.Timeout = TimeSpan.FromSeconds(100));
         // Update artifacts are large self-contained packages; the manifest

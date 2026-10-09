@@ -16,6 +16,8 @@ public sealed class SyncWorker(
     TimeProvider timeProvider,
     ILogger<SyncWorker> logger) : BackgroundService
 {
+    private const int MaxBatchSize = 100;
+    private static readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(10);
     private DateTimeOffset? _lastSuccess;
     private string _lastError = "";
 
@@ -36,94 +38,110 @@ public sealed class SyncWorker(
                 logger.LogError(exception, "Sync worker iteration failed.");
             }
 
-            await Delay(stoppingToken, TimeSpan.FromSeconds(10));
+            await DelayAsync(stoppingToken, _pollInterval);
         }
     }
 
-    /// <summary>
-    /// One poll-and-upload pass. The outbox entry is removed only once its
-    /// revision is acknowledged (accepted, duplicate, or stale-revision);
-    /// permanent rejections never retry; transport failures back off. Every
-    /// enabled pass ends with a diagnostics push so the Owner sees the queue
-    /// drain step by step after an outage.
-    /// </summary>
     public async Task RunOnceAsync(CancellationToken cancellationToken)
     {
         var settings = await settingsStore.GetSettingsAsync(cancellationToken);
         var pending = await syncQueue.GetPendingSyncCountAsync(cancellationToken);
+        _lastSuccess ??= (await syncQueue.GetSyncOverviewAsync(cancellationToken)).LastSuccessfulUploadAt;
         if (!settings.CloudSyncEnabled)
         {
             statusService.Update(new SyncStatus(false, false, pending, _lastSuccess, _lastError));
             return;
         }
 
-        var items = await syncQueue.GetPendingSyncAsync(100, timeProvider.GetUtcNow(), cancellationToken);
-        if (items.Count == 0)
+        var items = await syncQueue.GetPendingSyncAsync(MaxBatchSize, timeProvider.GetUtcNow(), cancellationToken);
+        if (items.Count > 0)
         {
-            statusService.Update(new SyncStatus(true, false, pending, _lastSuccess, _lastError));
-            await PushDiagnosticsAsync(settings, cancellationToken);
-            return;
+            statusService.Update(new SyncStatus(true, true, pending, _lastSuccess, _lastError));
+            await UploadPendingAsync(settings, items, cancellationToken);
         }
 
-        statusService.Update(new SyncStatus(true, true, pending, _lastSuccess, _lastError));
+        pending = await syncQueue.GetPendingSyncCountAsync(cancellationToken);
+        statusService.Update(new SyncStatus(true, false, pending, _lastSuccess, _lastError));
+        await PushDiagnosticsAsync(settings, cancellationToken);
+    }
+
+    private async Task UploadPendingAsync(
+        AppSettings settings,
+        IReadOnlyList<SyncQueueItem> items,
+        CancellationToken cancellationToken)
+    {
+        using var scope = logger.BeginScope(new Dictionary<string, object>
+        {
+            ["BatchId"] = Guid.NewGuid().ToString("N"),
+            ["DeviceId"] = settings.DeviceId,
+        });
         try
         {
-            // Keep the cached rule set near the Owner's published version; a
-            // failed refresh is non-fatal and classification continues with
-            // the last successful version (also fully offline).
+            // A failed rule refresh keeps the cache usable and must not prevent uploads.
             await classificationRuleSync.RefreshAsync(settings, cancellationToken);
             var outcomes = await client.UploadAsync(items, settings, cancellationToken);
-            var acknowledged = outcomes
-                .Where(outcome => outcome.Kind == SyncOutcomeKind.Acknowledged)
-                .Select(outcome => outcome.Item.SegmentId)
-                .ToArray();
-            var rejections = outcomes
-                .Where(outcome => outcome.Kind == SyncOutcomeKind.Rejected)
-                .ToArray();
-
-            foreach (var rejection in rejections)
-            {
-                await syncQueue.MarkPermanentAsync(
-                    [rejection.Item.SegmentId], rejection.Error ?? "rejected", timeProvider.GetUtcNow(), cancellationToken);
-            }
-            // One ring-buffer entry per distinct stable code per pass keeps a
-            // large rejected batch from drowning the recent-error history.
-            foreach (var group in rejections.GroupBy(rejection => rejection.ErrorCode ?? "rejected"))
-            {
-                await syncQueue.RecordSyncErrorAsync(
-                    group.Key, SafeRejectionMessage(group.First()), timeProvider.GetUtcNow(), cancellationToken);
-            }
-            if (acknowledged.Length > 0)
-            {
-                _lastSuccess = timeProvider.GetUtcNow();
-                _lastError = "";
-                await syncQueue.MarkSyncedAsync(acknowledged, _lastSuccess.Value, cancellationToken);
-            }
-            if (rejections.Length > 0)
-            {
-                _lastError = $"永久拒绝：{rejections[0].Error}";
-            }
-
-            pending = await syncQueue.GetPendingSyncCountAsync(cancellationToken);
-            statusService.Update(new SyncStatus(true, false, pending, _lastSuccess, _lastError));
-            await PushDiagnosticsAsync(settings, cancellationToken);
+            await ApplyOutcomesAsync(outcomes, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
         {
-            var attempt = items.Max(item => item.AttemptCount) + 1;
-            var seconds = Math.Min(3600, 15 * Math.Pow(2, Math.Min(attempt, 8)));
-            var next = timeProvider.GetUtcNow().AddSeconds(seconds + Random.Shared.Next(0, 10));
-            await syncQueue.MarkSyncFailedAsync(items.Select(item => item.SegmentId), exception.Message, next, cancellationToken);
-            logger.LogWarning(exception, "Cloud sync failed; local collection remains active.");
-            // The ring buffer gets a stable code and a safe summary only: the
-            // raw exception text can embed local content and never leaves the
-            // device (it stays in the local log and tray state).
-            var (code, message) = SyncErrorDescriber.Describe(exception);
-            await syncQueue.RecordSyncErrorAsync(code, message, timeProvider.GetUtcNow(), cancellationToken);
-            _lastError = exception.Message;
-            statusService.Update(new SyncStatus(true, false, pending, _lastSuccess, _lastError));
-            await PushDiagnosticsAsync(settings, cancellationToken);
+            await ScheduleRetryAsync(items, exception, cancellationToken);
         }
+    }
+
+    private async Task ApplyOutcomesAsync(IReadOnlyList<SyncOutcome> outcomes, CancellationToken cancellationToken)
+    {
+        var acknowledged = outcomes
+            .Where(outcome => outcome.Kind == SyncOutcomeKind.Acknowledged)
+            .Select(outcome => outcome.Item.Revision)
+            .ToArray();
+        var rejections = outcomes.Where(outcome => outcome.Kind == SyncOutcomeKind.Rejected).ToArray();
+        foreach (var rejection in rejections)
+        {
+            await syncQueue.MarkPermanentAsync(
+                [rejection.Item.Revision], rejection.DisplayError, timeProvider.GetUtcNow(), cancellationToken);
+            logger.LogWarning(
+                "Upload rejected segment {SegmentId} revision {Revision}: {Code}.",
+                rejection.Item.SegmentId, rejection.Item.SyncVersion, rejection.ErrorCode ?? "rejected");
+        }
+
+        // One entry per code prevents a large rejected batch from exhausting the diagnostics ring.
+        foreach (var group in rejections.GroupBy(rejection => rejection.ErrorCode ?? "rejected"))
+        {
+            await syncQueue.RecordSyncErrorAsync(
+                group.Key, group.First().ErrorMessage ?? "The event was rejected.", timeProvider.GetUtcNow(), cancellationToken);
+        }
+        if (acknowledged.Length > 0)
+        {
+            _lastSuccess = timeProvider.GetUtcNow();
+            _lastError = "";
+            await syncQueue.MarkSyncedAsync(acknowledged, _lastSuccess.Value, cancellationToken);
+        }
+        if (rejections.Length > 0)
+        {
+            _lastError = $"永久拒绝：{rejections[0].DisplayError}";
+        }
+    }
+
+    private async Task ScheduleRetryAsync(
+        IReadOnlyList<SyncQueueItem> items,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        var attempt = items.Max(item => item.AttemptCount) + 1;
+        var seconds = Math.Min(3600, 15 * Math.Pow(2, Math.Min(attempt, 8)));
+        var nextAttemptAt = timeProvider.GetUtcNow().AddSeconds(seconds + Random.Shared.Next(0, 10));
+        await syncQueue.MarkSyncFailedAsync(
+            items.Select(item => item.SegmentId), exception.Message, nextAttemptAt, cancellationToken);
+        logger.LogWarning(exception, "Cloud sync failed; local collection remains active.");
+
+        // Raw exception text may contain local data; diagnostics upload only a fixed safe summary.
+        var (code, message) = SyncErrorDescriber.Describe(exception);
+        await syncQueue.RecordSyncErrorAsync(code, message, timeProvider.GetUtcNow(), cancellationToken);
+        _lastError = exception.Message;
     }
 
     /// <summary>
@@ -135,7 +153,11 @@ public sealed class SyncWorker(
     /// </summary>
     private async Task PushDiagnosticsAsync(AppSettings settings, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(settings.DeviceToken)) return;
+        if (string.IsNullOrWhiteSpace(settings.DeviceToken))
+        {
+            return;
+        }
+
         try
         {
             var overview = await syncQueue.GetSyncOverviewAsync(cancellationToken);
@@ -160,20 +182,14 @@ public sealed class SyncWorker(
         }
     }
 
-    /// <summary>The server's safe contract message without the "code: " prefix the tray view adds.</summary>
-    private static string SafeRejectionMessage(SyncOutcome rejection)
+    private async Task DelayAsync(CancellationToken token, TimeSpan duration)
     {
-        var error = rejection.Error ?? "The event was rejected.";
-        if (rejection.ErrorCode is { } code && error.StartsWith($"{code}: ", StringComparison.Ordinal))
+        try
         {
-            return error[(code.Length + 2)..];
+            await Task.Delay(duration, timeProvider, token);
         }
-        return error;
-    }
-
-    private async Task Delay(CancellationToken token, TimeSpan duration)
-    {
-        try { await Task.Delay(duration, timeProvider, token); }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
     }
 }

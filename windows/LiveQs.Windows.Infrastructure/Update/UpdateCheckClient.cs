@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Update;
+using LiveQs.Windows.Infrastructure.Http;
 
 namespace LiveQs.Windows.Infrastructure.Update;
 
@@ -16,6 +17,8 @@ public sealed class UpdateCheckClient(IHttpClientFactory httpClientFactory) : IU
     public async Task<string> FetchManifestAsync(string manifestUrl, CancellationToken cancellationToken = default)
     {
         var client = httpClientFactory.CreateClient("update-check");
+        using var deadline = HttpRequestDeadline.Create(client, cancellationToken);
+        cancellationToken = deadline.Token;
         using var response = await client.GetAsync(manifestUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync(cancellationToken);
@@ -25,6 +28,8 @@ public sealed class UpdateCheckClient(IHttpClientFactory httpClientFactory) : IU
         string downloadUrl, string destinationDirectory, string expectedSha256, CancellationToken cancellationToken = default)
     {
         var client = httpClientFactory.CreateClient("update-download");
+        using var deadline = HttpRequestDeadline.Create(client, cancellationToken);
+        cancellationToken = deadline.Token;
         using var response = await client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
 
@@ -55,7 +60,11 @@ public sealed class UpdateCheckClient(IHttpClientFactory httpClientFactory) : IU
         catch
         {
             // A refused or interrupted download never leaves a partial file behind.
-            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+
             throw;
         }
     }

@@ -109,7 +109,7 @@ public sealed partial class SqliteActivityRepository
             VALUES(1, 0, '{}')
             ON CONFLICT(id) DO NOTHING;
             """;
-        seed.Parameters.AddWithValue("$json", JsonSerializer.Serialize(new AppSettings(), JsonOptions));
+        seed.Parameters.AddWithValue("$json", JsonSerializer.Serialize(new AppSettings(), _jsonOptions));
         seed.Parameters.AddWithValue("$now", UtcText(_timeProvider.GetUtcNow()));
         await seed.ExecuteNonQueryAsync(cancellationToken);
 
@@ -123,12 +123,17 @@ public sealed partial class SqliteActivityRepository
     /// names, so identical projects aggregate while no name (or unsalted
     /// digest of it) can ever be reconstructed from uploads.
     /// </summary>
-    private async Task EnsureClassificationSecretAsync(Microsoft.Data.Sqlite.SqliteConnection connection, CancellationToken cancellationToken)
+    private async Task EnsureClassificationSecretAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        CancellationToken cancellationToken)
     {
         await using var read = connection.CreateCommand();
         read.CommandText = "SELECT classification_secret FROM sync_state WHERE id = 1;";
         var existing = (await read.ExecuteScalarAsync(cancellationToken)) as string;
-        if (!string.IsNullOrWhiteSpace(existing)) return;
+        if (!string.IsNullOrWhiteSpace(existing))
+        {
+            return;
+        }
 
         await using var write = connection.CreateCommand();
         write.CommandText = "UPDATE sync_state SET classification_secret = $secret WHERE id = 1;";
@@ -142,12 +147,17 @@ public sealed partial class SqliteActivityRepository
     /// wiped database starts with fresh identities instead of colliding with
     /// already uploaded history.
     /// </summary>
-    private async Task EnsureInstallGuidAsync(Microsoft.Data.Sqlite.SqliteConnection connection, CancellationToken cancellationToken)
+    private async Task EnsureInstallGuidAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        CancellationToken cancellationToken)
     {
         await using var read = connection.CreateCommand();
         read.CommandText = "SELECT install_guid FROM sync_state WHERE id = 1;";
         var existing = (await read.ExecuteScalarAsync(cancellationToken)) as string;
-        if (!string.IsNullOrWhiteSpace(existing)) return;
+        if (!string.IsNullOrWhiteSpace(existing))
+        {
+            return;
+        }
 
         await using var write = connection.CreateCommand();
         write.CommandText = "UPDATE sync_state SET install_guid = $guid WHERE id = 1;";
@@ -170,7 +180,10 @@ public sealed partial class SqliteActivityRepository
         {
             columns.Add(reader.GetString(1));
         }
-        if (columns.Contains(column, StringComparer.OrdinalIgnoreCase)) return;
+        if (columns.Contains(column, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
 
         await using var alter = connection.CreateCommand();
         alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";

@@ -64,7 +64,11 @@ public sealed class ActiveTimeChart : Panel
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        foreach (UIElement child in Children) child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        foreach (UIElement child in Children)
+        {
+            child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        }
+
         var count = _items.Length;
         return new Size(Math.Max(260, IsHourly || count <= 31 ? 260 : AxisWidth + RightMargin + count * 12), 280);
     }
@@ -75,7 +79,7 @@ public sealed class ActiveTimeChart : Panel
         var height = Math.Max(0, finalSize.Height - TopMargin - BottomMargin);
         var slot = _items.Length > 0 ? width / _items.Length : 0;
         var barWidth = Math.Max(1, Math.Min(28, slot * 0.65));
-        var maximum = TickStep() * 4;
+        var maximum = GetTickStep() * 4;
         for (var index = 0; index < _items.Length; index++)
         {
             var x = AxisWidth + slot * (index + 0.5);
@@ -90,17 +94,21 @@ public sealed class ActiveTimeChart : Panel
         base.OnRender(context);
         var width = ActualWidth - AxisWidth - RightMargin;
         var height = ActualHeight - TopMargin - BottomMargin;
-        if (width <= 0 || height <= 0 || _items.Length == 0) return;
+        if (width <= 0 || height <= 0 || _items.Length == 0)
+        {
+            return;
+        }
+
         var baseline = TopMargin + height;
         var gridPen = new Pen(GridBrush, 1);
         var unitText = IsHourly ? "分钟" : "小时";
-        var tickStep = TickStep();
+        var tickStep = GetTickStep();
 
         for (var tick = 0; tick <= 4; tick++)
         {
             var y = baseline - height * tick / 4;
             context.DrawLine(gridPen, new Point(AxisWidth, y), new Point(ActualWidth - RightMargin, y));
-            var label = Text($"{tick * tickStep:0.#}{unitText}");
+            var label = CreateAxisLabel($"{tick * tickStep:0.#}{unitText}");
             context.DrawText(label, new Point(AxisWidth - label.Width - 8, y - label.Height / 2));
         }
 
@@ -109,15 +117,19 @@ public sealed class ActiveTimeChart : Panel
         for (var index = 0; index < _items.Length; index++)
         {
             var x = AxisWidth + slot * (index + 0.5);
-            if (index % labelStep != 0) continue;
-            var label = Text(_items[index].LocalStart.ToString(IsHourly ? "HH" : "M/d", CultureInfo.CurrentCulture));
+            if (index % labelStep != 0)
+            {
+                continue;
+            }
+
+            var label = CreateAxisLabel(_items[index].LocalStart.ToString(IsHourly ? "HH" : "M/d", CultureInfo.CurrentCulture));
             context.DrawText(label, new Point(x - label.Width / 2, baseline + 10));
         }
     }
 
     private double UnitSeconds => IsHourly ? 60 : 3600;
 
-    private double TickStep()
+    private double GetTickStep()
     {
         var minimumMaximum = IsHourly ? 60d : 24d;
         var quantum = IsHourly ? 15d : 1d;
@@ -137,7 +149,7 @@ public sealed class ActiveTimeChart : Panel
                 RadiusX = 2,
                 RadiusY = 2,
                 Visibility = item.ActiveDuration > TimeSpan.Zero ? Visibility.Visible : Visibility.Collapsed,
-                ToolTip = new ToolTip { Content = TooltipText(item) },
+                ToolTip = new ToolTip { Content = FormatTooltip(item) },
             };
             bar.SetBinding(Rectangle.FillProperty, new Binding(nameof(BarBrush)) { Source = this });
             ToolTipService.SetInitialShowDelay(bar, 250);
@@ -149,7 +161,7 @@ public sealed class ActiveTimeChart : Panel
         }
     }
 
-    private string TooltipText(ActiveTimeBucket item)
+    private string FormatTooltip(ActiveTimeBucket item)
     {
         var end = IsHourly ? item.LocalStart.AddHours(1) : item.LocalStart.AddDays(1);
         var startText = item.LocalStart.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture);
@@ -157,18 +169,31 @@ public sealed class ActiveTimeChart : Panel
         var duration = TimeSpan.FromMilliseconds(Math.Round(item.ActiveDuration.TotalMilliseconds, MidpointRounding.AwayFromZero));
         var seconds = (duration.Ticks % TimeSpan.TicksPerMinute) / (double)TimeSpan.TicksPerSecond;
         var value = $"{seconds:0} 秒";
-        if (duration.TotalMinutes >= 1) value = $"{duration.Minutes} 分钟 {value}";
-        if (duration.TotalHours >= 1) value = $"{duration.Ticks / TimeSpan.TicksPerHour} 小时 {value}";
+        if (duration.TotalMinutes >= 1)
+        {
+            value = $"{duration.Minutes} 分钟 {value}";
+        }
+
+        if (duration.TotalHours >= 1)
+        {
+            value = $"{duration.Ticks / TimeSpan.TicksPerHour} 小时 {value}";
+        }
+
         return $"{startText} – {endText}\n活跃时长：{value}";
     }
 
     private void CloseTooltips()
     {
         foreach (var bar in Children.OfType<Rectangle>())
-            if (bar.ToolTip is ToolTip tooltip) tooltip.IsOpen = false;
+        {
+            if (bar.ToolTip is ToolTip tooltip)
+            {
+                tooltip.IsOpen = false;
+            }
+        }
     }
 
-    private FormattedText Text(string value) => new(value, CultureInfo.CurrentCulture,
+    private FormattedText CreateAxisLabel(string value) => new(value, CultureInfo.CurrentCulture,
         FlowDirection.LeftToRight, new Typeface("Segoe UI, Microsoft YaHei UI"), 11, TextBrush,
         VisualTreeHelper.GetDpi(this).PixelsPerDip);
 

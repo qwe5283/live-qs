@@ -7,7 +7,10 @@ namespace LiveQs.Windows.Views;
 
 public partial class DashboardView : System.Windows.Controls.UserControl
 {
-    public DashboardViewModel ViewModel { get; }
+    public DashboardViewModel ViewModel
+    {
+        get;
+    }
 
     public DashboardView(DashboardViewModel viewModel)
     {
@@ -24,7 +27,11 @@ public partial class DashboardView : System.Windows.Controls.UserControl
 
     private void OnHeaderSizeChanged(object sender, SizeChangedEventArgs args)
     {
-        if (RangeFilters is null) return;
+        if (RangeFilters is null)
+        {
+            return;
+        }
+
         var narrow = args.NewSize.Width < 700;
         Grid.SetRow(RangeFilters, narrow ? 1 : 0);
         Grid.SetColumn(RangeFilters, narrow ? 0 : 1);

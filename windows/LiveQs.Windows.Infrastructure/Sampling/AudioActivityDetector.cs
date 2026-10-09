@@ -16,11 +16,17 @@ internal sealed class AudioActivityDetector
             enumeratorObject = new MmDeviceEnumerator();
             var enumerator = (IMmDeviceEnumerator)enumeratorObject;
             if (enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia, out var device) != 0 || device is null)
+            {
                 return false;
+            }
+
             deviceObject = device;
             var meterId = typeof(IAudioMeterInformation).GUID;
             if (device.Activate(ref meterId, ClassContext.All, nint.Zero, out meterObject) != 0 || meterObject is not IAudioMeterInformation meter)
+            {
                 return false;
+            }
+
             return meter.GetPeakValue(out var peak) == 0 && peak >= ActivePeakThreshold;
         }
         catch (COMException)
@@ -37,12 +43,25 @@ internal sealed class AudioActivityDetector
 
     private static void Release(object? value)
     {
-        if (value is not null && Marshal.IsComObject(value)) Marshal.ReleaseComObject(value);
+        if (value is not null && Marshal.IsComObject(value))
+        {
+            Marshal.ReleaseComObject(value);
+        }
     }
 
-    private enum DataFlow { Render }
-    private enum Role { Console, Multimedia }
-    [Flags] private enum ClassContext : uint { All = 0x17 }
+    private enum DataFlow
+    {
+        Render
+    }
+    private enum Role
+    {
+        Console, Multimedia
+    }
+    [Flags]
+    private enum ClassContext : uint
+    {
+        All = 0x17
+    }
 
     [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
     private sealed class MmDeviceEnumerator;

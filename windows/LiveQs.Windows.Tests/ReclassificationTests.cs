@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using LiveQs.Windows.Core.Abstractions;
 using LiveQs.Windows.Core.Activity;
 using LiveQs.Windows.Core.Classification;
 using LiveQs.Windows.Core.Contracts;
@@ -24,7 +23,9 @@ namespace LiveQs.Windows.Tests;
 /// </summary>
 public sealed class ReclassificationTests : IDisposable
 {
-    private readonly TestPaths _paths = new();
+    public void Dispose() => _paths.Dispose();
+
+    private readonly TestDataPaths _paths = new();
 
     private const string RuleSetV1 = """
         {
@@ -49,7 +50,7 @@ public sealed class ReclassificationTests : IDisposable
         }
         """;
 
-    private static readonly Guid TaskId = Guid.Parse("6f9619ff-8b86-d011-b42d-00cf4fc964ff");
+    private static readonly Guid _taskId = Guid.Parse("6f9619ff-8b86-d011-b42d-00cf4fc964ff");
 
     // --- Planner (pure) ---
 
@@ -108,16 +109,16 @@ public sealed class ReclassificationTests : IDisposable
     public async Task Candidates_ContainOnlyFinalizedNonAfkAcknowledgedSegmentsInRange()
     {
         var repository = await CreateRepositoryAsync();
-        var from = DateTimeOffset.UtcNow.AddHours(-3);
-        var to = DateTimeOffset.UtcNow.AddHours(1);
+        var from = TestClock.DefaultInstant.AddHours(-3);
+        var to = TestClock.DefaultInstant.AddHours(1);
 
         var active = await SeedFinalizedSegmentAsync(repository, from.AddHours(1), appId: "active.exe");
         var afk = await SeedFinalizedSegmentAsync(repository, from.AddHours(1).AddMinutes(12), appId: "afk.exe", afk: true);
         var queued = await SeedFinalizedSegmentAsync(repository, from.AddHours(1).AddMinutes(24), appId: "queued.exe");
-        var outside = await SeedFinalizedSegmentAsync(repository, DateTimeOffset.UtcNow.AddHours(2), appId: "outside.exe");
-        await repository.MarkSyncedAsync(new[] { active.SegmentId, afk.SegmentId, outside.SegmentId }, DateTimeOffset.UtcNow);
+        var outside = await SeedFinalizedSegmentAsync(repository, TestClock.DefaultInstant.AddHours(2), appId: "outside.exe");
+        await repository.MarkSyncedAsync(new[] { active.Revision, afk.Revision, outside.Revision }, TestClock.DefaultInstant);
 
-        await repository.RecordUploadOutcomeAsync(active.SegmentId, new ClassificationOutcome("svc.old", "edge.bilibili.title", 1, 0.8));
+        await repository.RecordUploadOutcomeAsync(active.Revision, new ClassificationOutcome("svc.old", "edge.bilibili.title", 1, 0.8));
 
         var candidates = await repository.GetReclassificationCandidatesAsync(from, to, 100, 0);
 
@@ -137,9 +138,9 @@ public sealed class ReclassificationTests : IDisposable
     public async Task RecordReclassified_AdvancesTheLocalRevisionAndRecordedOutcome()
     {
         var repository = await CreateRepositoryAsync();
-        var seeded = await SeedFinalizedSegmentAsync(repository, DateTimeOffset.UtcNow.AddMinutes(-5));
+        var seeded = await SeedFinalizedSegmentAsync(repository, TestClock.DefaultInstant.AddMinutes(-5));
         // Acknowledge the seed so it leaves the outbox and becomes a candidate.
-        await repository.MarkSyncedAsync(new[] { seeded.SegmentId }, DateTimeOffset.UtcNow);
+        await repository.MarkSyncedAsync(new[] { seeded.Revision }, TestClock.DefaultInstant);
 
         await repository.RecordReclassifiedAsync(seeded.SegmentId, seeded.SyncVersion + 1, new ClassificationOutcome("svc.new", "edge.bilibili.title", 2, 0.8));
 
@@ -259,7 +260,7 @@ public sealed class ReclassificationTests : IDisposable
         }, requests);
         var factory = new SingleClientFactory(handler);
         await repository.SaveSettingsAsync(CloudSettings());
-        await repository.SaveCachedRuleSetAsync(RuleSet(RuleSetV1), DateTimeOffset.UtcNow);
+        await repository.SaveCachedRuleSetAsync(RuleSet(RuleSetV1), TestClock.DefaultInstant);
         var worker = CreateWorker(repository, factory);
 
         await worker.RunOnceAsync(CancellationToken.None);
@@ -285,7 +286,10 @@ public sealed class ReclassificationTests : IDisposable
 
         // Sync disabled: no poll at all.
         requests.Clear();
-        await repository.SaveSettingsAsync(CloudSettings() with { CloudSyncEnabled = false });
+        await repository.SaveSettingsAsync(CloudSettings() with
+        {
+            CloudSyncEnabled = false
+        });
         await worker.RunOnceAsync(CancellationToken.None);
         Assert.Empty(requests);
     }
@@ -315,7 +319,7 @@ public sealed class ReclassificationTests : IDisposable
     }
 
     private static string AssignmentBody(int targetVersion) =>
-        "{\"task_id\":\"" + TaskId.ToString("D").ToLowerInvariant()
+        "{\"task_id\":\"" + _taskId.ToString("D").ToLowerInvariant()
         + "\",\"target_rule_set_version\":" + targetVersion.ToString(CultureInfo.InvariantCulture)
         + ",\"from\":null,\"to\":null}";
 
@@ -346,7 +350,7 @@ public sealed class ReclassificationTests : IDisposable
     {
         await repository.RecordSampleAsync(Sample(startedAt, appId, afk), TimeSpan.FromSeconds(10));
         await repository.RecordSampleAsync(Sample(startedAt.AddMinutes(1), "closer.exe", afk: false), TimeSpan.FromSeconds(10));
-        var pending = await repository.GetPendingSyncAsync(100, DateTimeOffset.UtcNow.AddMinutes(1));
+        var pending = await repository.GetPendingSyncAsync(100, TestClock.DefaultInstant.AddMinutes(1));
         return pending.Single(item => item.AppId == appId && item.StartedAt == startedAt.ToUniversalTime());
     }
 
@@ -364,25 +368,27 @@ public sealed class ReclassificationTests : IDisposable
         await repository.SaveSettingsAsync(CloudSettings());
         // The cached rule set is one version behind the task target, so the
         // pass must refresh it first — exactly what the ruleset GET serves.
-        await repository.SaveCachedRuleSetAsync(RuleSet(RuleSetV1), DateTimeOffset.UtcNow);
-        var seeded = await SeedFinalizedSegmentAsync(repository, DateTimeOffset.UtcNow.AddMinutes(-5));
+        await repository.SaveCachedRuleSetAsync(RuleSet(RuleSetV1), TestClock.DefaultInstant);
+        var seeded = await SeedFinalizedSegmentAsync(repository, TestClock.DefaultInstant.AddMinutes(-5));
         // The segment is already uploaded and acknowledged: out of the outbox,
         // with the server holding the v1 interpretation of it.
-        await repository.MarkSyncedAsync(new[] { seeded.SegmentId }, DateTimeOffset.UtcNow);
-        await repository.RecordUploadOutcomeAsync(seeded.SegmentId, new ClassificationOutcome("svc.old", "edge.bilibili.title", 1, 0.8));
+        await repository.MarkSyncedAsync(new[] { seeded.Revision }, TestClock.DefaultInstant);
+        await repository.RecordUploadOutcomeAsync(seeded.Revision, new ClassificationOutcome("svc.old", "edge.bilibili.title", 1, 0.8));
         var installId = await repository.GetInstallIdAsync();
         return (handler, repository, CreateWorker(repository, factory), seeded.SegmentId, installId, seeded.SyncVersion);
     }
 
-    private static ReclassificationWorker CreateWorker(SqliteActivityRepository repository, SingleClientFactory factory) =>
+    private static ReclassificationWorker CreateWorker(
+        SqliteActivityRepository repository,
+        SingleClientFactory factory) =>
         new(
             repository,
             repository,
             new ReclassificationClient(factory, NullLogger<ReclassificationClient>.Instance),
-            new CloudSyncClient(factory, repository, repository, TimeProvider.System),
-            new ClassificationRuleSync(factory, repository, TimeProvider.System, NullLogger<ClassificationRuleSync>.Instance),
+            new CloudSyncClient(factory, repository, repository, new TestClock(), new StubAppVersion("0.1.0")),
+            new ClassificationRuleSync(factory, repository, new TestClock(), NullLogger<ClassificationRuleSync>.Instance),
             repository,
-            TimeProvider.System,
+            new TestClock(),
             NullLogger<ReclassificationWorker>.Instance);
 
     private static AppSettings CloudSettings() => new()
@@ -409,7 +415,11 @@ public sealed class ReclassificationTests : IDisposable
         var builder = new StringBuilder("""{"results":[""");
         for (var index = 0; index < count; index++)
         {
-            if (index > 0) builder.Append(',');
+            if (index > 0)
+            {
+                builder.Append(',');
+            }
+
             builder.Append(status == "rejected"
                 ? """{"event_id":"6f9619ff-8b86-d011-b42d-00cf4fc964ff","revision":3,"status":"rejected","error":{"code":"invalid_event","message":"bad payload"}}"""
                 : "{\"event_id\":\"6f9619ff-8b86-d011-b42d-00cf4fc964ff\",\"revision\":3,\"status\":\"" + status + "\"}");
@@ -420,35 +430,22 @@ public sealed class ReclassificationTests : IDisposable
 
     private async Task<SqliteActivityRepository> CreateRepositoryAsync()
     {
-        var repository = new SqliteActivityRepository(_paths, TimeProvider.System);
+        var repository = new SqliteActivityRepository(_paths, new TestClock());
         await repository.InitializeAsync();
         return repository;
     }
 
-    public void Dispose()
-    {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        if (Directory.Exists(_paths.DataDirectory)) Directory.Delete(_paths.DataDirectory, true);
-    }
 
-    private sealed class TestPaths : IAppPaths
-    {
-        public TestPaths()
-        {
-            DataDirectory = Path.Combine(Path.GetTempPath(), "LiveQs.Tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(DataDirectory);
-        }
 
-        public string DataDirectory { get; }
-        public string DatabasePath => Path.Combine(DataDirectory, "test.db");
-        public string LogPath => Path.Combine(DataDirectory, "test.log");
-    }
-
-    private sealed class ScriptedHttpHandler(Func<HttpRequestMessage, string, HttpResponseMessage> respond, List<(string Method, string Path, string Body)>? requests) : HttpMessageHandler
+    private sealed class ScriptedHttpHandler(
+        Func<HttpRequestMessage, string, HttpResponseMessage> respond,
+        List<(string Method, string Path, string Body)>? requests) : HttpMessageHandler
     {
         public List<(string Method, string Path, string Body)> Requests { get; } = requests ?? new();
 
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
         {
             var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
             Requests.Add((request.Method.ToString(), request.RequestUri!.PathAndQuery, body));

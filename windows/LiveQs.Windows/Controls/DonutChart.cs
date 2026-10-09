@@ -34,7 +34,11 @@ public sealed class DonutChart : FrameworkElement
     {
         base.OnRender(drawingContext);
         var size = Math.Max(0, Math.Min(ActualWidth, ActualHeight) - 24);
-        if (size <= 0) return;
+        if (size <= 0)
+        {
+            return;
+        }
+
         var center = new System.Windows.Point(ActualWidth / 2, ActualHeight / 2);
         var radius = size / 2;
         var thickness = Math.Clamp(size * 0.14, 14, 26);
@@ -50,13 +54,24 @@ public sealed class DonutChart : FrameworkElement
         foreach (var item in items)
         {
             var sweep = Math.Min(359.85, item.Share * 360);
-            if (sweep < 0.35) continue;
+            if (sweep < 0.35)
+            {
+                continue;
+            }
+
             DrawArc(drawingContext, center, radius, startAngle, sweep, item.Color, thickness);
             startAngle += sweep;
         }
     }
 
-    private static void DrawArc(DrawingContext context, System.Windows.Point center, double radius, double start, double sweep, string color, double thickness)
+    private static void DrawArc(
+        DrawingContext context,
+        System.Windows.Point center,
+        double radius,
+        double start,
+        double sweep,
+        string color,
+        double thickness)
     {
         var startPoint = PointAt(center, radius, start);
         var endPoint = PointAt(center, radius, start + sweep);
@@ -83,9 +98,17 @@ public sealed class DonutChart : FrameworkElement
     private static void OnItemsChanged(DependencyObject owner, DependencyPropertyChangedEventArgs args)
     {
         var chart = (DonutChart)owner;
-        if (chart._observable is not null) chart._observable.CollectionChanged -= chart.OnCollectionChanged;
+        if (chart._observable is not null)
+        {
+            chart._observable.CollectionChanged -= chart.OnCollectionChanged;
+        }
+
         chart._observable = args.NewValue as INotifyCollectionChanged;
-        if (chart._observable is not null) chart._observable.CollectionChanged += chart.OnCollectionChanged;
+        if (chart._observable is not null)
+        {
+            chart._observable.CollectionChanged += chart.OnCollectionChanged;
+        }
+
         chart.InvalidateVisual();
     }
 

@@ -24,7 +24,10 @@ public sealed class SingleInstanceCoordinator : IDisposable
     public bool TryAcquire()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_singleInstance is not null) return _ownsSingleInstanceMutex;
+        if (_singleInstance is not null)
+        {
+            return _ownsSingleInstanceMutex;
+        }
 
         _activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivationEventName);
         _singleInstance = new Mutex(true, SingleInstanceMutexName, out var isFirstInstance);
@@ -58,7 +61,11 @@ public sealed class SingleInstanceCoordinator : IDisposable
 
     private void QueueActivationRequest()
     {
-        if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) return;
+        if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
         _ = _dispatcher.BeginInvoke(new Action(DispatchActivationRequest));
     }
 
@@ -75,7 +82,11 @@ public sealed class SingleInstanceCoordinator : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
+
         _disposed = true;
         _activationRegistration?.Unregister(null);
         _activationRegistration = null;
@@ -83,8 +94,13 @@ public sealed class SingleInstanceCoordinator : IDisposable
         _activationEvent = null;
         if (_ownsSingleInstanceMutex)
         {
-            try { _singleInstance?.ReleaseMutex(); }
-            catch (ApplicationException) { }
+            try
+            {
+                _singleInstance?.ReleaseMutex();
+            }
+            catch (ApplicationException)
+            {
+            }
             _ownsSingleInstanceMutex = false;
         }
         _singleInstance?.Dispose();

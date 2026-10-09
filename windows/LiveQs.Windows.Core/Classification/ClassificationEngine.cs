@@ -1,20 +1,7 @@
-using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.RegularExpressions;
 using LiveQs.Windows.Core.Contracts;
 
 namespace LiveQs.Windows.Core.Classification;
-
-/// <summary>
-/// The explainable result of one local match: everything the upload carries,
-/// nothing it must not (the raw title stays behind).
-/// </summary>
-public sealed record ClassificationOutcome(
-    string SubjectId,
-    string RuleId,
-    long RuleVersion,
-    double Confidence);
 
 /// <summary>
 /// Executes the Owner's versioned rule set entirely on-device: application
@@ -39,14 +26,29 @@ public static class ClassificationEngine
         string? windowTitle,
         string classificationSecret)
     {
-        if (ruleSet is null) return null;
+        if (ruleSet is null)
+        {
+            return null;
+        }
+
         var rules = ruleSet.Rules ?? [];
-        if (rules.Length == 0) return null;
+        if (rules.Length == 0)
+        {
+            return null;
+        }
 
         foreach (var rule in rules.OrderBy(rule => rule, RuleOrder.Comparer))
         {
-            if (!AppliesTo(rule, platform)) continue;
-            if (!Matches(rule, appId, windowTitle, classificationSecret, out var subject)) continue;
+            if (!AppliesTo(rule, platform))
+            {
+                continue;
+            }
+
+            if (!Matches(rule, appId, windowTitle, classificationSecret, out var subject))
+            {
+                continue;
+            }
+
             return subject is null ? null : new ClassificationOutcome(
                 subject,
                 rule.RuleId,
@@ -64,7 +66,12 @@ public static class ClassificationEngine
         _ => false,
     };
 
-    private static bool Matches(ClassificationRule rule, string appId, string? windowTitle, string classificationSecret, out string? subject)
+    private static bool Matches(
+        ClassificationRule rule,
+        string appId,
+        string? windowTitle,
+        string classificationSecret,
+        out string? subject)
     {
         subject = null;
         switch (rule.Kind)
@@ -72,18 +79,30 @@ public static class ClassificationEngine
             case ClassificationRuleKind.Application:
                 // Executable names are case-insensitive on Windows; Android
                 // package names are matched by the same tolerant comparison.
-                if (!string.Equals(appId, rule.Pattern, StringComparison.OrdinalIgnoreCase)) return false;
+                if (!string.Equals(appId, rule.Pattern, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
                 subject = rule.SubjectEntityId;
                 return subject is not null;
 
             case ClassificationRuleKind.TitleKeyword:
                 if (string.IsNullOrEmpty(windowTitle)
-                    || windowTitle.IndexOf(rule.Pattern, StringComparison.OrdinalIgnoreCase) < 0) return false;
+                    || windowTitle.IndexOf(rule.Pattern, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    return false;
+                }
+
                 subject = rule.SubjectEntityId;
                 return subject is not null;
 
             case ClassificationRuleKind.TitleRegex:
-                if (string.IsNullOrEmpty(windowTitle)) return false;
+                if (string.IsNullOrEmpty(windowTitle))
+                {
+                    return false;
+                }
+
                 Regex regex;
                 try
                 {
@@ -96,8 +115,21 @@ public static class ClassificationEngine
                     // no-match instead of breaking classification.
                     return false;
                 }
-                var match = regex.Match(windowTitle);
-                if (!match.Success) return false;
+                Match match;
+                try
+                {
+                    match = regex.Match(windowTitle);
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    // A slow Owner rule must not prevent other rules or unrelated events from being processed.
+                    return false;
+                }
+                if (!match.Success)
+                {
+                    return false;
+                }
+
                 if (rule.Dynamic == true)
                 {
                     // Dynamic project discovery: capture group 1 names a
@@ -123,33 +155,13 @@ public static class ClassificationEngine
 
         public int Compare(ClassificationRule? x, ClassificationRule? y)
         {
-            if (x is null || y is null) return (x is null ? 0 : 1) - (y is null ? 0 : 1);
+            if (x is null || y is null)
+            {
+                return (x is null ? 0 : 1) - (y is null ? 0 : 1);
+            }
+
             var byPriority = y.Priority.CompareTo(x.Priority);
             return byPriority != 0 ? byPriority : string.CompareOrdinal(x.RuleId, y.RuleId);
         }
     }
-}
-
-/// <summary>
-/// Opaque identifiers for locally discovered project names. The identifier is
-/// the first 128 bits of HMAC-SHA256 keyed with a device-generated secret that
-/// never leaves this installation, so the same project aggregates under one
-/// stable id while neither the name nor an unsalted digest of it is uploaded.
-/// </summary>
-public static class OpaqueSubjects
-{
-    private const string Prefix = "unapproved-";
-
-    /// <summary>Derives the stable opaque subject id for one local project name.</summary>
-    public static string ForProjectName(string projectName, string secretBase64)
-    {
-        var name = projectName.Trim();
-        var key = Convert.FromBase64String(secretBase64);
-        var digest = HMACSHA256.HashData(key, Encoding.UTF8.GetBytes("project:" + name));
-        var hex = Convert.ToHexString(digest, 0, 16).ToLowerInvariant();
-        return Prefix + hex;
-    }
-
-    /// <summary>Generates the per-installation classification secret (32 random bytes).</summary>
-    public static string NewSecret() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 }

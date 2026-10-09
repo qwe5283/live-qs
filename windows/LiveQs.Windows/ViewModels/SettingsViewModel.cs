@@ -1,12 +1,8 @@
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiveQs.Windows.Core.Abstractions;
-using LiveQs.Windows.Core.Common;
 using LiveQs.Windows.Core.Settings;
-using LiveQs.Windows.Core.Sync;
-using LiveQs.Windows.Core.Update;
 using LiveQs.Windows.Services;
 
 namespace LiveQs.Windows.ViewModels;
@@ -125,11 +121,18 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         var settings = BuildSettings();
         var validation = settings.Validate();
-        if (validation is not null) throw new ArgumentException(validation);
+        if (validation is not null)
+        {
+            throw new ArgumentException(validation);
+        }
+
         _startupManager.SetEnabled(LaunchOnStartup);
         await _settingsStore.SaveSettingsAsync(settings);
         foreach (var row in ApplicationRules)
+        {
             await _settingsStore.SaveApplicationRuleAsync(row.ToRule());
+        }
+
         StatusText = $"已保存于 {_timeProvider.GetLocalNow():HH:mm:ss}";
     }
 
@@ -137,27 +140,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         var rules = await _queryService.GetApplicationRulesAsync();
         ApplicationRules.Clear();
-        foreach (var rule in rules) ApplicationRules.Add(new ApplicationRuleRow(rule));
-    }
-
-    public async Task<int> DeleteSelectedRangeAsync()
-    {
-        var range = SelectedMaintenanceRange();
-        var deleted = await _maintenance.DeleteRangeAsync(range);
-        StatusText = $"已删除 {deleted} 个时间段";
-        return deleted;
-    }
-
-    public async Task ExportAsync(string path)
-    {
-        await _maintenance.ExportCsvAsync(path, SelectedMaintenanceRange());
-        StatusText = "CSV 导出完成";
-    }
-
-    private async Task OptimizeCoreAsync()
-    {
-        await _maintenance.OptimizeAsync();
-        StatusText = "数据库维护完成";
+        foreach (var rule in rules)
+        {
+            ApplicationRules.Add(new ApplicationRuleRow(rule));
+        }
     }
 
     private AppSettings BuildSettings() => new AppSettings
@@ -178,128 +164,20 @@ public sealed partial class SettingsViewModel : ViewModelBase
         UpdateManifestUrl = UpdateManifestUrl,
     }.Normalize();
 
-    private DateRange SelectedMaintenanceRange()
-    {
-        var start = (MaintenanceStartDate ?? Today).Date;
-        var end = (MaintenanceEndDate ?? start).Date;
-        if (end < start) (start, end) = (end, start);
-        return DateRange.FromLocalDates(start, end);
-    }
-
-    private void OnSyncStatusChanged(object? sender, SyncStatus status) =>
-        System.Windows.Application.Current.Dispatcher.Invoke(() => UpdateSyncText(status));
-
-    private void OnUpdateStatusChanged(object? sender, UpdateStatus status) =>
-        System.Windows.Application.Current.Dispatcher.Invoke(() => UpdateUpdateText(status));
-
-    private void UpdateUpdateText(UpdateStatus status)
-    {
-        UpdateStatusText = !status.Enabled
-            ? "更新检查已关闭"
-            : status.State switch
-            {
-                UpdateCheckState.Idle => "尚未检查",
-                UpdateCheckState.UpToDate => $"已是最新 · 当前 v{_currentVersion}",
-                UpdateCheckState.Available => $"发现新版本 v{status.AvailableVersion}（当前 v{_currentVersion}），安装包已校验",
-                UpdateCheckState.Incompatible => $"发现新版本 v{status.AvailableVersion}，但当前 v{_currentVersion} 低于其最低兼容版本，请先手动升级",
-                _ => $"检查失败（{status.LastErrorCode}）",
-            };
-        var details = new List<string>();
-        if (status.LastCheckedAt is { } checkedAt) details.Add($"上次检查：{checkedAt.ToLocalTime():yyyy-MM-dd HH:mm}");
-        if (status.VerifiedPackagePath is { } packagePath) details.Add($"安装包：{packagePath}");
-        if (!string.IsNullOrWhiteSpace(status.LastErrorMessage)) details.Add(status.LastErrorMessage);
-        UpdateDetailText = string.Join(Environment.NewLine, details);
-    }
-
-    [RelayCommand]
-    private void OpenUpdateFolder()
-    {
-        try
-        {
-            var directory = Path.Combine(_paths.DataDirectory, "updates");
-            Directory.CreateDirectory(directory);
-            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{directory}\"") { UseShellExecute = true });
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-            _dialogs.ShowError("无法打开目录", exception);
-        }
-    }
-
-    private void UpdateSyncText(SyncStatus status)
-    {
-        SyncStatusText = !status.Enabled
-            ? $"本地模式 · {status.PendingCount} 条待同步"
-            : status.IsRunning
-                ? $"正在同步 · {status.PendingCount} 条待处理"
-                : string.IsNullOrWhiteSpace(status.LastError)
-                    ? $"云端已连接 · {status.PendingCount} 条待处理"
-                    : $"云端暂不可用 · {status.PendingCount} 条待处理";
-    }
-
-    private async Task ExportSelectedRangeAsync()
-    {
-        var path = _dialogs.SelectExportPath($"LiveQs-{Today:yyyy-MM-dd}.csv");
-        if (path is not null) await RunAsync(() => ExportAsync(path), "导出失败");
-    }
-
-    private async Task DeleteSelectedRangeWithConfirmationAsync()
-    {
-        if (_dialogs.ConfirmDeleteRange())
-            await RunAsync(async () => { _ = await DeleteSelectedRangeAsync(); }, "删除失败");
-    }
-
     [RelayCommand]
     private Task SaveAsync() => RunAsync(SaveCoreAsync, "保存设置失败");
-
-    [RelayCommand]
-    private Task ExportAsync() => ExportSelectedRangeAsync();
-
-    [RelayCommand]
-    private Task DeleteAsync() => DeleteSelectedRangeWithConfirmationAsync();
-
-    [RelayCommand]
-    private Task OptimizeAsync() => RunAsync(OptimizeCoreAsync, "数据库维护失败");
-
-    [RelayCommand]
-    private void OpenDataFolder()
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_paths.DataDirectory}\"") { UseShellExecute = true });
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-            _dialogs.ShowError("无法打开目录", exception);
-        }
-    }
 
     private DateTime Today => _timeProvider.GetLocalNow().Date;
 
     private async Task RunAsync(Func<Task> action, string title)
     {
-        try { await action(); }
-        catch (Exception exception) { _dialogs.ShowError(title, exception); }
+        try
+        {
+            await action();
+        }
+        catch (Exception exception)
+        {
+            _dialogs.ShowError(title, exception);
+        }
     }
-}
-
-public sealed partial class ApplicationRuleRow : ViewModelBase
-{
-    [ObservableProperty]
-    private string _alias;
-    [ObservableProperty]
-    private string _category;
-    [ObservableProperty]
-    private bool _isExcluded;
-
-    public ApplicationRuleRow(ApplicationRule rule)
-    {
-        AppId = rule.AppId;
-        _alias = rule.Alias;
-        _category = rule.Category;
-        _isExcluded = rule.IsExcluded;
-    }
-
-    public string AppId { get; }
-    public ApplicationRule ToRule() => new(AppId, Alias ?? "", Category ?? "未分类", IsExcluded);
 }

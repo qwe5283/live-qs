@@ -6,9 +6,17 @@ namespace LiveQs.Windows.Core.Analytics;
 public static class ActiveTimeDistribution
 {
     public static IReadOnlyList<ActiveTimeBucket> Build(
-        DateRange range, IReadOnlyList<ActivitySegment> segments, TimeZoneInfo timeZone)
+        DateRange range, IReadOnlyList<ActivitySegment> segments, TimeZoneInfo timeZone) =>
+        BuildFromSlices(range, ActivityIntervals.CreateSlices(segments, range), timeZone);
+
+    internal static IReadOnlyList<ActiveTimeBucket> BuildFromSlices(
+        DateRange range, IReadOnlyList<ActivitySlice> activitySlices, TimeZoneInfo timeZone)
     {
-        if (range.End <= range.Start) return [];
+        if (range.End <= range.Start)
+        {
+            return [];
+        }
+
         var firstDate = TimeZoneInfo.ConvertTime(range.Start, timeZone).Date;
         var lastDate = TimeZoneInfo.ConvertTime(range.End.AddTicks(-1), timeZone).Date;
         var hourly = firstDate == lastDate;
@@ -21,31 +29,47 @@ public static class ActiveTimeDistribution
         {
             var local = TimeZoneInfo.ConvertTime(cursor, timeZone);
             var next = hourly ? NextHourBoundary(cursor, timeZone) : Midnight(local.Date.AddDays(1), timeZone);
-            if (next > range.End) next = range.End;
+            if (next > range.End)
+            {
+                next = range.End;
+            }
+
             var index = hourly ? local.Hour : (local.Date - firstDate).Days;
             periods[index] += (next - cursor).Ticks;
             slices.Add((cursor, next, index));
             cursor = next;
         }
 
-        foreach (var segment in segments)
+        foreach (var slice in activitySlices)
         {
-            if (segment.IsAfk || segment.EndedAt <= segment.StartedAt) continue;
+            if (slice.Record.IsAfk || slice.Duration <= TimeSpan.Zero)
+            {
+                continue;
+            }
             // Find the first intersecting slice, avoiding a full range scan per segment.
             var low = 0;
             var high = slices.Count;
             while (low < high)
             {
                 var middle = low + (high - low) / 2;
-                if (slices[middle].End <= segment.StartedAt) low = middle + 1;
-                else high = middle;
+                if (slices[middle].End <= slice.StartedAt)
+                {
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle;
+                }
             }
-            for (var index = low; index < slices.Count && slices[index].Start < segment.EndedAt; index++)
+            for (var index = low; index < slices.Count && slices[index].Start < slice.EndedAt; index++)
             {
-                var slice = slices[index];
-                var start = segment.StartedAt > slice.Start ? segment.StartedAt : slice.Start;
-                var end = segment.EndedAt < slice.End ? segment.EndedAt : slice.End;
-                if (end > start) active[slice.Index] += (end - start).Ticks;
+                var period = slices[index];
+                var start = slice.StartedAt > period.Start ? slice.StartedAt : period.Start;
+                var end = slice.EndedAt < period.End ? slice.EndedAt : period.End;
+                if (end > start)
+                {
+                    active[period.Index] += (end - start).Ticks;
+                }
             }
         }
 
@@ -57,7 +81,11 @@ public static class ActiveTimeDistribution
     private static DateTimeOffset Midnight(DateTime date, TimeZoneInfo timeZone)
     {
         var local = DateTime.SpecifyKind(date, DateTimeKind.Unspecified);
-        while (timeZone.IsInvalidTime(local)) local = local.AddMinutes(1);
+        while (timeZone.IsInvalidTime(local))
+        {
+            local = local.AddMinutes(1);
+        }
+
         var offset = timeZone.IsAmbiguousTime(local)
             ? timeZone.GetAmbiguousTimeOffsets(local).Max()
             : timeZone.GetUtcOffset(local);
@@ -68,7 +96,10 @@ public static class ActiveTimeDistribution
     {
         var local = TimeZoneInfo.ConvertTime(cursor, timeZone);
         var next = cursor.AddTicks(TimeSpan.TicksPerHour - local.TimeOfDay.Ticks % TimeSpan.TicksPerHour);
-        if (TimeZoneInfo.ConvertTime(next.AddTicks(-1), timeZone).Offset == local.Offset) return next;
+        if (TimeZoneInfo.ConvertTime(next.AddTicks(-1), timeZone).Offset == local.Offset)
+        {
+            return next;
+        }
 
         // Split at an offset transition as well, including half-hour DST changes.
         var low = cursor.UtcTicks;
@@ -77,8 +108,13 @@ public static class ActiveTimeDistribution
         {
             var middle = low + (high - low) / 2;
             if (TimeZoneInfo.ConvertTime(new DateTimeOffset(middle, TimeSpan.Zero), timeZone).Offset == local.Offset)
+            {
                 low = middle;
-            else high = middle;
+            }
+            else
+            {
+                high = middle;
+            }
         }
         return new DateTimeOffset(high, TimeSpan.Zero);
     }
