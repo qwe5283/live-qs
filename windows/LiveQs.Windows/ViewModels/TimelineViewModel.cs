@@ -19,11 +19,12 @@ public sealed partial class TimelineViewModel : ViewModelBase
     private CancellationTokenSource? _loadCancellation;
     private DateRange _currentRange;
     private TimelineCursor? _nextCursor;
+    private IReadOnlyList<ActivitySegment> _segments = [];
     private long _requestVersion;
     [ObservableProperty]
     private DateTime? _selectedDate;
     [ObservableProperty]
-    private IReadOnlyList<TimelineRow> _rows = Array.Empty<TimelineRow>();
+    private IReadOnlyList<TimelineEpisodeViewModel> _rows = [];
     [ObservableProperty]
     private bool _isEmpty = true;
     [ObservableProperty]
@@ -64,10 +65,11 @@ public sealed partial class TimelineViewModel : ViewModelBase
         HasMore = false;
         try
         {
-            var result = await LoadPageInBackgroundAsync(_currentRange, null, cancellation.Token);
+            var result = await LoadPageInBackgroundAsync(_currentRange, null, [], cancellation.Token);
             if (version != Volatile.Read(ref _requestVersion) || cancellation.IsCancellationRequested) return;
 
             Rows = result.Rows;
+            _segments = result.Segments;
             _nextCursor = result.NextCursor;
             HasMore = result.HasMore;
             UpdateSummary();
@@ -101,10 +103,12 @@ public sealed partial class TimelineViewModel : ViewModelBase
         IsLoadingMore = true;
         try
         {
-            var result = await LoadPageInBackgroundAsync(_currentRange, cursor, cancellation.Token);
+            var result = await LoadPageInBackgroundAsync(_currentRange, cursor, _segments, cancellation.Token);
             if (version != Volatile.Read(ref _requestVersion) || cancellation.IsCancellationRequested) return;
 
-            Rows = Rows.Concat(result.Rows).ToArray();
+            PreserveExpandedRows(result.Rows);
+            Rows = result.Rows;
+            _segments = result.Segments;
             _nextCursor = result.NextCursor;
             HasMore = result.HasMore;
             UpdateSummary();
@@ -137,6 +141,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
     private async Task<TimelinePageResult> LoadPageInBackgroundAsync(
         DateRange range,
         TimelineCursor? cursor,
+        IReadOnlyList<ActivitySegment> previous,
         CancellationToken cancellationToken) =>
         await Task.Run(async () =>
         {
@@ -148,32 +153,37 @@ public sealed partial class TimelineViewModel : ViewModelBase
             cancellationToken.ThrowIfCancellationRequested();
 
             var mappingTimer = Stopwatch.StartNew();
-            var rows = page.Items.Select(MapRow).ToArray();
+            var segments = previous.Concat(page.Items).DistinctBy(segment => segment.Id).ToArray();
+            var rows = TimelinePresentation.Build(segments, range, page.HasMore)
+                .Select(episode => new TimelineEpisodeViewModel(episode)).ToArray();
             mappingTimer.Stop();
             return new TimelinePageResult(
                 rows,
+                segments,
+                page.Items.Count,
                 page.NextCursor,
                 page.HasMore,
                 queryTimer.Elapsed,
                 mappingTimer.Elapsed);
         }, cancellationToken);
 
-    private static TimelineRow MapRow(ActivitySegment segment)
+    private void PreserveExpandedRows(IReadOnlyList<TimelineEpisodeViewModel> rows)
     {
-        var start = segment.StartedAt.ToLocalTime();
-        var end = segment.EndedAt.ToLocalTime();
-        var title = string.IsNullOrWhiteSpace(segment.WindowTitle) ? segment.AppId : segment.WindowTitle;
-        var flags = string.Join(" · ", new[]
+        var expanded = new Dictionary<long, TimelineEpisodeViewModel>();
+        foreach (var row in Rows.Where(row => row.IsExpanded))
         {
-            segment.IsAfk ? "AFK" : "活跃",
-            segment.IsAudioPlaying ? "音频播放" : "",
-            segment.IsFullscreen ? "全屏" : "",
-            segment.Category,
-        }.Where(value => !string.IsNullOrWhiteSpace(value)));
-        return new TimelineRow(
-            segment.Id, start.ToString("HH:mm"), $"{start:HH:mm:ss} - {end:HH:mm:ss}",
-            segment.AppName, title, DurationText.Format(segment.Duration), flags,
-            segment.Color, segment.IsAfk);
+            foreach (var slice in row.Data.Slices) expanded[slice.Record.Id] = row;
+        }
+        foreach (var row in rows)
+        {
+            var original = row.Data.Slices.Select(slice => expanded.GetValueOrDefault(slice.Record.Id)).FirstOrDefault(value => value is not null);
+            if (original is null) continue;
+            row.IsExpanded = true;
+            row.IsRawExpanded = original.IsRawExpanded;
+            if (original.SelectedWindow is { } window)
+                row.SelectedWindow = row.Windows.FirstOrDefault(candidate => candidate.StartedAt <= window.StartedAt && candidate.EndedAt > window.StartedAt)
+                    ?? row.SelectedWindow;
+        }
     }
 
     private void UpdateSummary()
@@ -181,14 +191,14 @@ public sealed partial class TimelineViewModel : ViewModelBase
         IsEmpty = Rows.Count == 0;
         Summary = IsEmpty
             ? "暂无活动"
-            : HasMore ? $"已加载 {Rows.Count} 个时间段" : $"{Rows.Count} 个时间段";
+            : $"{(HasMore ? "已加载 " : "")}{Rows.Count(row => !row.Data.IsGap)} 个活动段落 · {_segments.Count} 条原始记录";
     }
 
     private void LogPage(DateTime date, TimelinePageResult result, bool append) =>
         _logger.LogInformation(
             "Timeline page loaded for {Date}: {Count} rows, append={Append}, query={QueryMilliseconds} ms, mapping={MappingMilliseconds} ms, hasMore={HasMore}.",
             date.ToString("yyyy-MM-dd"),
-            result.Rows.Count,
+            result.PageCount,
             append,
             Math.Round(result.QueryDuration.TotalMilliseconds, 1),
             Math.Round(result.MappingDuration.TotalMilliseconds, 1),
@@ -205,20 +215,11 @@ public sealed partial class TimelineViewModel : ViewModelBase
     }
 
     private sealed record TimelinePageResult(
-        IReadOnlyList<TimelineRow> Rows,
+        IReadOnlyList<TimelineEpisodeViewModel> Rows,
+        IReadOnlyList<ActivitySegment> Segments,
+        int PageCount,
         TimelineCursor? NextCursor,
         bool HasMore,
         TimeSpan QueryDuration,
         TimeSpan MappingDuration);
 }
-
-public sealed record TimelineRow(
-    long Id,
-    string Time,
-    string TimeRange,
-    string AppName,
-    string Detail,
-    string Duration,
-    string Flags,
-    string Color,
-    bool IsAfk);
