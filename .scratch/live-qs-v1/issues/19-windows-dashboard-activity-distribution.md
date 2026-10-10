@@ -15,6 +15,7 @@ Status: resolved
 - 追加请求：指针停留在非零柱子上时，Tooltip 显示完整时间段及包含秒的具体活跃时长，相邻柱子切换时更新。
 - 追加请求：应用排行中昵称前的圆点替换为应用图标，使用本地记录的程序路径，读取失败时显示通用应用图标，昵称修改不影响图标。
 - 追加请求：应用时间占比添加「其他」图例，颜色与环形图底色一致；前 5 名使用不同颜色，图表、图例及排行进度条对应一致。
+- 追加请求：柱状图不消费鼠标滚轮事件，图表区域内滚轮继续滚动页面，保留较长范围的横向滚动条。
 
 ## Verification
 
@@ -123,3 +124,14 @@ WPF 冒烟检查覆盖 7 个应用、3 个应用、空数据及重新查询，�
 
 - [其他图例及独立配色浅色](../evidence/19-dashboard/share-legend-light.png)
 - [其他图例及独立配色深色](../evidence/19-dashboard/share-legend-dark.png)
+
+## Follow-up: 柱状图滚轮交给页面
+
+2026-10-10：图表的横向 ScrollViewer 在预览阶段将鼠标滚轮事件转交给 Dashboard 页面 ScrollViewer，避免内层容器吞掉滚轮。指针位于柱子或图表空白区域时都滚动页面；保留原生悬停提示和较长日期范围的横向滚动条。
+
+默认组件检查遇到运行中的客户端占用可执行文件，改用独立输出目录执行等价检查：173 项测试通过，构建 0 警告、0 错误；`git diff --check` 通过。
+
+```powershell
+dotnet test windows/LiveQs.Windows.Tests/LiveQs.Windows.Tests.csproj -p:BaseOutputPath=D:/Projects/FreeCoding/live-qs/windows/artifacts/dashboard-wheel-check/
+dotnet build windows/LiveQs.Windows/LiveQs.Windows.csproj -o windows/artifacts/dashboard-wheel-verify
+```

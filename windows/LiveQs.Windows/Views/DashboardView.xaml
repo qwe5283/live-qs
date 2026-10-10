@@ -138,6 +138,7 @@
             </Grid>
         </Grid>
         <ScrollViewer
+            x:Name="DashboardScrollViewer"
             Grid.Row="1"
             VerticalScrollBarVisibility="Auto"
             HorizontalScrollBarVisibility="Disabled"
@@ -196,7 +197,7 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
-                            <TextBlock Text="活跃时间占比" Style="{StaticResource SectionTitle}" />
+                            <TextBlock Text="活跃时间分布" Style="{StaticResource SectionTitle}" />
                             <TextBlock
                                 Grid.Row="1"
                                 Text="{Binding DistributionText}"
@@ -206,7 +207,8 @@
                                 Grid.Row="2"
                                 Margin="0,14,0,0"
                                 HorizontalScrollBarVisibility="Auto"
-                                VerticalScrollBarVisibility="Disabled">
+                                VerticalScrollBarVisibility="Disabled"
+                                PreviewMouseWheel="OnChartPreviewMouseWheel">
                                 <controls:ActiveTimeChart
                                     ItemsSource="{Binding ActiveBuckets}"
                                     IsHourly="{Binding IsHourlyDistribution}"

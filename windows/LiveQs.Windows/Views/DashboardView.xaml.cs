@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using LiveQs.Windows.Controls;
 using LiveQs.Windows.ViewModels;
 
@@ -24,6 +25,16 @@ public partial class DashboardView : System.Windows.Controls.UserControl
 
     private async void OnRangeSelected(object? sender, DateRangeSelectedEventArgs args) =>
         await ViewModel.SelectRangeAsync(args.StartDate, args.EndDate);
+
+    private void OnChartPreviewMouseWheel(object sender, MouseWheelEventArgs args)
+    {
+        args.Handled = true;
+        DashboardScrollViewer.RaiseEvent(new MouseWheelEventArgs(args.MouseDevice, args.Timestamp, args.Delta)
+        {
+            RoutedEvent = MouseWheelEvent,
+            Source = sender,
+        });
+    }
 
     private void OnHeaderSizeChanged(object sender, SizeChangedEventArgs args)
     {
