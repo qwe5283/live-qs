@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiveQs.Windows.Core.Activity;
 using LiveQs.Windows.Core.Common;
+using Wpf.Ui.Controls;
 
 namespace LiveQs.Windows.ViewModels;
 
@@ -13,6 +14,13 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
     }
     public string Title => Data.IsGap ? "无活动记录" : Data.IsAfk ? "离开电脑" :
         Data.Applications.Count == 1 ? Data.Applications[0].AppName : "多应用活动";
+    public bool HasApplicationIcon => HasActiveApplications && Data.Applications.Count == 1;
+    public SymbolRegular TitleSymbol => Data.IsGap ? SymbolRegular.EyeOff24 :
+        Data.IsAfk ? SymbolRegular.DrinkCoffee24 : SymbolRegular.Apps24;
+    public string ExecutablePath => HasApplicationIcon
+        ? Data.Slices.LastOrDefault(slice => !slice.Record.IsAfk &&
+            !string.IsNullOrWhiteSpace(slice.Record.ExecutablePath))?.Record.ExecutablePath ?? ""
+        : "";
     public string StartTime => FormatLocalTime(Data.StartedAt);
     public string EndTime => FormatLocalTime(Data.EndedAt);
     public string MiddleTime => FormatLocalTime(Data.StartedAt + Data.Span / 2);

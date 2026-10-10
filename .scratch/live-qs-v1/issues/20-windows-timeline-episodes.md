@@ -45,6 +45,8 @@ Status: resolved
 
 ## Comments
 
+2026-10-10 Owner 采纳标题图标设计：图标放在卡片内 Title 文本前，使用固定 20 × 20 图标槽，垂直居中并保留 8 px 间距。无活动记录使用 EyeOff24 Regular，离开电脑使用 DrinkCoffee24 Regular，多应用活动使用 Apps24 Regular；单应用复用 Dashboard 的本地图标与通用回退。状态图标使用次要文字色，应用图标保留原色，左侧时间轴保留现有布局。
+
 2026-10-10 Owner 追加：持续不超过 5 分钟的 AFK 不再因离开电脑切开前后活动，预览轨迹与应用泳道中间留白；超过 5 分钟仍独立成段。活跃时长、应用占比和变化次数排除 AFK，原始记录继续可查看；现有单应用长段、无记录间隔、约 60 分钟与按日裁剪规则保留。将更新后的段落切分规则表写入 `windows/README.md`。
 
 2026-10-10 Owner 采纳改造：活动段落独立卡片嵌入滚动内容流，左侧纵轴保持连续；取消固定底部的手动加载按钮，将进度、失败重试、全部加载提示及弱化的手动兜底入口放入列表末尾。接近底部及不足一屏时自动补页，失败后停止自动重试，保留虚拟化、展开状态、选区及滚动位置。
@@ -96,3 +98,21 @@ dotnet .scratch/live-qs-v1/evidence/20-timeline/short-afk/outputs/bin/ShortAfkSm
 ```
 
 复现前须将 Windows 项目测试构建到同一个 `--artifacts-path`，供冒烟程序引用。
+
+### 2026-10-10 卡片标题图标交付
+
+- 卡片内标题前增加固定 20 × 20 图标槽，与文字垂直居中、间距 8 px；无活动记录、离开电脑、多应用活动分别使用 EyeOff24、DrinkCoffee24、Apps24 的 Regular 图标，颜色随主题的次要文字色变化。
+- 单应用段落复用 Dashboard 的 `ApplicationIconConverter`，按非 AFK 记录中最近可用的程序路径显示应用原色图标；路径缺失、不可用或提取失败时使用已有通用应用图标。短 AFK 中的前台程序路径不会影响活动应用图标。
+- 保留卡片标题文字、窄窗口省略显示、展开/折叠及左侧时间轴；同步 SPEC。变更仅影响 Windows 本地展示。
+
+验证：独立输出目录执行 `.\scripts\check.ps1 windows`，**193 项测试通过**，构建零警告、零错误；`git diff --check` 通过。真实 WPF 冒烟覆盖三种 Regular 状态图标、可提取的应用图标、缺失路径的通用回退、跨短 AFK 的程序路径选择、20 px 图标槽、8 px 间距、垂直对齐、浅色折叠及深色窄窗口展开，无绑定错误。
+
+- [浅色四类标题图标与通用回退](../evidence/20-timeline/title-icons/collapsed-light.png)
+- [深色窄窗口与展开轨迹](../evidence/20-timeline/title-icons/expanded-narrow-dark.png)
+
+截图使用独立内存样例和已验证的应用程序集，未启动采集或同步。复现前将 Windows 项目测试构建到下面的 `--artifacts-path`，然后执行：
+
+```powershell
+dotnet build .scratch/live-qs-v1/evidence/20-timeline/short-afk/smoke/ShortAfkSmoke.csproj --artifacts-path .scratch/live-qs-v1/evidence/20-timeline/title-icons/outputs -p:BuildProjectReferences=false
+dotnet .scratch/live-qs-v1/evidence/20-timeline/title-icons/outputs/bin/ShortAfkSmoke/debug/ShortAfkSmoke.dll .scratch/live-qs-v1/evidence/20-timeline/title-icons --title-icons
+```

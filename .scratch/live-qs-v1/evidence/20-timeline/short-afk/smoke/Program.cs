@@ -18,6 +18,8 @@ using LiveQs.Windows.Views;
 using Microsoft.Extensions.Logging.Abstractions;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Markup;
+using SymbolIcon = Wpf.Ui.Controls.SymbolIcon;
+using SymbolRegular = Wpf.Ui.Controls.SymbolRegular;
 
 namespace ShortAfkSmoke;
 
@@ -41,6 +43,14 @@ internal static class Program
         });
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
         var start = new DateTimeOffset(2026, 10, 10, 10, 0, 0, TimeSpan.FromHours(8));
+        if (args.Length > 1 && args[1] == "--title-icons")
+        {
+            VerifyTitleIcons(application, output, start);
+            PresentationTraceSources.DataBindingSource.Flush();
+            Require(bindingErrors.ToString().Length == 0, bindingErrors.ToString());
+            Console.WriteLine("WPF title icon smoke passed: EyeOff24, DrinkCoffee24, Apps24 regular icons, native application icon, missing-path fallback, 20px slot with 8px spacing, light and narrow dark layouts, no binding errors.");
+            return;
+        }
         var model = new TimelineViewModel(new Query([
             Record(1, start, start.AddMinutes(10), false, "main.ts"),
             Record(2, start.AddMinutes(10), start.AddMinutes(13), true, "短暂离开电脑"),
@@ -59,7 +69,7 @@ internal static class Program
         Require(row.Data.Span == TimeSpan.FromMinutes(23), "The time axis must retain the break.");
         row.IsExpanded = true;
         var view = new TimelineView(model);
-        var window = new Window
+        var window = new System.Windows.Window
         {
             Content = view, Width = 1000, Height = 850, WindowStyle = WindowStyle.None,
             ShowActivated = false, ShowInTaskbar = false, Left = -10000, Top = -10000
@@ -92,6 +102,91 @@ internal static class Program
         PresentationTraceSources.DataBindingSource.Flush();
         Require(bindingErrors.ToString().Length == 0, bindingErrors.ToString());
         Console.WriteLine("WPF smoke passed: one episode, 23-minute span, 20 active minutes, blank AFK on both tracks, raw AFK visible, light and narrow dark layouts, no binding errors.");
+    }
+
+    private static void VerifyTitleIcons(Application application, string output, DateTimeOffset start)
+    {
+        var executable = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "notepad.exe");
+        Require(File.Exists(executable), "The native application icon sample requires Windows Notepad.");
+        ActivitySegment Segment(long id, int from, int to, string appId, string name, string path = "", bool afk = false) =>
+            new(id, start.AddMinutes(from), start.AddMinutes(to), appId, name, name, afk, false, false, "开发", "#007AFF")
+            {
+                ExecutablePath = path
+            };
+        var model = new TimelineViewModel(new Query([
+            Segment(1, 0, 4, "notepad", "记事本", executable),
+            Segment(2, 4, 7, "lock", "锁屏", "unavailable-lock.exe", afk: true),
+            Segment(3, 7, 10, "notepad", "记事本"),
+            Segment(4, 10, 20, "notepad", "记事本", executable, afk: true),
+            Segment(5, 25, 26, "code", "Visual Studio Code"),
+            Segment(6, 26, 27, "terminal", "Windows Terminal"),
+            Segment(7, 27, 28, "edge", "Microsoft Edge"),
+            Segment(8, 28, 29, "code", "Visual Studio Code"),
+            Segment(9, 29, 39, "custom", "项目资料整理与需求讨论工作台 · LiveQs Windows 开发", "unavailable-app.exe")
+        ]), new Dialogs(), NullLogger<TimelineViewModel>.Instance, TimeProvider.System);
+        model.SelectedDate = start.ToLocalTime().Date;
+        var load = model.RefreshAsync();
+        while (!load.IsCompleted)
+        {
+            Pump();
+        }
+        load.GetAwaiter().GetResult();
+        Require(model.Rows.Count == 5, "The fixture must include single, mixed, AFK, gap and fallback cards.");
+        var native = model.Rows.Single(row => row.Title == "记事本");
+        Require(native.ExecutablePath == executable, "Use the most recent available active application path across a short AFK.");
+        var view = new TimelineView(model);
+        var window = new System.Windows.Window
+        {
+            Content = view, Width = 1000, Height = 960, WindowStyle = WindowStyle.None,
+            ShowActivated = false, ShowInTaskbar = false, Left = -10000, Top = -10000
+        };
+        window.Show();
+        Pump();
+        CheckIcons(view, model);
+        Save(view, System.IO.Path.Combine(output, "collapsed-light.png"));
+        native.IsExpanded = true;
+        model.Rows.Single(row => row.Title == "多应用活动").IsExpanded = true;
+        ((ThemesDictionary)application.Resources.MergedDictionaries[0]).Theme = ApplicationTheme.Dark;
+        application.Resources.MergedDictionaries[2] = Theme("Dark");
+        window.Width = 720;
+        window.Height = 1100;
+        Pump();
+        CheckIcons(view, model);
+        Save(view, System.IO.Path.Combine(output, "expanded-narrow-dark.png"));
+        window.Close();
+    }
+
+    private static void CheckIcons(TimelineView view, TimelineViewModel model)
+    {
+        foreach (var row in model.Rows)
+        {
+            var title = Descendants<TextBlock>(view).Single(text => text.DataContext == row && text.Text == row.Title);
+            FrameworkElement icon;
+            if (row.HasApplicationIcon)
+            {
+                var image = Descendants<System.Windows.Controls.Image>(view)
+                    .Single(candidate => candidate.DataContext == row && candidate.IsVisible);
+                Require(image.Source is not null, "Both native and fallback application icons must be visible.");
+                Require(row.Title == "记事本" ? image.Source is BitmapSource : image.Source is DrawingImage,
+                    "Use native imagery for an available executable and the generic fallback otherwise.");
+                icon = image;
+            }
+            else
+            {
+                var symbol = Descendants<SymbolIcon>(view).Single(candidate => candidate.DataContext == row && candidate.IsVisible);
+                var expected = row.Data.IsGap ? SymbolRegular.EyeOff24 : row.Data.IsAfk ? SymbolRegular.DrinkCoffee24 : SymbolRegular.Apps24;
+                Require(symbol.Symbol == expected && !symbol.Filled, "Use the requested regular Fluent status icon.");
+                icon = symbol;
+            }
+            var slot = (FrameworkElement)icon.Parent;
+            Require(slot.ActualWidth == 20 && slot.ActualHeight == 20, "Keep a fixed 20px icon slot.");
+            var iconBounds = slot.TransformToAncestor(view).TransformBounds(new Rect(slot.RenderSize));
+            var titleBounds = title.TransformToAncestor(view).TransformBounds(new Rect(title.RenderSize));
+            Require(Math.Abs(titleBounds.Left - iconBounds.Right - 8) < 0.1, "Keep 8px between the icon and title.");
+            Require(Math.Abs(titleBounds.Top + titleBounds.Height / 2 - iconBounds.Top - iconBounds.Height / 2) < 0.1,
+                "Vertically center the icon and title.");
+            Require(title.TextTrimming == TextTrimming.CharacterEllipsis, "Preserve narrow-window title trimming.");
+        }
     }
 
     private static ActivitySegment Record(long id, DateTimeOffset start, DateTimeOffset end, bool afk, string title) =>
