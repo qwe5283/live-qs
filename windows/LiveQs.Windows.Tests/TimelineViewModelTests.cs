@@ -207,6 +207,40 @@ public sealed class TimelineViewModelTests
         Assert.False(model.HasMore);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EvidenceOnlyEpisode_KeepsExpandedInspectionAfterLoadingEarlierRecords(bool hasPairedState)
+    {
+        var records = DenseRecords();
+        var start = records[^1].EndedAt.AddMinutes(5);
+        var query = new Query(records)
+        {
+            StateEvents = hasPairedState ?
+            [
+                new DeviceStateEvent("sleep", start, DeviceStateKind.Sleep, true, "system:test", "现代待机"),
+                new DeviceStateEvent("wake", start.AddMinutes(10), DeviceStateKind.Sleep, false, "system:test", "现代待机")
+            ] :
+            [
+                new DeviceStateEvent("wake", start.AddMinutes(10), DeviceStateKind.Sleep, false, "system:test", "现代待机")
+            ]
+        };
+        var model = Model(query);
+        model.SelectedDate = records[0].StartedAt.ToLocalTime().Date;
+        await model.RefreshAsync();
+        var original = Assert.Single(model.Rows, row => row.Data.IsAfk);
+        original.SelectPositionCommand.Execute(0.5d);
+        Assert.Empty(original.Data.Slices);
+
+        await model.LoadMoreCommand.ExecuteAsync(null);
+
+        var updated = Assert.Single(model.Rows, row => row.Data.IsAfk);
+        Assert.True(updated.IsExpanded);
+        Assert.True(updated.IsRawExpanded);
+        Assert.Equal(original.SelectedWindow, updated.SelectedWindow);
+        Assert.Single(updated.StateEvidenceRows);
+    }
+
     private static ActivitySegment[] DenseRecords()
     {
         var start = new DateTimeOffset(2026, 10, 9, 10, 0, 0, TimeSpan.Zero);
@@ -220,7 +254,11 @@ public sealed class TimelineViewModelTests
 
     private sealed class Query(ActivitySegment[] records) : IActivityQueryService
     {
-        public Func<TimelineCursor?, Task>? BeforePage { get; init; }
+        public Func<TimelineCursor?, Task>? BeforePage
+        {
+            get; init;
+        }
+        public IReadOnlyList<DeviceStateEvent> StateEvents { get; init; } = [];
 
         public async Task<TimelinePage> GetTimelinePageAsync(
             DateRange range,
@@ -238,7 +276,10 @@ public sealed class TimelineViewModelTests
                 .ToArray();
             var items = ordered.Take(pageSize).ToArray();
             var more = ordered.Length > pageSize;
-            return new TimelinePage(items, more ? new TimelineCursor(items[^1].StartedAt, items[^1].Id) : null, more);
+            return new TimelinePage(items, more ? new TimelineCursor(items[^1].StartedAt, items[^1].Id) : null, more)
+            {
+                StateEvents = StateEvents
+            };
         }
 
         public Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(

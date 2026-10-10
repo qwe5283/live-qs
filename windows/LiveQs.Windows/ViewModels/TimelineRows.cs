@@ -18,3 +18,5 @@ public sealed record TimelineRawRow(
     string Title,
     string Duration,
     string Flags);
+
+public sealed record TimelineStateEvidenceRow(string Description, string TimeRange, string Source);

@@ -17,7 +17,8 @@ public sealed partial class SqliteActivityRepository :
     ISettingsStore,
     ISyncQueueStore,
     IClassificationRuleStore,
-    IActivityMaintenance
+    IActivityMaintenance,
+    IDeviceStateStore
 {
     private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web)
     {

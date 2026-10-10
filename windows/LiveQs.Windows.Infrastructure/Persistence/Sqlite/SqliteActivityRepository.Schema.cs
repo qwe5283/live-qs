@@ -87,6 +87,21 @@ public sealed partial class SqliteActivityRepository
                 ON activity_segments(started_utc DESC, id DESC);
             CREATE INDEX IF NOT EXISTS ix_sync_queue_due
                 ON sync_queue(next_attempt_utc, attempt_count);
+
+            CREATE TABLE IF NOT EXISTS device_state_events (
+                event_key TEXT PRIMARY KEY,
+                occurred_utc TEXT NOT NULL,
+                json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_device_state_events_time ON device_state_events(occurred_utc);
+            CREATE TABLE IF NOT EXISTS device_state_import (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                imported_until_utc TEXT NULL,
+                warning TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS excluded_sampling (
+                captured_utc TEXT PRIMARY KEY
+            );
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
 

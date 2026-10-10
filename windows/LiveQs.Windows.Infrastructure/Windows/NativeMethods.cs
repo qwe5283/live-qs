@@ -6,6 +6,14 @@ internal static partial class NativeMethods
 {
     internal const uint MonitorDefaultToNearest = 2;
 
+    [LibraryImport("wtsapi32.dll", EntryPoint = "WTSQuerySessionInformationW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool WTSQuerySessionInformation(nint server, int sessionId, int infoClass,
+        out nint buffer, out int bytesReturned);
+
+    [LibraryImport("wtsapi32.dll")]
+    internal static partial void WTSFreeMemory(nint buffer);
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct LastInputInfo
     {

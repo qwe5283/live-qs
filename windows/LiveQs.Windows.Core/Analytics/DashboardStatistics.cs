@@ -8,9 +8,10 @@ public static class DashboardStatistics
     public static DashboardSnapshot Calculate(
         IReadOnlyList<ActivitySegment> records,
         DateRange range,
-        TimeZoneInfo timeZone)
+        TimeZoneInfo timeZone,
+        IReadOnlyList<DeviceStateEvent>? stateEvents = null)
     {
-        var slices = ActivityIntervals.CreateSlices(records, range);
+        var slices = ActivityIntervals.ApplyDeviceStates(ActivityIntervals.CreateSlices(records, range), stateEvents ?? []);
         var active = TimeSpan.Zero;
         var afk = TimeSpan.Zero;
         var applications = new Dictionary<string, ApplicationTotals>(StringComparer.OrdinalIgnoreCase);
@@ -20,7 +21,7 @@ public static class DashboardStatistics
             {
                 continue;
             }
-            if (slice.Record.IsAfk)
+            if (slice.IsAfk)
             {
                 afk += slice.Duration;
                 continue;

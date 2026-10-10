@@ -13,7 +13,7 @@ public sealed partial class SqliteActivityRepository
         var rule = await GetRuleAsync(sample.AppId, cancellationToken);
         if (rule?.IsExcluded == true)
         {
-            await FinalizeOpenIntervalAsync(sample.CapturedAt.ToUniversalTime(), cancellationToken);
+            await RecordExcludedSampleAsync(sample.CapturedAt.ToUniversalTime(), cancellationToken);
             return;
         }
 
@@ -121,12 +121,18 @@ public sealed partial class SqliteActivityRepository
         await EnqueueIntervalAsync(transaction, segmentId, interval.RecordedAt, cancellationToken);
     }
 
-    private async Task FinalizeOpenIntervalAsync(DateTimeOffset endBoundary, CancellationToken cancellationToken)
+    private async Task RecordExcludedSampleAsync(DateTimeOffset capturedAt, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
         using var transaction = connection.BeginTransaction();
         // Excluding an app interrupts the previous interval without recording the excluded context.
-        await FinalizeOpenIntervalAsync(transaction, _timeProvider.GetUtcNow(), endBoundary, cancellationToken);
+        await FinalizeOpenIntervalAsync(transaction, _timeProvider.GetUtcNow(), capturedAt, cancellationToken);
+        // Retain only the sampling instant so excluded context can end recovery without being recorded or uploaded.
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "INSERT INTO excluded_sampling(captured_utc) VALUES($at) ON CONFLICT DO NOTHING;";
+        command.Parameters.AddWithValue("$at", UtcText(capturedAt));
+        await command.ExecuteNonQueryAsync(cancellationToken);
         transaction.Commit();
     }
 

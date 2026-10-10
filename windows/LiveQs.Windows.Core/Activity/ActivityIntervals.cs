@@ -5,6 +5,13 @@ namespace LiveQs.Windows.Core.Activity;
 public sealed record ActivitySlice(ActivitySegment Record, DateTimeOffset StartedAt, DateTimeOffset EndedAt)
 {
     public TimeSpan Duration => EndedAt - StartedAt;
+    public DateTimeOffset EffectiveStartedAt { get; init; } = StartedAt;
+    public DateTimeOffset EffectiveEndedAt { get; init; } = EndedAt;
+    public bool SystemInactive
+    {
+        get; init;
+    }
+    public bool IsAfk => Record.IsAfk || SystemInactive || WindowsActivityState.IsLockScreen(Record.AppId);
 }
 
 public static class ActivityIntervals
@@ -21,21 +28,57 @@ public static class ActivityIntervals
         for (var index = 0; index < ordered.Length; index++)
         {
             var record = ordered[index];
-            var end = record.EndedAt < range.End ? record.EndedAt : range.End;
+            var effectiveEnd = record.EndedAt;
             // A later foreground sample supersedes the earlier estimate; keep the raw record intact.
-            if (index + 1 < ordered.Length && ordered[index + 1].StartedAt < end)
+            if (index + 1 < ordered.Length && ordered[index + 1].StartedAt < effectiveEnd)
             {
-                end = ordered[index + 1].StartedAt;
+                effectiveEnd = ordered[index + 1].StartedAt;
             }
             // Resolve supersession before range clipping, even when the newer sample ended before this query.
-            if (end <= range.Start)
+            if (effectiveEnd <= range.Start)
             {
                 continue;
             }
 
             var start = record.StartedAt > range.Start ? record.StartedAt : range.Start;
-            slices.Add(new ActivitySlice(record, start, end > start ? end : start));
+            var end = effectiveEnd < range.End ? effectiveEnd : range.End;
+            slices.Add(new ActivitySlice(record, start, end > start ? end : start)
+            {
+                EffectiveStartedAt = record.StartedAt,
+                EffectiveEndedAt = effectiveEnd
+            });
         }
         return slices;
+    }
+
+    public static IReadOnlyList<ActivitySlice> ApplyDeviceStates(
+        IReadOnlyList<ActivitySlice> slices, IReadOnlyList<DeviceStateEvent> stateEvents)
+    {
+        var intervals = DeviceStateTimeline.Pair(stateEvents);
+        if (intervals.Count == 0)
+        {
+            return slices;
+        }
+        var result = new List<ActivitySlice>();
+        foreach (var slice in slices)
+        {
+            var evidence = intervals.Where(value => value.StartedAt < slice.EndedAt && value.EndedAt > slice.StartedAt).ToArray();
+            var boundaries = evidence.SelectMany(value => new[]
+                {
+                    value.StartedAt > slice.StartedAt ? value.StartedAt : slice.StartedAt,
+                    value.EndedAt < slice.EndedAt ? value.EndedAt : slice.EndedAt
+                })
+                .Append(slice.StartedAt).Append(slice.EndedAt).Distinct().Order().ToArray();
+            for (var index = 0; index + 1 < boundaries.Length; index++)
+            {
+                result.Add(slice with
+                {
+                    StartedAt = boundaries[index],
+                    EndedAt = boundaries[index + 1],
+                    SystemInactive = evidence.Any(value => value.StartedAt <= boundaries[index] && value.EndedAt >= boundaries[index + 1])
+                });
+            }
+        }
+        return result;
     }
 }

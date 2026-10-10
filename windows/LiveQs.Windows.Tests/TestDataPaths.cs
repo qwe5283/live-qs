@@ -20,8 +20,15 @@ internal sealed class TestDataPaths : IAppPaths, IDisposable
 
     public void Dispose()
     {
-        // A pooled SQLite handle otherwise keeps the isolated test directory open on Windows.
-        SqliteConnection.ClearAllPools();
+        // Release this database's pooled handle without interrupting other parallel tests.
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = DatabasePath,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Cache = SqliteCacheMode.Shared,
+            Pooling = true
+        }.ToString());
+        SqliteConnection.ClearPool(connection);
         if (Directory.Exists(DataDirectory))
         {
             Directory.Delete(DataDirectory, true);

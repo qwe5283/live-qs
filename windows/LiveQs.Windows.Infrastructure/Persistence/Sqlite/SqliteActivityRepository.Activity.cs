@@ -11,7 +11,8 @@ public sealed partial class SqliteActivityRepository
         CancellationToken cancellationToken = default)
     {
         var segments = await ReadSegmentsAsync(range, cancellationToken);
-        return DashboardStatistics.Calculate(segments, range, TimeZoneInfo.Local);
+        var states = await ReadDeviceStateEventsAsync(range, cancellationToken);
+        return DashboardStatistics.Calculate(segments, range, TimeZoneInfo.Local, states);
     }
 
     public async Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(
@@ -31,7 +32,15 @@ public sealed partial class SqliteActivityRepository
         var pageItems = hasMore ? items.Take(take).ToArray() : items;
         var last = pageItems.LastOrDefault();
         TimelineCursor? nextCursor = hasMore && last is not null ? new TimelineCursor(last.StartedAt, last.Id) : null;
-        return new TimelinePage(pageItems, nextCursor, hasMore);
+        var states = await ReadDeviceStateEventsAsync(range, cancellationToken);
+        var recoveryWindows = await ReadRecoveryWindowsAsync(states, range, cancellationToken);
+        var status = await GetDeviceStateImportStatusAsync(cancellationToken);
+        return new TimelinePage(pageItems, nextCursor, hasMore)
+        {
+            StateEvents = states,
+            RecoveryWindows = recoveryWindows,
+            StateWarning = status.Warning
+        };
     }
 
     private Task<IReadOnlyList<ActivitySegment>> ReadSegmentsAsync(
@@ -61,7 +70,7 @@ public sealed partial class SqliteActivityRepository
             LEFT JOIN application_rules r ON r.app_id = s.app_id
             WHERE s.started_utc < $end AND s.ended_utc > $start
               AND COALESCE(r.is_excluded, 0) = 0
-              AND NOT EXISTS (
+              AND (s.started_utc >= $start OR NOT EXISTS (
                   SELECT 1 FROM activity_segments newer
                   LEFT JOIN application_rules newer_rule ON newer_rule.app_id = newer.app_id
                   WHERE newer.started_utc <= $start
@@ -69,7 +78,7 @@ public sealed partial class SqliteActivityRepository
                          OR (newer.started_utc = s.started_utc AND newer.id > s.id))
                     AND newer.ended_utc > newer.started_utc
                     AND COALESCE(newer_rule.is_excluded, 0) = 0
-              )
+              ))
               {cursorPredicate}
             ORDER BY s.started_utc DESC, s.id DESC
             LIMIT $take;

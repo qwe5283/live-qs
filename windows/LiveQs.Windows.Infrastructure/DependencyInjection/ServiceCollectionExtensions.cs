@@ -7,6 +7,7 @@ using LiveQs.Windows.Infrastructure.Sampling;
 using LiveQs.Windows.Infrastructure.Startup;
 using LiveQs.Windows.Infrastructure.Sync;
 using LiveQs.Windows.Infrastructure.Update;
+using LiveQs.Windows.Infrastructure.Windows;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace LiveQs.Windows.Infrastructure.DependencyInjection;
@@ -27,6 +28,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISyncQueueStore>(sp => sp.GetRequiredService<SqliteActivityRepository>());
         services.AddSingleton<IClassificationRuleStore>(sp => sp.GetRequiredService<SqliteActivityRepository>());
         services.AddSingleton<IActivityMaintenance>(sp => sp.GetRequiredService<SqliteActivityRepository>());
+        services.AddSingleton<IDeviceStateStore>(sp => sp.GetRequiredService<SqliteActivityRepository>());
+        services.AddSingleton<WindowsSessionState>();
+        services.AddSingleton<ISessionStateProvider>(sp => sp.GetRequiredService<WindowsSessionState>());
+        services.AddSingleton<IWindowsStateEventReader, WindowsStateEventReader>();
         services.AddSingleton<IForegroundSampler, ForegroundSampler>();
         services.AddSingleton<IStartupManager, StartupManager>();
         services.AddSingleton<ISyncStatusService, SyncStatusService>();
@@ -55,6 +60,7 @@ public static class ServiceCollectionExtensions
         // Update artifacts are large self-contained packages; the manifest
         // stays on the short-timeout client and the download gets its own.
         services.AddHttpClient("update-download", client => client.Timeout = TimeSpan.FromMinutes(10));
+        services.AddHostedService<WindowsDeviceStateWorker>();
         services.AddHostedService<SamplingWorker>();
         services.AddHostedService<SyncWorker>();
         services.AddHostedService<ReclassificationWorker>();

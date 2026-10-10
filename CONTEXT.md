@@ -18,6 +18,7 @@ LiveQs is a single-Owner quantified-self system. It records structured, privacy-
 - **Classification rule**: a versioned, Owner-managed rule executed locally by a device to map raw local context to a Subject or activity category.
 - **Source policy**: a versioned rule that chooses a normalized result from retained observations without deleting competing sources.
 - **Coverage**: the known completeness, source availability, conflicts, and gaps for a query range.
+- **Device state evidence**: platform-reported lock, sleep, or shutdown transitions that explain device inactivity. This evidence has its own source and coverage and does not count as foreground activity sampling.
 - **Device minutes**: the sum of qualifying durations across devices; concurrent use can exceed elapsed time.
 - **Active minutes**: the union of qualifying non-AFK intervals; concurrent use is counted once.
 - **Private observation**: an observation blocked on the client before upload.

@@ -43,6 +43,9 @@ public sealed partial class TimelineViewModel : ViewModelBase
     private bool _hasQueryError;
     [ObservableProperty]
     private string _summary = "暂无活动";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStateWarning))]
+    private string _stateWarning = "";
 
     public TimelineViewModel(
         IActivityQueryService queryService,
@@ -59,6 +62,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
 
     public IEnumerable<object> ListItems => Rows.Count == 0 ? [] : Rows.Cast<object>().Append(this);
     public bool CanLoadMore => HasMore && !IsLoading && !IsLoadingMore;
+    public bool HasStateWarning => !string.IsNullOrWhiteSpace(StateWarning);
 
     public async Task RefreshAsync()
     {
@@ -80,6 +84,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
         _segments = [];
         IsEmpty = false;
         Summary = "正在加载活动…";
+        StateWarning = "";
         try
         {
             var result = await LoadPageInBackgroundAsync(_currentRange, null, [], cancellation.Token);
@@ -92,6 +97,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
             _segments = result.Segments;
             _nextCursor = result.NextCursor;
             HasMore = result.HasMore;
+            StateWarning = result.StateWarning;
             UpdateSummary();
             LogPage(date, result, false);
         }
@@ -148,6 +154,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
             _segments = result.Segments;
             _nextCursor = result.NextCursor;
             HasMore = result.HasMore;
+            StateWarning = result.StateWarning;
             UpdateSummary();
             LogPage((SelectedDate ?? Today).Date, result, true);
         }
@@ -204,7 +211,8 @@ public sealed partial class TimelineViewModel : ViewModelBase
 
             var mappingTimer = Stopwatch.StartNew();
             var segments = previous.Concat(page.Items).DistinctBy(segment => segment.Id).ToArray();
-            var rows = TimelinePresentation.Build(segments, range, page.HasMore)
+            var rows = TimelinePresentation.Build(segments, range, page.HasMore, page.StateEvents,
+                    _timeProvider.GetUtcNow(), page.RecoveryWindows)
                 .Select(episode => new TimelineEpisodeViewModel(episode)).ToArray();
             mappingTimer.Stop();
             return new TimelinePageResult(
@@ -213,25 +221,24 @@ public sealed partial class TimelineViewModel : ViewModelBase
                 page.Items.Count,
                 page.NextCursor,
                 page.HasMore,
+                page.StateWarning,
                 queryTimer.Elapsed,
                 mappingTimer.Elapsed);
         }, cancellationToken);
 
     private void PreserveExpandedRows(IReadOnlyList<TimelineEpisodeViewModel> rows)
     {
-        var expanded = new Dictionary<long, TimelineEpisodeViewModel>();
-        foreach (var row in Rows.Where(row => row.IsExpanded))
-        {
-            foreach (var slice in row.Data.Slices)
-            {
-                expanded[slice.Record.Id] = row;
-            }
-        }
+        var expanded = Rows.Where(row => row.IsExpanded).ToArray();
         foreach (var row in rows)
         {
-            var original = row.Data.Slices
-                .Select(slice => expanded.GetValueOrDefault(slice.Record.Id))
-                .FirstOrDefault(value => value is not null);
+            var recordIds = row.Data.Records.Select(record => record.Id).ToHashSet();
+            var evidenceKeys = row.Data.StateEvidence.Select(value => value.Start.Key).ToHashSet();
+            var recoveryKeys = row.Data.RecoveryWindows.Select(value => value.Event.Key).ToHashSet();
+            var original = expanded.FirstOrDefault(value =>
+                value.Data.StartedAt < row.Data.EndedAt && value.Data.EndedAt > row.Data.StartedAt &&
+                (value.Data.Records.Any(record => recordIds.Contains(record.Id)) ||
+                 value.Data.StateEvidence.Any(evidence => evidenceKeys.Contains(evidence.Start.Key)) ||
+                 value.Data.RecoveryWindows.Any(window => recoveryKeys.Contains(window.Event.Key))));
             if (original is null)
             {
                 continue;
@@ -286,6 +293,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
         int PageCount,
         TimelineCursor? NextCursor,
         bool HasMore,
+        string StateWarning,
         TimeSpan QueryDuration,
         TimeSpan MappingDuration);
 }

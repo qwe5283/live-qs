@@ -42,7 +42,7 @@ public static class ActiveTimeDistribution
 
         foreach (var slice in activitySlices)
         {
-            if (slice.Record.IsAfk || slice.Duration <= TimeSpan.Zero)
+            if (slice.IsAfk || slice.Duration <= TimeSpan.Zero)
             {
                 continue;
             }

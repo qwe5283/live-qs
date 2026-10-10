@@ -73,7 +73,10 @@ public sealed class TimelinePresentationTests
     [InlineData(300)]
     public void ShortAfk_BridgesSustainedSameApplicationAndStaysBlank(int seconds)
     {
-        var afk = Segment(2, 600, 600 + seconds, "lock", "锁屏") with { IsAfk = true };
+        var afk = Segment(2, 600, 600 + seconds, "lock", "锁屏") with
+        {
+            IsAfk = true
+        };
         var episode = Assert.Single(TimelinePresentation.Build([
             Segment(1, 0, 600, "code", "main.ts"), afk,
             Segment(3, 600 + seconds, 1200 + seconds, "CODE", "Player.vue")
@@ -205,7 +208,10 @@ public sealed class TimelinePresentationTests
     [Fact]
     public void AfkWithoutAdjacentActivity_RemainsVisibleWithItsRawRecord()
     {
-        var afk = Segment(1, 0, 300) with { IsAfk = true };
+        var afk = Segment(1, 0, 300) with
+        {
+            IsAfk = true
+        };
         var episode = Assert.Single(TimelinePresentation.Build([afk], _range));
         var row = new TimelineEpisodeViewModel(episode);
 
@@ -312,6 +318,63 @@ public sealed class TimelinePresentationTests
         var slice = Assert.Single(episodes.SelectMany(episode => episode.Slices), slice => slice.Record.Id == 1);
         Assert.Equal(_day.AddMinutes(5), slice.EndedAt);
         Assert.Equal(_day.AddMinutes(10), slice.Record.EndedAt);
+    }
+
+    [Fact]
+    public void SupersededAfkTail_DoesNotSplitAShortBreak()
+    {
+        var afk = Segment(1, 0, 600) with
+        {
+            IsAfk = true
+        };
+        var active = Segment(2, 120, 720);
+
+        var episode = Assert.Single(TimelinePresentation.Build([afk, active], _range));
+
+        Assert.False(episode.IsAfk);
+        Assert.Equal(TimeSpan.FromMinutes(10), episode.ActiveDuration);
+        Assert.Equal(TimeSpan.FromMinutes(12), episode.ObservedDuration);
+        Assert.Equal(_day.AddMinutes(10), afk.EndedAt);
+    }
+
+    [Theory]
+    [InlineData(-300, 120)]
+    [InlineData(86300, 86360)]
+    public void SupersededAfkTail_DoesNotCreateFalseCrossDayContinuation(int afkStart, int activeStart)
+    {
+        var afk = Segment(1, afkStart, 87000) with
+        {
+            IsAfk = true
+        };
+        var active = Segment(2, activeStart, 86400);
+
+        var episodes = TimelinePresentation.Build([afk, active], _range);
+
+        Assert.All(episodes, episode => Assert.False(episode.ContinuesAfterRange));
+        if (afkStart < 0)
+        {
+            Assert.True(Assert.Single(episodes, episode => episode.IsAfk).ContinuesBeforeRange);
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(60)]
+    public void SameStartRecords_RemainInspectableWithoutDoubleCounting(int start)
+    {
+        var original = Segment(1, start, start + 600, title: "old title");
+        var newer = Segment(2, start, start + 600, title: "new title");
+
+        var episode = Assert.Single(TimelinePresentation.Build([original, newer], _range));
+        var row = new TimelineEpisodeViewModel(episode);
+        row.SelectPositionCommand.Execute(0.1d);
+
+        Assert.Equal(2, episode.RecordCount);
+        Assert.Equal(TimeSpan.FromMinutes(10), episode.ActiveDuration);
+        Assert.Equal(TimeSpan.FromMinutes(10), episode.ObservedDuration);
+        Assert.Contains(row.RawRecords, record => record.Id == original.Id && record.Title == "old title");
+        Assert.Contains(row.RawRecords, record => record.Id == newer.Id && record.Title == "new title");
+        Assert.Equal(0, episode.TitleChanges);
     }
 
     [Fact]

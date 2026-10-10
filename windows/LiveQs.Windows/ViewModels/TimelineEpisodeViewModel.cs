@@ -18,7 +18,7 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
     public SymbolRegular TitleSymbol => Data.IsGap ? SymbolRegular.EyeOff24 :
         Data.IsAfk ? SymbolRegular.DrinkCoffee24 : SymbolRegular.Apps24;
     public string ExecutablePath => HasApplicationIcon
-        ? Data.Slices.LastOrDefault(slice => !slice.Record.IsAfk &&
+        ? Data.Slices.LastOrDefault(slice => !slice.IsAfk &&
             !string.IsNullOrWhiteSpace(slice.Record.ExecutablePath))?.Record.ExecutablePath ?? ""
         : "";
     public string StartTime => FormatLocalTime(Data.StartedAt);
@@ -27,24 +27,31 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
     public string TimeRange => FormatRange(Data.StartedAt, Data.EndedAt);
     public bool HasDetails => !Data.IsGap;
     public bool HasActiveApplications => !Data.IsGap && !Data.IsAfk;
-    public bool HasChanges => Data.Slices.Count(slice => !slice.Record.IsAfk) > 1;
+    public bool HasChanges => Data.Slices.Where(slice => !slice.IsAfk).Select(slice => slice.Record.Id).Distinct().Count() > 1;
     public bool HasFlags => Flags.Length > 0;
-    public bool HasCoverageDifference => Data.IsGap || Data.Span != Data.ObservedDuration ||
+    public bool HasCoverageDifference => Data.IsGap || Data.SystemCoveredDuration > TimeSpan.Zero || Data.RecoveryCoveredDuration > TimeSpan.Zero || Data.Span != Data.ObservedDuration ||
         (!Data.IsAfk && Data.ActiveDuration != Data.ObservedDuration);
     public bool IsPartial => Data.IsPartial;
     public string Summary => Data.IsGap ? $"未观测 {DurationText.Format(Data.Span)}" :
-        $"{(Data.IsAfk ? "AFK" : "活跃")} {DurationText.Format(Data.IsAfk ? Data.ObservedDuration : Data.ActiveDuration)} · {Data.Slices.Count} 条原始记录";
+        $"{(Data.IsAfk ? "离开" : "活跃")} {DurationText.Format(Data.IsAfk ? Data.Span : Data.ActiveDuration)} · {Data.RecordCount} 条原始记录";
     public string Coverage => Data.IsGap ? "此区间没有活动记录" :
-        $"跨度 {DurationText.Format(Data.Span)} · 记录覆盖 {DurationText.Format(Data.ObservedDuration)}" +
+        $"跨度 {DurationText.Format(Data.Span)} · 采样覆盖 {DurationText.Format(Data.ObservedDuration)}" +
+        (Data.SystemCoveredDuration > TimeSpan.Zero ? $" · 系统补充 {DurationText.Format(Data.SystemCoveredDuration)}" : "") +
+        (Data.RecoveryCoveredDuration > TimeSpan.Zero ? $" · 恢复缓冲 {FormatExactDuration(Data.RecoveryCoveredDuration)}" : "") +
         (!Data.IsAfk && Data.ObservedDuration > Data.ActiveDuration
             ? $" · AFK {DurationText.Format(Data.ObservedDuration - Data.ActiveDuration)}" : "");
     public string Changes => Data.TitleChanges > 0
         ? $"{Data.ApplicationSwitches} 次应用切换 · {Data.TitleChanges} 次同应用标题变化"
-        : Data.ApplicationSwitches > 0 ? $"{Data.ApplicationSwitches} 次应用切换" : $"{Data.Slices.Count(slice => !slice.Record.IsAfk)} 条同应用记录已折叠";
+        : Data.ApplicationSwitches > 0 ? $"{Data.ApplicationSwitches} 次应用切换" : $"{Data.Slices.Where(slice => !slice.IsAfk).Select(slice => slice.Record.Id).Distinct().Count()} 条同应用记录已折叠";
     public string Flags => string.Join(" · ", new[]
     {
-        Data.Slices.Any(slice => slice.Record.IsFullscreen) ? "含全屏记录" : "",
-        Data.Slices.Any(slice => slice.Record.IsAudioPlaying) ? "含音频播放" : "",
+        Data.Slices.Any(slice => !slice.IsAfk && slice.Record.IsFullscreen) ? "含全屏记录" : "",
+        Data.Slices.Any(slice => !slice.IsAfk && slice.Record.IsAudioPlaying) ? "含音频播放" : "",
+        Data.Slices.Any(slice => WindowsActivityState.IsLockScreen(slice.Record.AppId)) ? "含锁屏记录" : "",
+        Data.StateEvidence.Count > 0 ? string.Join(" / ", Data.StateEvidence.Select(value => value.Description).Distinct()) : "",
+        Data.RecoveryCoveredDuration > TimeSpan.Zero ? "含恢复缓冲" : "",
+        Data.ContinuesBeforeRange ? "从前一天延续" : "",
+        Data.ContinuesAfterRange ? "延续至下一天" : "",
     }.Where(value => value.Length > 0));
     public IReadOnlyList<TimelineMark> Marks
     {
@@ -70,6 +77,8 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
     [ObservableProperty]
     private string _rawSummary = "";
     [ObservableProperty]
+    private IReadOnlyList<TimelineStateEvidenceRow> _stateEvidenceRows = [];
+    [ObservableProperty]
     private double _selectionStart;
     [ObservableProperty]
     private double _selectionEnd;
@@ -78,7 +87,7 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
     {
         Data = data;
         Marks = data.Slices
-            .Where(slice => !slice.Record.IsAfk && slice.Duration > TimeSpan.Zero)
+            .Where(slice => !slice.IsAfk && slice.Duration > TimeSpan.Zero)
             .Select(CreateActivityMark)
             .ToArray();
         Applications = data.Applications.Select(CreateApplicationRow).ToArray();
@@ -95,7 +104,7 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
     private TimelineApplicationRow CreateApplicationRow(TimelineApplication application)
     {
         var marks = Data.Slices
-            .Where(slice => !slice.Record.IsAfk && slice.Duration > TimeSpan.Zero &&
+            .Where(slice => !slice.IsAfk && slice.Duration > TimeSpan.Zero &&
                 string.Equals(slice.Record.AppId, application.AppId, StringComparison.OrdinalIgnoreCase))
             .Select(slice => new TimelineMark(
                 GetPositionFraction(slice.StartedAt),
@@ -157,23 +166,35 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
 
         SelectionStart = GetPositionFraction(value.StartedAt);
         SelectionEnd = GetPositionFraction(value.EndedAt);
-        RawRecords = Data.Slices
-            .Select(slice => slice.Record)
+        RawRecords = Data.Records
             .Where(record => record.StartedAt < value.EndedAt && record.EndedAt > value.StartedAt)
             .OrderByDescending(record => record.StartedAt)
             .ThenByDescending(record => record.Id)
-            .Select(CreateRawRow)
+            .Select(record => CreateRawRow(record, Data.Slices.Any(slice => slice.Record.Id == record.Id &&
+                slice.IsAfk && slice.StartedAt < value.EndedAt && slice.EndedAt > value.StartedAt)))
             .ToArray();
         RawSummary = $"{value.Label} · {RawRecords.Count} 条原始记录";
+        StateEvidenceRows = Data.StateEvidence
+            .Where(interval => interval.StartedAt < value.EndedAt && interval.EndedAt > value.StartedAt)
+            .Select(interval => new TimelineStateEvidenceRow(interval.Description, FormatRange(interval.StartedAt, interval.EndedAt),
+                interval.Start.Source.StartsWith("system:", StringComparison.Ordinal)
+                    ? $"Windows 系统日志 · 事件 {interval.Start.EventId} → {interval.End.EventId}"
+                    : "Windows 实时状态通知"))
+            .Concat(Data.RecoveryWindows
+                .Where(window => window.StartedAt < value.EndedAt && window.EndedAt > value.StartedAt)
+                .Select(window => new TimelineStateEvidenceRow("采集恢复窗口",
+                    FormatRange(window.StartedAt, window.EndedAt),
+                    $"Windows 系统日志 · 恢复/开机事件 {window.Event.EventId} · 未观测时间按缓冲规则合并")))
+            .ToArray();
     }
 
-    private static TimelineRawRow CreateRawRow(ActivitySegment record) => new(
+    private static TimelineRawRow CreateRawRow(ActivitySegment record, bool effectiveAfk) => new(
         record.Id,
         FormatRange(record.StartedAt, record.EndedAt),
         record.AppName,
         string.IsNullOrWhiteSpace(record.WindowTitle) ? "未保留窗口标题" : record.WindowTitle,
         FormatExactDuration(record.Duration),
-        FormatRecordFlags(record));
+        FormatRecordFlags(record) + (!record.IsAfk && effectiveAfk ? " · 系统状态：非活跃" : ""));
 
     private static string FormatRecordFlags(ActivitySegment record) => string.Join(" · ", new[]
     {

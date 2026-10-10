@@ -2,10 +2,7 @@ using LiveQs.Windows.Core.Common;
 
 namespace LiveQs.Windows.Core.Activity;
 
-/// <summary>
-/// A local display projection. Records remain intact; later foreground records
-/// take precedence over overlap for marks and duration, never for persistence.
-/// </summary>
+/// <summary>A local projection with separate sampling and system-state evidence.</summary>
 public static class TimelinePresentation
 {
     private static readonly TimeSpan _gapBoundary = TimeSpan.FromSeconds(30);
@@ -14,66 +11,78 @@ public static class TimelinePresentation
     private static readonly TimeSpan _maximumMixedSpan = TimeSpan.FromHours(1);
 
     public static IReadOnlyList<TimelineEpisode> Build(
-        IEnumerable<ActivitySegment> records, DateRange range, bool hasEarlierRecords = false)
+        IEnumerable<ActivitySegment> records, DateRange range, bool hasEarlierRecords = false,
+        IReadOnlyList<DeviceStateEvent>? stateEvents = null, DateTimeOffset? observedUntil = null,
+        IReadOnlyList<DeviceRecoveryWindow>? recoveryWindows = null)
     {
-        var slices = ActivityIntervals.CreateSlices(records, range);
-
-        var runs = new List<List<ActivitySlice>>();
-        foreach (var slice in slices)
+        var recordArray = records.ToArray();
+        var sourceSlices = ActivityIntervals.CreateSlices(recordArray,
+            new DateRange(DateTimeOffset.MinValue, DateTimeOffset.MaxValue));
+        var slices = sourceSlices.Where(slice => slice.StartedAt < range.End && slice.EndedAt > range.Start)
+            .Select(slice => slice with
+            {
+                StartedAt = slice.StartedAt > range.Start ? slice.StartedAt : range.Start,
+                EndedAt = slice.EndedAt < range.End ? slice.EndedAt : range.End
+            }).ToArray();
+        // Earlier sampling pages are not loaded yet; do not present their absence as system-only coverage.
+        var loadedRange = hasEarlierRecords && slices.Length > 0
+            ? new DateRange(slices[0].StartedAt, range.End) : range;
+        var intervals = DeviceStateTimeline.Pair(stateEvents ?? []);
+        var windows = (recoveryWindows ?? DeviceStateTimeline.CreateRecoveryWindows(stateEvents ?? [], intervals,
+                value => FirstSampleAt(sourceSlices, value.OccurredAt), observedUntil ?? DateTimeOffset.MaxValue))
+            .Where(window => window.StartedAt < loadedRange.End && window.EndedAt > loadedRange.Start).ToArray();
+        var pieces = CreatePieces(slices, intervals, windows, loadedRange);
+        bool HasGap(DateTimeOffset end, DateTimeOffset start) => start - end > _gapBoundary ||
+            windows.Any(window => window.EndedAt == window.Deadline && window.Deadline >= end && window.Deadline < start);
+        var runs = new List<List<Piece>>();
+        foreach (var piece in pieces)
         {
             var previous = runs.LastOrDefault();
-            if (previous is not null && previous[^1].Record.IsAfk == slice.Record.IsAfk &&
-                (slice.Record.IsAfk || SameApplication(previous[^1], slice)) &&
-                slice.StartedAt - previous[^1].EndedAt <= _gapBoundary)
+            if (previous is not null && previous[^1].IsAfk == piece.IsAfk &&
+                (piece.IsAfk || SameApplication(previous[^1], piece)) &&
+                !HasGap(previous[^1].EndedAt, piece.StartedAt))
             {
-                previous.Add(slice);
+                previous.Add(piece);
             }
             else
             {
-                runs.Add([slice]);
+                runs.Add([piece]);
             }
         }
 
         var episodes = new List<TimelineEpisode>();
-        var pending = new List<ActivitySlice>();
-        foreach (var run in FoldShortAfkRuns(runs))
+        var pending = new List<Piece>();
+        foreach (var run in FoldShortAfkRuns(runs, HasGap))
         {
             var first = run[0];
-            if (pending.Count > 0 && first.StartedAt - pending[^1].EndedAt > _gapBoundary)
+            if (pending.Count > 0 && HasGap(pending[^1].EndedAt, first.StartedAt))
             {
                 Flush();
             }
-
-            if (pending.Count == 0 && episodes.Count > 0 && first.StartedAt - episodes[^1].EndedAt > _gapBoundary)
+            if (pending.Count == 0 && episodes.Count > 0 && HasGap(episodes[^1].EndedAt, first.StartedAt))
             {
-                episodes.Add(new TimelineEpisode(-first.Record.Id, episodes[^1].EndedAt, first.StartedAt,
+                episodes.Add(new TimelineEpisode(-first.StartedAt.UtcTicks, episodes[^1].EndedAt, first.StartedAt,
                     [], [], false, false, 0, 0));
             }
 
-            var duration = TimeSpan.FromTicks(run.Where(slice => !slice.Record.IsAfk).Sum(slice => slice.Duration.Ticks));
-            if (run.All(slice => slice.Record.IsAfk) || duration >= _sustainedApplication)
+            var duration = TimeSpan.FromTicks(run.Where(piece => !piece.IsAfk).Sum(piece => piece.Duration.Ticks));
+            if (run.All(piece => piece.IsAfk) || duration >= _sustainedApplication)
             {
-                if (pending.Any(slice => slice.Duration > TimeSpan.Zero))
-                {
-                    Flush();
-                }
-
+                Flush();
                 pending.AddRange(run);
                 Flush();
                 continue;
             }
-
             if (pending.Count > 0 && run[^1].EndedAt - pending[0].StartedAt > _maximumMixedSpan)
             {
                 Flush();
             }
-
             pending.AddRange(run);
         }
         Flush();
         if (hasEarlierRecords)
         {
-            var firstRecord = episodes.FindIndex(episode => !episode.IsGap);
+            var firstRecord = episodes.FindIndex(episode => episode.Slices.Count > 0);
             if (firstRecord >= 0)
             {
                 episodes[firstRecord] = episodes[firstRecord] with
@@ -91,34 +100,86 @@ public static class TimelinePresentation
             {
                 return;
             }
-
-            episodes.Add(CreateEpisode(pending.ToArray()));
+            episodes.Add(CreateEpisode(pending, range, sourceSlices));
             pending.Clear();
         }
     }
 
-    private static IReadOnlyList<List<ActivitySlice>> FoldShortAfkRuns(List<List<ActivitySlice>> runs)
+    private static IReadOnlyList<Piece> CreatePieces(
+        IReadOnlyList<ActivitySlice> slices, IReadOnlyList<DeviceStateInterval> intervals,
+        IReadOnlyList<DeviceRecoveryWindow> recoveryWindows, DateRange range)
     {
-        var folded = new List<List<ActivitySlice>>();
+        var evidence = intervals.Where(value => value.StartedAt < range.End && value.EndedAt > range.Start).ToArray();
+        var boundaries = slices.SelectMany(slice => new[] { slice.StartedAt, slice.EndedAt })
+            .Concat(evidence.SelectMany(value => new[]
+            {
+                value.StartedAt > range.Start ? value.StartedAt : range.Start,
+                value.EndedAt < range.End ? value.EndedAt : range.End
+            }))
+            .Concat(recoveryWindows.SelectMany(window => new[]
+            {
+                window.StartedAt > range.Start ? window.StartedAt : range.Start,
+                window.EndedAt < range.End ? window.EndedAt : range.End
+            })).Distinct().Order().ToArray();
+        var result = new List<Piece>();
+        var sampleIndex = 0;
+        for (var index = 0; index + 1 < boundaries.Length; index++)
+        {
+            var start = boundaries[index];
+            var end = boundaries[index + 1];
+            while (sampleIndex < slices.Count && slices[sampleIndex].EndedAt <= start)
+            {
+                sampleIndex++;
+            }
+            var sample = sampleIndex < slices.Count && slices[sampleIndex].StartedAt <= start
+                ? slices[sampleIndex] : null;
+            var states = evidence.Where(value => value.StartedAt <= start && value.EndedAt >= end).ToArray();
+            if (sample is not null)
+            {
+                sample = sample with
+                {
+                    StartedAt = start,
+                    EndedAt = end,
+                    SystemInactive = states.Length > 0
+                };
+            }
+            var recovery = sample is null && states.Length == 0
+                ? recoveryWindows.Where(window => window.StartedAt <= start && window.EndedAt >= end).ToArray() : [];
+            if (sample is not null || states.Length > 0 || recovery.Length > 0)
+            {
+                result.Add(new Piece(start, end, sample, states, recovery));
+            }
+        }
+        return result;
+    }
+
+    private static DateTimeOffset? FirstSampleAt(IReadOnlyList<ActivitySlice> slices, DateTimeOffset at)
+    {
+        var sample = slices.FirstOrDefault(slice => slice.EndedAt > at);
+        return sample is null ? null : sample.StartedAt > at ? sample.StartedAt : at;
+    }
+
+    private static IReadOnlyList<List<Piece>> FoldShortAfkRuns(List<List<Piece>> runs,
+        Func<DateTimeOffset, DateTimeOffset, bool> hasGap)
+    {
+        var folded = new List<List<Piece>>();
         for (var index = 0; index < runs.Count; index++)
         {
             var run = runs[index];
-            if (!run[0].Record.IsAfk || run[^1].EndedAt - run[0].StartedAt > _shortAfk)
+            if (!run[0].IsAfk || run.Max(piece => piece.KnownEnd) - run.Min(piece => piece.KnownStart) > _shortAfk)
             {
                 folded.Add(run);
                 continue;
             }
-
             var previous = folded.LastOrDefault();
             var next = index + 1 < runs.Count ? runs[index + 1] : null;
-            var joinsNext = next is not null && !next[0].Record.IsAfk &&
-                next[0].StartedAt - run[^1].EndedAt <= _gapBoundary;
-            if (previous is not null && previous.Any(slice => !slice.Record.IsAfk) &&
-                run[0].StartedAt - previous[^1].EndedAt <= _gapBoundary)
+            var joinsNext = next is not null && !next[0].IsAfk &&
+                !hasGap(run[^1].EndedAt, next[0].StartedAt);
+            if (previous is not null && previous.Any(piece => !piece.IsAfk) &&
+                !hasGap(previous[^1].EndedAt, run[0].StartedAt))
             {
                 previous.AddRange(run);
-                // Preserve a single-application run across a short break, even when both sides are sustained.
-                if (joinsNext && SameApplication(previous.Last(slice => !slice.Record.IsAfk), next![0]))
+                if (joinsNext && SameApplication(previous.Last(piece => !piece.IsAfk), next![0]))
                 {
                     previous.AddRange(next!);
                     index++;
@@ -137,32 +198,66 @@ public static class TimelinePresentation
         return folded;
     }
 
-    private static TimelineEpisode CreateEpisode(ActivitySlice[] slices)
+    private static TimelineEpisode CreateEpisode(
+        IReadOnlyList<Piece> pieces, DateRange range, IReadOnlyList<ActivitySlice> sourceSlices)
     {
-        var activeSlices = slices.Where(slice => !slice.Record.IsAfk).ToArray();
-        var applications = activeSlices
-            .GroupBy(slice => slice.Record.AppId, StringComparer.OrdinalIgnoreCase)
+        var slices = pieces.Select(piece => piece.Sample).OfType<ActivitySlice>().ToArray();
+        var activeSlices = slices.Where(slice => !slice.IsAfk).ToArray();
+        var applications = activeSlices.GroupBy(slice => slice.Record.AppId, StringComparer.OrdinalIgnoreCase)
             .Select(group => new TimelineApplication(group.Key, group.Last().Record.AppName, group.Last().Record.Color,
                 TimeSpan.FromTicks(group.Sum(slice => slice.Duration.Ticks))))
-            .OrderByDescending(application => application.Duration).ThenBy(application => application.AppId, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+            .OrderByDescending(application => application.Duration)
+            .ThenBy(application => application.AppId, StringComparer.OrdinalIgnoreCase).ToArray();
         var switches = 0;
         var titleChanges = 0;
         for (var index = 1; index < activeSlices.Length; index++)
         {
-            if (!SameApplication(activeSlices[index - 1], activeSlices[index]))
+            var previous = activeSlices[index - 1].Record;
+            var current = activeSlices[index].Record;
+            if (!string.Equals(previous.AppId, current.AppId, StringComparison.OrdinalIgnoreCase))
             {
                 switches++;
             }
-            else if (!string.Equals(activeSlices[index - 1].Record.WindowTitle, activeSlices[index].Record.WindowTitle, StringComparison.Ordinal))
+            else if (!string.Equals(previous.WindowTitle, current.WindowTitle, StringComparison.Ordinal))
             {
                 titleChanges++;
             }
         }
-        return new TimelineEpisode(slices[0].Record.Id, slices[0].StartedAt, slices.Max(slice => slice.EndedAt),
-            slices, applications, slices.All(slice => slice.Record.IsAfk), false, switches, titleChanges);
+        var evidence = pieces.SelectMany(piece => piece.Evidence).DistinctBy(value => (value.Start.Key, value.End.Key)).ToArray();
+        var start = pieces[0].StartedAt;
+        var end = pieces[^1].EndedAt;
+        return new TimelineEpisode(slices.FirstOrDefault()?.Record.Id ?? -start.UtcTicks, start, end,
+            slices, applications, pieces.All(piece => piece.IsAfk), false, switches, titleChanges)
+        {
+            // Fully superseded observations remain inspectable without adding coverage or changes.
+            Records = slices.Select(slice => slice.Record)
+                .Concat(sourceSlices.Where(slice => slice.Duration == TimeSpan.Zero &&
+                    slice.StartedAt >= start && slice.StartedAt < end).Select(slice => slice.Record))
+                .DistinctBy(record => record.Id).ToArray(),
+            StateEvidence = evidence,
+            RecoveryWindows = pieces.SelectMany(piece => piece.Recovery).DistinctBy(value => value.Event.Key).ToArray(),
+            SystemCoveredDuration = TimeSpan.FromTicks(pieces.Where(piece => piece.Sample is null && piece.Evidence.Count > 0).Sum(piece => piece.Duration.Ticks)),
+            RecoveryCoveredDuration = TimeSpan.FromTicks(pieces.Where(piece => piece.Recovery.Count > 0).Sum(piece => piece.Duration.Ticks)),
+            ContinuesBeforeRange = start == range.Start && pieces.Min(piece => piece.KnownStart) < range.Start,
+            ContinuesAfterRange = end == range.End && pieces.Max(piece => piece.KnownEnd) > range.End
+        };
     }
 
-    private static bool SameApplication(ActivitySlice left, ActivitySlice right) =>
-        string.Equals(left.Record.AppId, right.Record.AppId, StringComparison.OrdinalIgnoreCase);
+    private static bool SameApplication(Piece left, Piece right) =>
+        string.Equals(left.Sample?.Record.AppId, right.Sample?.Record.AppId, StringComparison.OrdinalIgnoreCase);
+
+    private sealed record Piece(DateTimeOffset StartedAt, DateTimeOffset EndedAt, ActivitySlice? Sample,
+        IReadOnlyList<DeviceStateInterval> Evidence, IReadOnlyList<DeviceRecoveryWindow> Recovery)
+    {
+        public TimeSpan Duration => EndedAt - StartedAt;
+        public bool IsAfk => Sample is null || Sample.IsAfk;
+        private bool HasRecordedAway => Sample is { } sample &&
+            (sample.Record.IsAfk || WindowsActivityState.IsLockScreen(sample.Record.AppId));
+        public DateTimeOffset KnownStart => Evidence.Select(value => value.StartedAt)
+            .Concat(Recovery.Select(value => value.KnownStartedAt))
+            .Append(HasRecordedAway ? Sample!.EffectiveStartedAt : StartedAt).Min();
+        public DateTimeOffset KnownEnd => Evidence.Select(value => value.EndedAt)
+            .Concat(Recovery.Select(value => value.EndedAt))
+            .Append(HasRecordedAway ? Sample!.EffectiveEndedAt : EndedAt).Max();
+    }
 }

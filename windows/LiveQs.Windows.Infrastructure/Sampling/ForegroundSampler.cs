@@ -12,15 +12,23 @@ namespace LiveQs.Windows.Infrastructure.Sampling;
 public sealed class ForegroundSampler : IForegroundSampler
 {
     private readonly TimeProvider _timeProvider;
+    private readonly ISessionStateProvider _sessionState;
     private readonly AudioActivityDetector _audioDetector = new();
 
-    public ForegroundSampler(TimeProvider timeProvider)
+    public ForegroundSampler(TimeProvider timeProvider, ISessionStateProvider sessionState)
     {
         _timeProvider = timeProvider;
+        _sessionState = sessionState;
     }
 
     public ActivitySample? Capture(AppSettings settings)
     {
+        if (_sessionState.IsLocked)
+        {
+            var lockedBattery = GetBattery();
+            return new ActivitySample(_timeProvider.GetUtcNow(), "windows.locked", "Windows 锁屏", "", "", "",
+                GetIdleSeconds(), true, false, false, lockedBattery.Percent, lockedBattery.Charging);
+        }
         var handle = NativeMethods.GetForegroundWindow();
         if (handle == nint.Zero)
         {
@@ -69,7 +77,7 @@ public sealed class ForegroundSampler : IForegroundSampler
             visibleTitle,
             titleHash,
             idleSeconds,
-            idleSeconds >= settings.AfkThresholdSeconds,
+            WindowsActivityState.IsAfk(processName, idleSeconds, settings.AfkThresholdSeconds, false),
             _audioDetector.IsAudioPlaying(),
             IsFullscreen(handle),
             battery.Percent,
