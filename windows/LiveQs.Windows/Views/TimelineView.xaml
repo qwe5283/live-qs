@@ -3,6 +3,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="clr-namespace:LiveQs.Windows.Controls"
     xmlns:converters="clr-namespace:LiveQs.Windows.Converters"
+    xmlns:viewModels="clr-namespace:LiveQs.Windows.ViewModels"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     x:Class="LiveQs.Windows.Views.TimelineView"
     MinWidth="640"
@@ -18,7 +19,6 @@
                 </Grid.ColumnDefinitions>
                 <ScrollContentPresenter
                     x:Name="PART_ScrollContentPresenter"
-                    Margin="18,0"
                     CanContentScroll="{TemplateBinding CanContentScroll}"
                     Content="{TemplateBinding Content}"
                     ContentTemplate="{TemplateBinding ContentTemplate}"
@@ -260,20 +260,9 @@
             </StackPanel>
         </Grid>
         <Grid Grid.Row="1" Margin="28,0,0,28">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-            <Border
-                x:Name="TimelineSurface"
-                Grid.RowSpan="2"
-                Style="{StaticResource Surface}"
-                Margin="0,0,28,0"
-                Padding="0" />
             <ListBox
                 x:Name="TimelineList"
-                ItemsSource="{Binding Rows}"
-                Margin="0,10"
+                ItemsSource="{Binding ListItems}"
                 Background="Transparent"
                 BorderThickness="0"
                 ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -315,15 +304,15 @@
                         </Setter>
                     </Style>
                 </ListBox.ItemContainerStyle>
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
+                <ListBox.Resources>
+                    <DataTemplate DataType="{x:Type viewModels:TimelineEpisodeViewModel}">
                         <Grid Margin="2,0,0,0" UseLayoutRounding="True" SnapsToDevicePixels="True">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="50" />
                                 <ColumnDefinition Width="24" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <Grid Margin="0,16,6,16">
+                            <Grid Margin="0,16,6,28">
                                 <TextBlock
                                     Text="{Binding EndTime}"
                                     FontFamily="Cascadia Mono, Consolas"
@@ -345,7 +334,7 @@
                                 <Border
                                     Width="2"
                                     Background="{DynamicResource AccentBrush}"
-                                    Margin="0,24"
+                                    Margin="0,24,0,36"
                                     HorizontalAlignment="Center"
                                     Opacity="0.5" />
                                 <Ellipse
@@ -365,13 +354,14 @@
                                     StrokeThickness="2"
                                     VerticalAlignment="Bottom"
                                     HorizontalAlignment="Center"
-                                    Margin="0,0,0,20" />
+                                    Margin="0,0,0,32" />
                             </Grid>
                             <Border
+                                x:Name="EpisodeCard"
                                 Grid.Column="2"
-                                BorderBrush="{DynamicResource BorderBrush}"
-                                BorderThickness="0,0,0,1"
-                                Padding="0,16">
+                                Style="{StaticResource Surface}"
+                                Margin="0,0,0,12"
+                                Padding="18,16">
                                 <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -502,42 +492,83 @@
                             </Border>
                         </Grid>
                     </DataTemplate>
-                </ListBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type viewModels:TimelineViewModel}">
+                        <StackPanel Margin="76,4,0,16" HorizontalAlignment="Center" AutomationProperties.Name="时间线分页状态">
+                            <StackPanel
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Center"
+                                Visibility="{Binding IsLoadingMore, Converter={StaticResource VisibleWhenTrue}}">
+                                <ui:ProgressRing Width="18" Height="18" IsIndeterminate="True" />
+                                <TextBlock Text="正在加载更早记录…" Style="{StaticResource MutedText}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock
+                                Text="更早记录加载失败，已加载的内容仍可查看"
+                                Style="{StaticResource MutedText}"
+                                TextWrapping="Wrap"
+                                Margin="0,0,0,8"
+                                Visibility="{Binding HasLoadMoreError, Converter={StaticResource VisibleWhenTrue}}" />
+                            <Button
+                                Command="{Binding LoadMoreCommand}"
+                                HorizontalAlignment="Center"
+                                Visibility="{Binding CanLoadMore, Converter={StaticResource VisibleWhenTrue}}">
+                                <Button.ContentTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Style="{StaticResource ButtonContentText}" />
+                                    </DataTemplate>
+                                </Button.ContentTemplate>
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                                        <Setter Property="Content" Value="加载更早记录" />
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Setter Property="BorderThickness" Value="0" />
+                                        <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+                                        <Setter Property="Padding" Value="12,6" />
+                                        <Setter Property="FontSize" Value="12" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasLoadMoreError}" Value="True">
+                                                <Setter Property="Content" Value="重试" />
+                                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <TextBlock
+                                Text="已显示当天全部记录"
+                                Style="{StaticResource MutedText}"
+                                FontSize="12"
+                                Visibility="{Binding HasMore, Converter={StaticResource VisibleWhenFalse}}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.Resources>
             </ListBox>
-            <Button
-                Grid.Row="1"
-                Content="加载更早记录"
-                Command="{Binding LoadMoreCommand}"
-                Style="{StaticResource SecondaryButton}"
-                Margin="18,0,46,12"
-                HorizontalAlignment="Center"
-                Visibility="{Binding HasMore, Converter={StaticResource VisibleWhenTrue}}" />
-            <StackPanel
-                Margin="0,0,28,0"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Visibility="{Binding IsEmpty, Converter={StaticResource VisibleWhenTrue}}">
-                <ui:SymbolIcon
-                    Symbol="CalendarEmpty24"
-                    FontSize="34"
-                    Foreground="{DynamicResource MutedTextBrush}"
-                    HorizontalAlignment="Center" />
-                <TextBlock
-                    Text="这一天没有活动记录"
-                    FontSize="16"
-                    FontWeight="SemiBold"
-                    Margin="0,14,0,0"
-                    HorizontalAlignment="Center" />
-                <TextBlock
-                    Text="可以切换日期，或在设置中确认采样未暂停"
-                    Style="{StaticResource MutedText}"
-                    Margin="0,6,0,0"
-                    HorizontalAlignment="Center" />
-            </StackPanel>
             <Border
-                Grid.RowSpan="2"
-                Margin="1,1,29,1"
-                Background="{DynamicResource SurfaceBrush}"
+                Style="{StaticResource Surface}"
+                Margin="0,0,28,0"
+                Padding="28"
+                Visibility="{Binding IsEmpty, Converter={StaticResource VisibleWhenTrue}}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <ui:SymbolIcon
+                        Symbol="CalendarEmpty24"
+                        FontSize="34"
+                        Foreground="{DynamicResource MutedTextBrush}"
+                        HorizontalAlignment="Center" />
+                    <TextBlock
+                        Text="这一天没有活动记录"
+                        FontSize="16"
+                        FontWeight="SemiBold"
+                        Margin="0,14,0,0"
+                        HorizontalAlignment="Center" />
+                    <TextBlock
+                        Text="可以切换日期，或在设置中确认采样未暂停"
+                        Style="{StaticResource MutedText}"
+                        Margin="0,6,0,0"
+                        HorizontalAlignment="Center" />
+                </StackPanel>
+            </Border>
+            <Border
+                Style="{StaticResource Surface}"
+                Margin="0,0,28,0"
                 Visibility="{Binding IsLoading, Converter={StaticResource VisibleWhenTrue}}"
                 Panel.ZIndex="2">
                 <ui:ProgressRing
@@ -548,9 +579,8 @@
                     VerticalAlignment="Center" />
             </Border>
             <Border
-                Grid.RowSpan="2"
-                Margin="1,1,29,1"
-                Background="{DynamicResource SurfaceBrush}"
+                Style="{StaticResource Surface}"
+                Margin="0,0,28,0"
                 Visibility="{Binding HasQueryError, Converter={StaticResource VisibleWhenTrue}}"
                 Panel.ZIndex="2">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -563,20 +593,6 @@
                         HorizontalAlignment="Center"
                         Margin="0,14,0,0" />
                 </StackPanel>
-            </Border>
-            <Border
-                Grid.RowSpan="2"
-                Background="{DynamicResource SurfaceBrush}"
-                BorderBrush="{DynamicResource BorderBrush}"
-                BorderThickness="1"
-                CornerRadius="6"
-                Padding="10"
-                Margin="0,0,42,14"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Bottom"
-                Visibility="{Binding IsLoadingMore, Converter={StaticResource VisibleWhenTrue}}"
-                Panel.ZIndex="3">
-                <ui:ProgressRing Width="20" Height="20" IsIndeterminate="True" />
             </Border>
         </Grid>
     </Grid>

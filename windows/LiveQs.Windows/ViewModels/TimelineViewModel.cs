@@ -24,15 +24,21 @@ public sealed partial class TimelineViewModel : ViewModelBase
     [ObservableProperty]
     private DateTime? _selectedDate;
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ListItems))]
     private IReadOnlyList<TimelineEpisodeViewModel> _rows = [];
     [ObservableProperty]
     private bool _isEmpty = true;
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanLoadMore))]
     private bool _isLoading;
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanLoadMore))]
     private bool _isLoadingMore;
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanLoadMore))]
     private bool _hasMore;
+    [ObservableProperty]
+    private bool _hasLoadMoreError;
     [ObservableProperty]
     private bool _hasQueryError;
     [ObservableProperty]
@@ -51,6 +57,9 @@ public sealed partial class TimelineViewModel : ViewModelBase
         _selectedDate = Today;
     }
 
+    public IEnumerable<object> ListItems => Rows.Count == 0 ? [] : Rows.Cast<object>().Append(this);
+    public bool CanLoadMore => HasMore && !IsLoading && !IsLoadingMore;
+
     public async Task RefreshAsync()
     {
         var version = Interlocked.Increment(ref _requestVersion);
@@ -65,6 +74,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
         IsLoading = true;
         IsLoadingMore = false;
         HasMore = false;
+        HasLoadMoreError = false;
         HasQueryError = false;
         Rows = [];
         _segments = [];
@@ -123,6 +133,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
         }
 
         var version = Volatile.Read(ref _requestVersion);
+        HasLoadMoreError = false;
         IsLoadingMore = true;
         try
         {
@@ -142,6 +153,14 @@ public sealed partial class TimelineViewModel : ViewModelBase
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
+        }
+        catch (Exception exception)
+        {
+            if (version == Volatile.Read(ref _requestVersion) && !cancellation.IsCancellationRequested)
+            {
+                HasLoadMoreError = true;
+                _logger.LogWarning(exception, "Loading earlier timeline records failed.");
+            }
         }
         finally
         {

@@ -81,24 +81,164 @@ public sealed class TimelineViewModelTests
         Assert.False(model.IsLoading);
     }
 
+    [Fact]
+    public async Task FailedPagination_RetainsRecordsAndExpandedSelectionThenRetriesTheSamePage()
+    {
+        var records = DenseRecords();
+        var attempts = 0;
+        TimelineCursor? failedCursor = null;
+        var query = new Query(records)
+        {
+            BeforePage = cursor =>
+            {
+                if (cursor is not null && ++attempts == 1)
+                {
+                    failedCursor = cursor;
+                    throw new IOException("Page unavailable.");
+                }
+                if (cursor is not null)
+                {
+                    Assert.Equal(failedCursor, cursor);
+                }
+                return Task.CompletedTask;
+            }
+        };
+        var dialogs = new RecordingDialogs();
+        var model = new TimelineViewModel(query, dialogs, NullLogger<TimelineViewModel>.Instance, new TestClock());
+        model.SelectedDate = records[0].StartedAt.ToLocalTime().Date;
+        await model.RefreshAsync();
+        var original = Assert.Single(model.Rows);
+        original.SelectPositionCommand.Execute(0.9d);
+        var selectedTime = original.SelectedWindow!.StartedAt;
+
+        await model.LoadMoreCommand.ExecuteAsync(null);
+
+        Assert.Same(original, Assert.Single(model.Rows));
+        Assert.True(model.HasLoadMoreError);
+        Assert.True(model.CanLoadMore);
+        Assert.False(model.IsLoadingMore);
+        Assert.Equal(0, dialogs.ErrorCount);
+
+        await model.LoadMoreCommand.ExecuteAsync(null);
+
+        var complete = Assert.Single(model.Rows);
+        Assert.Equal(600, complete.Data.Slices.Count);
+        Assert.True(complete.IsExpanded);
+        Assert.True(complete.IsRawExpanded);
+        Assert.True(complete.SelectedWindow!.StartedAt <= selectedTime && complete.SelectedWindow.EndedAt > selectedTime);
+        Assert.False(model.HasLoadMoreError);
+        Assert.False(model.HasMore);
+        Assert.False(model.CanLoadMore);
+    }
+
+    [Fact]
+    public async Task ChangingDate_DiscardsALatePaginationFailure()
+    {
+        var records = DenseRecords();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var query = new Query(records)
+        {
+            BeforePage = async cursor =>
+            {
+                if (cursor is null)
+                {
+                    return;
+                }
+                started.SetResult();
+                await finish.Task;
+                throw new IOException("Old page unavailable.");
+            }
+        };
+        var model = Model(query);
+        model.SelectedDate = records[0].StartedAt.ToLocalTime().Date;
+        await model.RefreshAsync();
+        var earlierPage = model.LoadMoreCommand.ExecuteAsync(null);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        model.SelectedDate = model.SelectedDate!.Value.AddDays(1);
+        await model.RefreshAsync();
+        finish.SetResult();
+        await earlierPage;
+
+        Assert.True(model.IsEmpty);
+        Assert.Empty(model.Rows);
+        Assert.False(model.HasLoadMoreError);
+        Assert.False(model.IsLoadingMore);
+        Assert.False(model.CanLoadMore);
+    }
+
+    [Fact]
+    public async Task RepeatedPaginationRequests_OnlyLoadOnePageAtATime()
+    {
+        var records = DenseRecords();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pageCalls = 0;
+        var query = new Query(records)
+        {
+            BeforePage = async cursor =>
+            {
+                if (cursor is null)
+                {
+                    return;
+                }
+                Interlocked.Increment(ref pageCalls);
+                started.TrySetResult();
+                await finish.Task;
+            }
+        };
+        var model = Model(query);
+        model.SelectedDate = records[0].StartedAt.ToLocalTime().Date;
+        await model.RefreshAsync();
+        var firstPage = model.LoadMoreCommand.ExecuteAsync(null);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await model.LoadMoreCommand.ExecuteAsync(null);
+
+        Assert.True(model.IsLoadingMore);
+        Assert.False(model.CanLoadMore);
+        Assert.Equal(1, pageCalls);
+        Assert.Equal(500, Assert.Single(model.Rows).Data.Slices.Count);
+        finish.SetResult();
+        await firstPage;
+
+        Assert.Equal(600, Assert.Single(model.Rows).Data.Slices.Count);
+        Assert.False(model.IsLoadingMore);
+        Assert.False(model.HasMore);
+    }
+
+    private static ActivitySegment[] DenseRecords()
+    {
+        var start = new DateTimeOffset(2026, 10, 9, 10, 0, 0, TimeSpan.Zero);
+        return Enumerable.Range(0, 600).Select(index => new ActivitySegment(
+            index + 1, start.AddSeconds(index * 5), start.AddSeconds((index + 1) * 5),
+            index % 2 == 0 ? "code" : "edge", "Application", $"title-{index}", false, false, false, "未分类", "#007AFF")).ToArray();
+    }
+
     private static TimelineViewModel Model(IActivityQueryService query) => new(
         query, new Dialogs(), NullLogger<TimelineViewModel>.Instance, new TestClock());
 
     private sealed class Query(ActivitySegment[] records) : IActivityQueryService
     {
-        public Task<TimelinePage> GetTimelinePageAsync(
+        public Func<TimelineCursor?, Task>? BeforePage { get; init; }
+
+        public async Task<TimelinePage> GetTimelinePageAsync(
             DateRange range,
             int pageSize,
             TimelineCursor? cursor = null,
             CancellationToken cancellationToken = default)
         {
+            if (BeforePage is not null)
+            {
+                await BeforePage(cursor);
+            }
             var ordered = records.Where(record => record.StartedAt < range.End && record.EndedAt > range.Start)
                 .OrderByDescending(record => record.StartedAt).ThenByDescending(record => record.Id)
                 .Where(record => cursor is null || record.StartedAt < cursor.Value.StartedAt || record.StartedAt == cursor.Value.StartedAt && record.Id < cursor.Value.Id)
                 .ToArray();
             var items = ordered.Take(pageSize).ToArray();
             var more = ordered.Length > pageSize;
-            return Task.FromResult(new TimelinePage(items, more ? new TimelineCursor(items[^1].StartedAt, items[^1].Id) : null, more));
+            return new TimelinePage(items, more ? new TimelineCursor(items[^1].StartedAt, items[^1].Id) : null, more);
         }
 
         public Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(
