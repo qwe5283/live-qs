@@ -19,17 +19,20 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
     public string TimeRange => FormatRange(Data.StartedAt, Data.EndedAt);
     public bool HasDetails => !Data.IsGap;
     public bool HasActiveApplications => !Data.IsGap && !Data.IsAfk;
-    public bool HasChanges => Data.Slices.Count > 1;
+    public bool HasChanges => Data.Slices.Count(slice => !slice.Record.IsAfk) > 1;
     public bool HasFlags => Flags.Length > 0;
-    public bool HasCoverageDifference => Data.IsGap || Data.Span != Data.ObservedDuration;
+    public bool HasCoverageDifference => Data.IsGap || Data.Span != Data.ObservedDuration ||
+        (!Data.IsAfk && Data.ActiveDuration != Data.ObservedDuration);
     public bool IsPartial => Data.IsPartial;
     public string Summary => Data.IsGap ? $"未观测 {DurationText.Format(Data.Span)}" :
         $"{(Data.IsAfk ? "AFK" : "活跃")} {DurationText.Format(Data.IsAfk ? Data.ObservedDuration : Data.ActiveDuration)} · {Data.Slices.Count} 条原始记录";
     public string Coverage => Data.IsGap ? "此区间没有活动记录" :
-        $"跨度 {DurationText.Format(Data.Span)} · 记录覆盖 {DurationText.Format(Data.ObservedDuration)}";
+        $"跨度 {DurationText.Format(Data.Span)} · 记录覆盖 {DurationText.Format(Data.ObservedDuration)}" +
+        (!Data.IsAfk && Data.ObservedDuration > Data.ActiveDuration
+            ? $" · AFK {DurationText.Format(Data.ObservedDuration - Data.ActiveDuration)}" : "");
     public string Changes => Data.TitleChanges > 0
         ? $"{Data.ApplicationSwitches} 次应用切换 · {Data.TitleChanges} 次同应用标题变化"
-        : Data.ApplicationSwitches > 0 ? $"{Data.ApplicationSwitches} 次应用切换" : $"{Data.Slices.Count} 条同应用记录已折叠";
+        : Data.ApplicationSwitches > 0 ? $"{Data.ApplicationSwitches} 次应用切换" : $"{Data.Slices.Count(slice => !slice.Record.IsAfk)} 条同应用记录已折叠";
     public string Flags => string.Join(" · ", new[]
     {
         Data.Slices.Any(slice => slice.Record.IsFullscreen) ? "含全屏记录" : "",
@@ -67,7 +70,7 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
     {
         Data = data;
         Marks = data.Slices
-            .Where(slice => slice.Duration > TimeSpan.Zero)
+            .Where(slice => !slice.Record.IsAfk && slice.Duration > TimeSpan.Zero)
             .Select(CreateActivityMark)
             .ToArray();
         Applications = data.Applications.Select(CreateApplicationRow).ToArray();
@@ -84,7 +87,7 @@ public sealed partial class TimelineEpisodeViewModel : ObservableObject
     private TimelineApplicationRow CreateApplicationRow(TimelineApplication application)
     {
         var marks = Data.Slices
-            .Where(slice => slice.Duration > TimeSpan.Zero &&
+            .Where(slice => !slice.Record.IsAfk && slice.Duration > TimeSpan.Zero &&
                 string.Equals(slice.Record.AppId, application.AppId, StringComparison.OrdinalIgnoreCase))
             .Select(slice => new TimelineMark(
                 GetPositionFraction(slice.StartedAt),

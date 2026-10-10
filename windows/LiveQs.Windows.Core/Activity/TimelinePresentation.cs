@@ -10,6 +10,7 @@ public static class TimelinePresentation
 {
     private static readonly TimeSpan _gapBoundary = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan _sustainedApplication = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan _shortAfk = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan _maximumMixedSpan = TimeSpan.FromHours(1);
 
     public static IReadOnlyList<TimelineEpisode> Build(
@@ -35,7 +36,7 @@ public static class TimelinePresentation
 
         var episodes = new List<TimelineEpisode>();
         var pending = new List<ActivitySlice>();
-        foreach (var run in runs)
+        foreach (var run in FoldShortAfkRuns(runs))
         {
             var first = run[0];
             if (pending.Count > 0 && first.StartedAt - pending[^1].EndedAt > _gapBoundary)
@@ -49,8 +50,8 @@ public static class TimelinePresentation
                     [], [], false, false, 0, 0));
             }
 
-            var duration = TimeSpan.FromTicks(run.Sum(slice => slice.Duration.Ticks));
-            if (first.Record.IsAfk || duration >= _sustainedApplication)
+            var duration = TimeSpan.FromTicks(run.Where(slice => !slice.Record.IsAfk).Sum(slice => slice.Duration.Ticks));
+            if (run.All(slice => slice.Record.IsAfk) || duration >= _sustainedApplication)
             {
                 if (pending.Any(slice => slice.Duration > TimeSpan.Zero))
                 {
@@ -96,9 +97,50 @@ public static class TimelinePresentation
         }
     }
 
+    private static IReadOnlyList<List<ActivitySlice>> FoldShortAfkRuns(List<List<ActivitySlice>> runs)
+    {
+        var folded = new List<List<ActivitySlice>>();
+        for (var index = 0; index < runs.Count; index++)
+        {
+            var run = runs[index];
+            if (!run[0].Record.IsAfk || run[^1].EndedAt - run[0].StartedAt > _shortAfk)
+            {
+                folded.Add(run);
+                continue;
+            }
+
+            var previous = folded.LastOrDefault();
+            var next = index + 1 < runs.Count ? runs[index + 1] : null;
+            var joinsNext = next is not null && !next[0].Record.IsAfk &&
+                next[0].StartedAt - run[^1].EndedAt <= _gapBoundary;
+            if (previous is not null && previous.Any(slice => !slice.Record.IsAfk) &&
+                run[0].StartedAt - previous[^1].EndedAt <= _gapBoundary)
+            {
+                previous.AddRange(run);
+                // Preserve a single-application run across a short break, even when both sides are sustained.
+                if (joinsNext && SameApplication(previous.Last(slice => !slice.Record.IsAfk), next![0]))
+                {
+                    previous.AddRange(next!);
+                    index++;
+                }
+            }
+            else if (joinsNext)
+            {
+                folded.Add([.. run, .. next!]);
+                index++;
+            }
+            else
+            {
+                folded.Add(run);
+            }
+        }
+        return folded;
+    }
+
     private static TimelineEpisode CreateEpisode(ActivitySlice[] slices)
     {
-        var applications = slices
+        var activeSlices = slices.Where(slice => !slice.Record.IsAfk).ToArray();
+        var applications = activeSlices
             .GroupBy(slice => slice.Record.AppId, StringComparer.OrdinalIgnoreCase)
             .Select(group => new TimelineApplication(group.Key, group.Last().Record.AppName, group.Last().Record.Color,
                 TimeSpan.FromTicks(group.Sum(slice => slice.Duration.Ticks))))
@@ -106,13 +148,13 @@ public static class TimelinePresentation
             .ToArray();
         var switches = 0;
         var titleChanges = 0;
-        for (var index = 1; index < slices.Length; index++)
+        for (var index = 1; index < activeSlices.Length; index++)
         {
-            if (!SameApplication(slices[index - 1], slices[index]))
+            if (!SameApplication(activeSlices[index - 1], activeSlices[index]))
             {
                 switches++;
             }
-            else if (!string.Equals(slices[index - 1].Record.WindowTitle, slices[index].Record.WindowTitle, StringComparison.Ordinal))
+            else if (!string.Equals(activeSlices[index - 1].Record.WindowTitle, activeSlices[index].Record.WindowTitle, StringComparison.Ordinal))
             {
                 titleChanges++;
             }
