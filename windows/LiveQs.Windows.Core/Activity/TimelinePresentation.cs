@@ -13,7 +13,7 @@ public static class TimelinePresentation
     public static IReadOnlyList<TimelineEpisode> Build(
         IEnumerable<ActivitySegment> records, DateRange range, bool hasEarlierRecords = false,
         IReadOnlyList<DeviceStateEvent>? stateEvents = null, DateTimeOffset? observedUntil = null,
-        IReadOnlyList<DeviceRecoveryWindow>? recoveryWindows = null)
+        IReadOnlyList<DeviceRecoveryWindow>? recoveryWindows = null, IReadOnlyList<DateRange>? deletedStateRanges = null)
     {
         var recordArray = records.ToArray();
         var sourceSlices = ActivityIntervals.CreateSlices(recordArray,
@@ -27,12 +27,14 @@ public static class TimelinePresentation
         // Earlier sampling pages are not loaded yet; do not present their absence as system-only coverage.
         var loadedRange = hasEarlierRecords && slices.Length > 0
             ? new DateRange(slices[0].StartedAt, range.End) : range;
-        var intervals = DeviceStateTimeline.Pair(stateEvents ?? []);
+        var intervals = DeviceStateTimeline.Pair(stateEvents ?? [], deletedStateRanges);
         var windows = (recoveryWindows ?? DeviceStateTimeline.CreateRecoveryWindows(stateEvents ?? [], intervals,
-                value => FirstSampleAt(sourceSlices, value.OccurredAt), observedUntil ?? DateTimeOffset.MaxValue))
+                value => FirstSampleAt(sourceSlices, value.OccurredAt), observedUntil ?? DateTimeOffset.MaxValue,
+                deletedStateRanges))
             .Where(window => window.StartedAt < loadedRange.End && window.EndedAt > loadedRange.Start).ToArray();
         var pieces = CreatePieces(slices, intervals, windows, loadedRange);
         bool HasGap(DateTimeOffset end, DateTimeOffset start) => start - end > _gapBoundary ||
+            (deletedStateRanges ?? []).Any(deleted => deleted.Start < start && deleted.End > end) ||
             windows.Any(window => window.EndedAt == window.Deadline && window.Deadline >= end && window.Deadline < start);
         var runs = new List<List<Piece>>();
         foreach (var piece in pieces)

@@ -9,9 +9,10 @@ public static class DashboardStatistics
         IReadOnlyList<ActivitySegment> records,
         DateRange range,
         TimeZoneInfo timeZone,
-        IReadOnlyList<DeviceStateEvent>? stateEvents = null)
+        IReadOnlyList<DeviceStateEvent>? stateEvents = null, IReadOnlyList<DateRange>? deletedStateRanges = null)
     {
-        var slices = ActivityIntervals.ApplyDeviceStates(ActivityIntervals.CreateSlices(records, range), stateEvents ?? []);
+        var slices = ActivityIntervals.ApplyDeviceStates(ActivityIntervals.CreateSlices(records, range),
+            stateEvents ?? [], deletedStateRanges);
         var active = TimeSpan.Zero;
         var afk = TimeSpan.Zero;
         var applications = new Dictionary<string, ApplicationTotals>(StringComparer.OrdinalIgnoreCase);

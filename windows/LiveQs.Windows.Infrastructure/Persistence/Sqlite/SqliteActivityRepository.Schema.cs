@@ -102,6 +102,10 @@ public sealed partial class SqliteActivityRepository
             CREATE TABLE IF NOT EXISTS excluded_sampling (
                 captured_utc TEXT PRIMARY KEY
             );
+            CREATE TABLE IF NOT EXISTS device_state_deleted_ranges (
+                started_utc TEXT PRIMARY KEY,
+                ended_utc TEXT NOT NULL CHECK (ended_utc > started_utc)
+            );
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
 

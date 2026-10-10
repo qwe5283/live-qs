@@ -1,3 +1,5 @@
+using LiveQs.Windows.Core.Common;
+
 namespace LiveQs.Windows.Core.Activity;
 
 public enum DeviceStateKind
@@ -43,7 +45,8 @@ public static class DeviceStateTimeline
 {
     public static IReadOnlyList<DeviceRecoveryWindow> CreateRecoveryWindows(
         IEnumerable<DeviceStateEvent> events, IReadOnlyList<DeviceStateInterval> intervals,
-        Func<DeviceStateEvent, DateTimeOffset?> firstSampleAt, DateTimeOffset observedUntil)
+        Func<DeviceStateEvent, DateTimeOffset?> firstSampleAt, DateTimeOffset observedUntil,
+        IReadOnlyList<DateRange>? deletedRanges = null)
     {
         var windows = new List<DeviceRecoveryWindow>();
         foreach (var value in events.DistinctBy(value => value.Key).Where(value => !value.IsEntering &&
@@ -51,7 +54,18 @@ public static class DeviceStateTimeline
             value.Source.StartsWith("system:", StringComparison.Ordinal) && value.EventId != 507 &&
             value.Source != "system:modern-standby"))
         {
+            if (IsDeleted(value.OccurredAt, deletedRanges))
+            {
+                continue;
+            }
             var end = value.OccurredAt.AddMinutes(2);
+            foreach (var deleted in deletedRanges ?? [])
+            {
+                if (deleted.Start > value.OccurredAt && deleted.Start < end)
+                {
+                    end = deleted.Start;
+                }
+            }
             if (firstSampleAt(value) is { } sampleAt && sampleAt < end)
             {
                 end = sampleAt;
@@ -71,10 +85,12 @@ public static class DeviceStateTimeline
         return windows;
     }
 
-    public static IReadOnlyList<DeviceStateInterval> Pair(IEnumerable<DeviceStateEvent> events)
+    public static IReadOnlyList<DeviceStateInterval> Pair(IEnumerable<DeviceStateEvent> events,
+        IReadOnlyList<DateRange>? deletedRanges = null)
     {
         var intervals = new List<DeviceStateInterval>();
-        foreach (var stream in events.DistinctBy(value => value.Key).GroupBy(value => (value.Source, value.Kind)))
+        foreach (var stream in events.DistinctBy(value => value.Key)
+            .Where(value => !IsDeleted(value.OccurredAt, deletedRanges)).GroupBy(value => (value.Source, value.Kind)))
         {
             DeviceStateEvent? start = null;
             foreach (var value in stream.OrderBy(value => value.OccurredAt).ThenBy(value => value.IsEntering))
@@ -86,7 +102,9 @@ public static class DeviceStateTimeline
                 }
                 else if (start is not null)
                 {
-                    if (value.OccurredAt > start.OccurredAt)
+                    // Missing transitions inside deleted history must not produce a new cross-boundary pairing.
+                    if (value.OccurredAt > start.OccurredAt && !(deletedRanges ?? []).Any(deleted =>
+                        deleted.Start < value.OccurredAt && deleted.End > start.OccurredAt))
                     {
                         intervals.Add(new DeviceStateInterval(start, value));
                     }
@@ -96,6 +114,9 @@ public static class DeviceStateTimeline
         }
         return intervals.OrderBy(interval => interval.StartedAt).ToArray();
     }
+
+    private static bool IsDeleted(DateTimeOffset at, IReadOnlyList<DateRange>? deletedRanges) =>
+        (deletedRanges ?? []).Any(range => range.Start <= at && range.End > at);
 }
 
 public static class WindowsActivityState

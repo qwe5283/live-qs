@@ -52,9 +52,10 @@ public static class ActivityIntervals
     }
 
     public static IReadOnlyList<ActivitySlice> ApplyDeviceStates(
-        IReadOnlyList<ActivitySlice> slices, IReadOnlyList<DeviceStateEvent> stateEvents)
+        IReadOnlyList<ActivitySlice> slices, IReadOnlyList<DeviceStateEvent> stateEvents,
+        IReadOnlyList<DateRange>? deletedStateRanges = null)
     {
-        var intervals = DeviceStateTimeline.Pair(stateEvents);
+        var intervals = DeviceStateTimeline.Pair(stateEvents, deletedStateRanges);
         if (intervals.Count == 0)
         {
             return slices;

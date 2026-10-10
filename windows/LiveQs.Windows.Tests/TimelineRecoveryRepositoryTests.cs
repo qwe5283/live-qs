@@ -84,7 +84,7 @@ public sealed class TimelineRecoveryRepositoryTests : IDisposable
         await model.RefreshAsync();
 
         Assert.Equal(0, deleted);
-        Assert.Equal(120, model.Rows.Sum(row => row.Data.RecoveryCoveredDuration.TotalSeconds));
+        Assert.Empty(model.Rows);
     }
 
     [Fact]

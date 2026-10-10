@@ -1,3 +1,5 @@
+using LiveQs.Windows.Core.Common;
+
 namespace LiveQs.Windows.Core.Activity;
 
 public readonly record struct TimelineCursor(DateTimeOffset StartedAt, long Id);
@@ -8,6 +10,7 @@ public sealed record TimelinePage(
     bool HasMore)
 {
     public IReadOnlyList<DeviceStateEvent> StateEvents { get; init; } = [];
+    public IReadOnlyList<DateRange> DeletedStateRanges { get; init; } = [];
     public IReadOnlyList<DeviceRecoveryWindow>? RecoveryWindows
     {
         get; init;

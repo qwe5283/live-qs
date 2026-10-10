@@ -11,8 +11,8 @@ public sealed partial class SqliteActivityRepository
         CancellationToken cancellationToken = default)
     {
         var segments = await ReadSegmentsAsync(range, cancellationToken);
-        var states = await ReadDeviceStateEventsAsync(range, cancellationToken);
-        return DashboardStatistics.Calculate(segments, range, TimeZoneInfo.Local, states);
+        var context = await ReadDeviceStateContextAsync(range, cancellationToken);
+        return DashboardStatistics.Calculate(segments, range, TimeZoneInfo.Local, context.Events, context.DeletedRanges);
     }
 
     public async Task<IReadOnlyList<ActivitySegment>> GetTimelineAsync(
@@ -32,12 +32,13 @@ public sealed partial class SqliteActivityRepository
         var pageItems = hasMore ? items.Take(take).ToArray() : items;
         var last = pageItems.LastOrDefault();
         TimelineCursor? nextCursor = hasMore && last is not null ? new TimelineCursor(last.StartedAt, last.Id) : null;
-        var states = await ReadDeviceStateEventsAsync(range, cancellationToken);
-        var recoveryWindows = await ReadRecoveryWindowsAsync(states, range, cancellationToken);
+        var context = await ReadDeviceStateContextAsync(range, cancellationToken);
+        var recoveryWindows = await ReadRecoveryWindowsAsync(context, range, cancellationToken);
         var status = await GetDeviceStateImportStatusAsync(cancellationToken);
         return new TimelinePage(pageItems, nextCursor, hasMore)
         {
-            StateEvents = states,
+            StateEvents = context.Events,
+            DeletedStateRanges = context.DeletedRanges,
             RecoveryWindows = recoveryWindows,
             StateWarning = status.Warning
         };

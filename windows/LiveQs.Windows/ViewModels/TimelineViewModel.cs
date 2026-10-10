@@ -212,7 +212,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
             var mappingTimer = Stopwatch.StartNew();
             var segments = previous.Concat(page.Items).DistinctBy(segment => segment.Id).ToArray();
             var rows = TimelinePresentation.Build(segments, range, page.HasMore, page.StateEvents,
-                    _timeProvider.GetUtcNow(), page.RecoveryWindows)
+                    _timeProvider.GetUtcNow(), page.RecoveryWindows, page.DeletedStateRanges)
                 .Select(episode => new TimelineEpisodeViewModel(episode)).ToArray();
             mappingTimer.Stop();
             return new TimelinePageResult(

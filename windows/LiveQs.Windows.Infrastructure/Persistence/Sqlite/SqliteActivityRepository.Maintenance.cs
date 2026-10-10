@@ -13,11 +13,13 @@ public sealed partial class SqliteActivityRepository
         command.Transaction = transaction;
         command.CommandText = """
             DELETE FROM excluded_sampling WHERE captured_utc < $cutoff;
+            DELETE FROM device_state_events WHERE occurred_utc < $cutoff;
             DELETE FROM activity_segments WHERE ended_utc < $cutoff;
             SELECT changes();
             """;
         command.Parameters.AddWithValue("$cutoff", UtcText(cutoff));
         var deleted = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+        await RecordDeviceStateDeletionAsync(transaction, new DateRange(DateTimeOffset.MinValue, cutoff), cancellationToken);
         transaction.Commit();
         return deleted;
     }
@@ -30,12 +32,18 @@ public sealed partial class SqliteActivityRepository
         command.Transaction = transaction;
         command.CommandText = """
             DELETE FROM excluded_sampling WHERE captured_utc >= $start AND captured_utc < $end;
+            DELETE FROM device_state_events WHERE occurred_utc >= $start AND occurred_utc < $end;
             DELETE FROM activity_segments WHERE started_utc < $end AND ended_utc > $start;
             SELECT changes();
             """;
         command.Parameters.AddWithValue("$start", UtcText(range.Start));
         command.Parameters.AddWithValue("$end", UtcText(range.End));
         var deleted = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+        var now = _timeProvider.GetUtcNow();
+        // Include events at the deletion instant, while allowing subsequent live collection.
+        var deletionEnd = range.End <= now ? range.End : now.AddTicks(1);
+        await RecordDeviceStateDeletionAsync(transaction,
+            new DateRange(range.Start, deletionEnd), cancellationToken);
         transaction.Commit();
         return deleted;
     }

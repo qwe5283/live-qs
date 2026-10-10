@@ -22,14 +22,14 @@ public sealed class WpfUserDialogService : IUserDialogService
         var owner = Application.Current?.MainWindow;
         var result = owner is null
             ? MessageBox.Show(
-            "将永久删除选定日期范围内的本地活动数据。是否继续？",
+            "将永久删除选定日期范围内的本地活动记录、系统状态证据与采样时刻标记。是否继续？",
             "删除本地数据",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning,
             MessageBoxResult.No)
             : MessageBox.Show(
                 owner,
-                "将永久删除选定日期范围内的本地活动数据。是否继续？",
+                "将永久删除选定日期范围内的本地活动记录、系统状态证据与采样时刻标记。是否继续？",
                 "删除本地数据",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning,

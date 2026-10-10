@@ -10,7 +10,7 @@ public sealed partial class SettingsViewModel
     {
         var range = SelectedMaintenanceRange();
         var deleted = await _maintenance.DeleteRangeAsync(range);
-        StatusText = $"已删除 {deleted} 个时间段";
+        StatusText = $"已清理所选范围的本地数据，删除 {deleted} 条活动记录";
         return deleted;
     }
 

@@ -67,7 +67,10 @@ public sealed partial class SqliteActivityRepository
         await using var command = transaction.Connection!.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            INSERT INTO device_state_events(event_key, occurred_utc, json) VALUES($key, $at, $json)
+            INSERT INTO device_state_events(event_key, occurred_utc, json)
+            SELECT $key, $at, $json WHERE NOT EXISTS (
+                SELECT 1 FROM device_state_deleted_ranges WHERE started_utc <= $at AND ended_utc > $at
+            )
             ON CONFLICT(event_key) DO NOTHING;
             """;
         var key = command.Parameters.Add("$key", SqliteType.Text);
@@ -83,35 +86,44 @@ public sealed partial class SqliteActivityRepository
         }
     }
 
-    private async Task<IReadOnlyList<DeviceStateEvent>> ReadDeviceStateEventsAsync(DateRange range,
+    private async Task<DeviceStateContext> ReadDeviceStateContextAsync(DateRange range,
         CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        // Include both sides of cross-day states; unmatched historical starts never become open intervals.
+        // Read evidence and its deletion boundaries from one SQLite snapshot, including cross-day context.
         command.CommandText = """
-            SELECT json FROM device_state_events WHERE occurred_utc >= $start AND occurred_utc <= $end
-            ORDER BY occurred_utc, event_key;
+            SELECT json, NULL, NULL FROM device_state_events WHERE occurred_utc >= $start AND occurred_utc <= $end
+            UNION ALL
+            SELECT NULL, started_utc, ended_utc FROM device_state_deleted_ranges
+            WHERE started_utc < $end AND ended_utc > $start;
             """;
         command.Parameters.AddWithValue("$start", UtcText(range.Start.AddDays(-31)));
         command.Parameters.AddWithValue("$end", UtcText(range.End.AddDays(31)));
         var events = new List<DeviceStateEvent>();
+        var deletedRanges = new List<DateRange>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            if (JsonSerializer.Deserialize<DeviceStateEvent>(reader.GetString(0), _jsonOptions) is { } value)
+            if (reader.IsDBNull(0))
+            {
+                deletedRanges.Add(new DateRange(ParseTime(reader.GetString(1)), ParseTime(reader.GetString(2))));
+            }
+            else if (JsonSerializer.Deserialize<DeviceStateEvent>(reader.GetString(0), _jsonOptions) is { } value)
             {
                 events.Add(value);
             }
         }
-        return events;
+        return new DeviceStateContext(events.OrderBy(value => value.OccurredAt).ThenBy(value => value.Key).ToArray(),
+            deletedRanges);
     }
 
     private async Task<IReadOnlyList<DeviceRecoveryWindow>> ReadRecoveryWindowsAsync(
-        IReadOnlyList<DeviceStateEvent> events, DateRange range, CancellationToken cancellationToken)
+        DeviceStateContext context, DateRange range, CancellationToken cancellationToken)
     {
-        var windows = DeviceStateTimeline.CreateRecoveryWindows(events, DeviceStateTimeline.Pair(events),
-                _ => null, _timeProvider.GetUtcNow())
+        var windows = DeviceStateTimeline.CreateRecoveryWindows(context.Events,
+                DeviceStateTimeline.Pair(context.Events, context.DeletedRanges), _ => null, _timeProvider.GetUtcNow(),
+                context.DeletedRanges)
             .Where(window => window.StartedAt < range.End && window.EndedAt > range.Start).ToArray();
         if (windows.Length == 0)
         {
@@ -155,4 +167,6 @@ public sealed partial class SqliteActivityRepository
         }
         return resolved;
     }
+
+    private sealed record DeviceStateContext(IReadOnlyList<DeviceStateEvent> Events, IReadOnlyList<DateRange> DeletedRanges);
 }

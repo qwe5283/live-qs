@@ -165,3 +165,31 @@ $env:ArtifactsPath = Join-Path $reviewFixOutput 'outputs'
 $env:OutDir = (Join-Path $reviewFixOutput 'verify') + '\'
 ..\scripts\check.ps1 windows
 ```
+
+### 系统证据删除与保留边界（2026-10-11）
+
+按 Owner 确认的方案，将系统证据纳入本地历史清理。原删除路径只清理活动与排除采样时刻，留下仅系统证据的离开段落；只删除事件行仍会被 15 分钟重读或删除时正在进行的导入恢复，也无法阻止范围外端点重建跨日段落。
+
+- 范围删除按 UTC 左闭右开边界清理 `device_state_events.occurred_utc`，保留清理删除截止时刻之前的系统事件；`device_state_import` 检查点保留，返回数量仍只统计活动记录。
+- 同一事务持久化仅含时间边界的 `device_state_deleted_ranges`，重叠与相邻范围合并，保留截止时间只向前推进。实时事件及日志导入在写事务内检查该边界，重启、重复补查与正在进行的导入不能回填已删事件；即使全部事件被过滤，成功补查仍正常推进检查点。
+- 手动删除当天或未来日期时，防回填范围截至执行时刻并包含该时刻，后续正常采集不受影响。旧版本未保存历史删除边界，残留证据需重新执行范围删除。
+- 系统证据和删除边界从同一 SQLite 查询快照读取，时间线和仪表盘不跨删除范围重新配对；无法安全闭合的系统状态按未知处理，范围外完整配对继续可查。恢复窗口在首个删除边界终止；即使缺口不超过 30 秒，段落也不跨删除范围合并。
+- 更新 SPEC、Windows README、删除确认与范围说明；仅系统证据被清理时也报告完成，数量明确为活动记录数。本地删除不修改服务端历史或 Windows 自身的事件日志。
+
+新增 **12 项真实 SQLite 回归用例**，覆盖两条清理路径、物理删除、检查点保留、导入竞争与重启、跨日端点、短缺口、恢复窗口、仪表盘一致性、保留边界、范围合并和删除执行时刻。先确认初始 9 项失败，再修复；更新原有 2 项排除采样删除测试，使被删除的开机证据不再生成恢复段落。
+
+验证：`..\scripts\check.ps1 windows` 通过 **270 项测试**，构建 **0 警告、0 错误**；全解的 whitespace/style 检查及 `git diff --check` 通过。使用合成数据在实际 WPF 设置页执行删除，确认仅系统证据的日期变为空状态、浅色和深色提示正确、无绑定错误。
+
+- [删除前的系统证据段落](../evidence/22-system-state/deletion/before-delete-light.png)
+- [删除后的空时间线](../evidence/22-system-state/deletion/after-delete-light.png)
+- [清理结果与范围说明（浅色）](../evidence/22-system-state/deletion/settings-delete-light.png)
+- [清理结果与范围说明（深色）](../evidence/22-system-state/deletion/settings-delete-dark.png)
+
+从 `windows/` 复核：
+
+```powershell
+..\scripts\check.ps1 windows
+dotnet format whitespace LiveQs.Windows.sln --no-restore --verify-no-changes --exclude LiveQs.Windows.Core/Generated
+dotnet format style LiveQs.Windows.sln --no-restore --verify-no-changes --exclude LiveQs.Windows.Core/Generated --diagnostics IDE0011 IDE0005 IDE0161 IDE0065
+git diff --check
+```
