@@ -9,6 +9,10 @@ node_modules/
 **/artifacts/
 **/.gradle/
 
+# Generated test evidence
+**/evidence/**/*.txt
+**/evidence/**/*.png
+
 # Local configuration and data
 .env
 .env.*

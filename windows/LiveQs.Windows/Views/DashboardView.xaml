@@ -16,46 +16,20 @@
         <converters:ApplicationIconConverter x:Key="ApplicationIcon" />
         <Style x:Key="RangeSegment" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Padding" Value="11,6" />
-            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="10,7" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="RadioButton">
-                        <Border
-                            x:Name="SegmentSurface"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="Transparent"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Padding="{TemplateBinding Padding}">
-                            <ContentPresenter
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                TextElement.Foreground="{TemplateBinding Foreground}" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
-                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
-                            </Trigger>
-                            <MultiTrigger>
-                                <MultiTrigger.Conditions>
-                                    <Condition Property="IsMouseOver" Value="True" />
-                                    <Condition Property="IsChecked" Value="False" />
-                                </MultiTrigger.Conditions>
-                                <Setter Property="Background" Value="{DynamicResource InputBrush}" />
-                            </MultiTrigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter
-                                    TargetName="SegmentSurface"
-                                    Property="BorderBrush"
-                                    Value="{DynamicResource AccentBrush}" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
+                <Setter.Value><ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Surface" CornerRadius="4" Padding="{TemplateBinding Padding}" Background="Transparent">
+                        <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Surface" Property="Background" Value="{DynamicResource AccentBrush}" />
+                            <Setter Property="Foreground" Value="White" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate></Setter.Value>
             </Setter>
         </Style>
     </UserControl.Resources>
@@ -97,9 +71,8 @@
                 <Border
                     x:Name="PresetSegments"
                     Grid.Column="1"
-                    Background="{DynamicResource SidebarBrush}"
-                    CornerRadius="6"
-                    Padding="3"
+                    Style="{StaticResource Surface}"
+                    Padding="2"
                     VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" AutomationProperties.Name="快捷日期范围">
                         <RadioButton
