@@ -20,7 +20,7 @@ public partial class DashboardView : System.Windows.Controls.UserControl
         Loaded += OnLoaded;
     }
 
-    public Task RefreshAsync() => ViewModel.RefreshAsync();
+    public Task RefreshAsync(bool preserveSnapshot = false) => ViewModel.RefreshAsync(preserveSnapshot);
     private void OnLoaded(object sender, RoutedEventArgs args) => ViewModel.LoadCommand.Execute(null);
 
     private async void OnRangeSelected(object? sender, DateRangeSelectedEventArgs args) =>

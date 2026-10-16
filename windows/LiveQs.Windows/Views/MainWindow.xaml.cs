@@ -16,6 +16,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private readonly SettingsView _settings;
     private readonly DispatcherTimer _statusTimer;
     private bool _closeToTray = true;
+    private bool _dashboardRefreshQueued;
+    private WindowState _previousWindowState = WindowState.Normal;
 
     public MainWindow(
         ISettingsStore settingsStore,
@@ -36,6 +38,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         Closing += OnClosing;
         Closed += OnClosed;
         Loaded += OnLoaded;
+        Activated += OnActivated;
+        IsVisibleChanged += OnIsVisibleChanged;
+        StateChanged += OnStateChanged;
         SelectPage("statistics");
     }
 
@@ -57,6 +62,47 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         await RefreshStatusAsync();
         _statusTimer.Start();
+    }
+
+    private void OnActivated(object? sender, EventArgs args) => ScheduleDashboardRefresh();
+
+    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs args)
+    {
+        if (args.NewValue is true)
+        {
+            ScheduleDashboardRefresh();
+        }
+    }
+
+    private void OnStateChanged(object? sender, EventArgs args)
+    {
+        var restored = _previousWindowState == WindowState.Minimized && WindowState != WindowState.Minimized;
+        _previousWindowState = WindowState;
+        if (restored)
+        {
+            ScheduleDashboardRefresh();
+        }
+    }
+
+    private bool CanRefreshDashboard => IsLoaded && IsVisible && WindowState != WindowState.Minimized &&
+        ReferenceEquals(PageContent.Content, _dashboard) && !_dashboard.ViewModel.IsLoading;
+
+    private void ScheduleDashboardRefresh()
+    {
+        if (_dashboardRefreshQueued || !CanRefreshDashboard)
+        {
+            return;
+        }
+
+        _dashboardRefreshQueued = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, async () =>
+        {
+            _dashboardRefreshQueued = false;
+            if (CanRefreshDashboard)
+            {
+                await _dashboard.RefreshAsync(preserveSnapshot: true);
+            }
+        });
     }
 
     private async void OnNavigationClick(object sender, RoutedEventArgs args)

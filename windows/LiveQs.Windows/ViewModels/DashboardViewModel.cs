@@ -65,7 +65,7 @@ public sealed partial class DashboardViewModel : ViewModelBase
     public bool IsMonthRange => PresetDays == 30;
     public string RangeText => Formatting.DateRangeText.Format(StartDate, EndDate, Today.Year);
 
-    public async Task RefreshAsync()
+    public async Task RefreshAsync(bool preserveSnapshot = false)
     {
         var version = Interlocked.Increment(ref _requestVersion);
         var cancellation = new CancellationTokenSource();
@@ -73,24 +73,25 @@ public sealed partial class DashboardViewModel : ViewModelBase
         previous?.Cancel();
         previous?.Dispose();
         var token = cancellation.Token;
-        if (PresetDays > 0)
+        var keepSnapshot = preserveSnapshot && HasSnapshot;
+        var today = Today;
+        var start = PresetDays > 0 ? today.AddDays(-(PresetDays - 1)) : (StartDate ?? today).Date;
+        var end = PresetDays > 0 ? today : (EndDate ?? start).Date;
+        if (end < start)
         {
-            StartDate = Today.AddDays(-(PresetDays - 1));
-            EndDate = Today;
+            (start, end) = (end, start);
         }
         IsLoading = true;
-        HasSnapshot = false;
         HasQueryError = false;
-        QueryStatusText = "正在更新统计…";
+        if (!keepSnapshot)
+        {
+            StartDate = start;
+            EndDate = end;
+            HasSnapshot = false;
+            QueryStatusText = "正在更新统计…";
+        }
         try
         {
-            var start = (StartDate ?? Today).Date;
-            var end = (EndDate ?? start).Date;
-            if (end < start)
-            {
-                (start, end) = (end, start);
-            }
-
             var range = DateRange.FromLocalDates(start, end);
             var snapshot = await Task.Run(() => _queryService.GetDashboardAsync(range, token), token);
             if (version != Volatile.Read(ref _requestVersion) || token.IsCancellationRequested)
@@ -98,6 +99,8 @@ public sealed partial class DashboardViewModel : ViewModelBase
                 return;
             }
 
+            StartDate = start;
+            EndDate = end;
             ActiveBuckets = snapshot.ActiveBuckets;
             IsHourlyDistribution = start == end;
             DistributionText = IsHourlyDistribution ? "每小时活跃时长" : "每日活跃时长";
@@ -132,7 +135,7 @@ public sealed partial class DashboardViewModel : ViewModelBase
             }
 
             HasQueryError = true;
-            QueryStatusText = "查询失败，请重试或选择其他日期范围。";
+            QueryStatusText = keepSnapshot ? "更新失败，暂时显示上次统计。" : "查询失败，请重试或选择其他日期范围。";
             _dialogs.ShowError("查询失败", exception);
         }
         finally

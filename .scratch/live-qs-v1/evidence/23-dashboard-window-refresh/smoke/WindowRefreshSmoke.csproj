@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../../windows/LiveQs.Windows/LiveQs.Windows.csproj" />
+    <Resource Include="../../../../../windows/LiveQs.Windows/Assets/LiveQs.ico" Link="Assets/LiveQs.ico" />
+    <Resource Include="../../../../../windows/LiveQs.Windows/Assets/LiveQs.png" Link="Assets/LiveQs.png" />
+  </ItemGroup>
+</Project>
